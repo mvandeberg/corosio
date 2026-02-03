@@ -25,7 +25,7 @@
 #endif
 
 #if BOOST_COROSIO_HAS_KQUEUE
-// #include <boost/corosio/kqueue_context.hpp>
+#include <boost/corosio/kqueue_context.hpp>
 #endif
 
 #if BOOST_COROSIO_HAS_SELECT
@@ -82,8 +82,7 @@ using io_context = iocp_context;
 #elif BOOST_COROSIO_HAS_EPOLL
 using io_context = epoll_context;
 #elif BOOST_COROSIO_HAS_KQUEUE
-// using io_context = kqueue_context;
-using io_context = select_context;  // fallback until kqueue implemented
+using io_context = kqueue_context;
 #elif BOOST_COROSIO_HAS_SELECT
 using io_context = select_context;
 #endif

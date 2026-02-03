@@ -1,0 +1,171 @@
+//
+// Copyright (c) 2026 Michael Vandeberg
+//
+// Distributed under the Boost Software License, Version 1.0. (See accompanying
+// file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+//
+// Official repository: https://github.com/cppalliance/corosio
+//
+
+#ifndef BOOST_COROSIO_DETAIL_KQUEUE_SCHEDULER_HPP
+#define BOOST_COROSIO_DETAIL_KQUEUE_SCHEDULER_HPP
+
+#include <boost/corosio/detail/platform.hpp>
+
+#if BOOST_COROSIO_HAS_KQUEUE
+
+#include <boost/corosio/detail/config.hpp>
+#include <boost/corosio/detail/scheduler.hpp>
+#include <boost/capy/ex/execution_context.hpp>
+
+#include "src/detail/scheduler_op.hpp"
+#include "src/detail/timer_service.hpp"
+
+#include <atomic>
+#include <condition_variable>
+#include <cstddef>
+#include <cstdint>
+#include <mutex>
+
+namespace boost::corosio::detail {
+
+struct kqueue_op;
+struct descriptor_data;
+
+/** BSD/macOS scheduler using kqueue for I/O multiplexing.
+
+    This scheduler implements the scheduler interface using BSD/macOS kqueue
+    for efficient I/O event notification. It uses a single reactor model
+    where one thread runs kevent() while other threads
+    wait on a condition variable for handler work. This design provides:
+
+    - Handler parallelism: N posted handlers can execute on N threads
+    - No thundering herd: condition_variable wakes exactly one thread
+    - IOCP parity: Behavior matches Windows I/O completion port semantics
+
+    When threads call run(), they first try to execute queued handlers.
+    If the queue is empty and no reactor is running, one thread becomes
+    the reactor and runs kevent(). Other threads wait on a condition
+    variable until handlers are available.
+
+    @par Thread Safety
+    All public member functions are thread-safe.
+*/
+class kqueue_scheduler
+    : public scheduler
+    , public capy::execution_context::service
+{
+public:
+    using key_type = scheduler;
+
+    /** Construct the scheduler.
+
+        Creates a kqueue instance and registers EVFILT_USER for
+        reactor interruption.
+
+        @param ctx Reference to the owning execution_context.
+        @param concurrency_hint Hint for expected thread count (unused).
+    */
+    kqueue_scheduler(
+        capy::execution_context& ctx,
+        int concurrency_hint = -1);
+
+    ~kqueue_scheduler();
+
+    kqueue_scheduler(kqueue_scheduler const&) = delete;
+    kqueue_scheduler& operator=(kqueue_scheduler const&) = delete;
+
+    void shutdown() override;
+    void post(capy::coro h) const override;
+    void post(scheduler_op* h) const override;
+    void on_work_started() noexcept override;
+    void on_work_finished() noexcept override;
+    bool running_in_this_thread() const noexcept override;
+    void stop() override;
+    bool stopped() const noexcept override;
+    void restart() override;
+    std::size_t run() override;
+    std::size_t run_one() override;
+    std::size_t wait_one(long usec) override;
+    std::size_t poll() override;
+    std::size_t poll_one() override;
+
+    /** Return the kqueue file descriptor.
+
+        Used by socket services to register file descriptors
+        for I/O event notification.
+
+        @return The kqueue file descriptor.
+    */
+    int kqueue_fd() const noexcept { return kq_; }
+
+    /** Register a descriptor for persistent monitoring.
+
+        The fd is registered once and stays registered until explicitly
+        deregistered. Events are dispatched via descriptor_data which
+        tracks pending read/write/connect operations.
+
+        @param fd The file descriptor to register.
+        @param desc Pointer to descriptor data (stored in kevent.udata).
+    */
+    void register_descriptor(int fd, descriptor_data* desc) const;
+
+    /** Update events for a persistently registered descriptor.
+
+        @param fd The file descriptor.
+        @param desc Pointer to descriptor data.
+        @param events The new events to monitor.
+    */
+    void update_descriptor_events(int fd, descriptor_data* desc, std::uint32_t events) const;
+
+    /** Deregister a persistently registered descriptor.
+
+        @param fd The file descriptor to deregister.
+    */
+    void deregister_descriptor(int fd) const;
+
+    /** For use by I/O operations to track pending work. */
+    void work_started() const noexcept override;
+
+    /** For use by I/O operations to track completed work. */
+    void work_finished() const noexcept override;
+
+private:
+    std::size_t do_one(long timeout_us);
+    void run_reactor(std::unique_lock<std::mutex>& lock);
+    void wake_one_thread_and_unlock(std::unique_lock<std::mutex>& lock) const;
+    void interrupt_reactor() const;
+
+    int kq_;                                        // kqueue file descriptor
+    mutable std::mutex mutex_;
+    mutable std::condition_variable wakeup_event_;
+    mutable op_queue completed_ops_;
+    mutable std::atomic<long> outstanding_work_;
+    std::atomic<bool> stopped_;
+    bool shutdown_;
+    timer_service* timer_svc_ = nullptr;
+
+    // Single reactor thread coordination
+    mutable bool reactor_running_ = false;
+    mutable bool reactor_interrupted_ = false;
+    mutable int idle_thread_count_ = 0;
+
+    // Edge-triggered EVFILT_USER wakeup state
+    mutable std::atomic<bool> wakeup_armed_{false};
+
+    // Sentinel operation for interleaving reactor runs with handler execution.
+    // Ensures the reactor runs periodically even when handlers are continuously
+    // posted, preventing timer starvation.
+    struct task_op final : scheduler_op
+    {
+        void operator()() override {}
+        void destroy() override {}
+    };
+    task_op task_op_;
+};
+
+} // namespace boost::corosio::detail
+
+#endif // BOOST_COROSIO_HAS_KQUEUE
+
+#endif // BOOST_COROSIO_DETAIL_KQUEUE_SCHEDULER_HPP

@@ -1,0 +1,835 @@
+//
+// Copyright (c) 2026 Michael Vandeberg
+//
+// Distributed under the Boost Software License, Version 1.0. (See accompanying
+// file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+//
+// Official repository: https://github.com/cppalliance/corosio
+//
+
+#include <boost/corosio/detail/platform.hpp>
+
+#if BOOST_COROSIO_HAS_KQUEUE
+
+#include "src/detail/kqueue/sockets.hpp"
+#include "src/detail/endpoint_convert.hpp"
+#include "src/detail/make_err.hpp"
+#include "src/detail/resume_coro.hpp"
+
+#include <boost/corosio/detail/except.hpp>
+#include <boost/capy/buffers.hpp>
+
+#include <errno.h>
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <sys/event.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+namespace boost::corosio::detail {
+
+void
+kqueue_op::canceller::
+operator()() const noexcept
+{
+    op->cancel();
+}
+
+void
+kqueue_connect_op::
+cancel() noexcept
+{
+    if (socket_impl_)
+        socket_impl_->cancel_single_op(*this);
+    else
+        request_cancel();
+}
+
+void
+kqueue_read_op::
+cancel() noexcept
+{
+    if (socket_impl_)
+        socket_impl_->cancel_single_op(*this);
+    else
+        request_cancel();
+}
+
+void
+kqueue_write_op::
+cancel() noexcept
+{
+    if (socket_impl_)
+        socket_impl_->cancel_single_op(*this);
+    else
+        request_cancel();
+}
+
+void
+kqueue_connect_op::
+operator()()
+{
+    stop_cb.reset();
+
+    bool success = (errn == 0 && !cancelled.load(std::memory_order_acquire));
+
+    // Cache endpoints on successful connect
+    if (success && socket_impl_)
+    {
+        // Query local endpoint via getsockname (may fail, but remote is always known)
+        endpoint local_ep;
+        sockaddr_in local_addr{};
+        socklen_t local_len = sizeof(local_addr);
+        if (::getsockname(fd, reinterpret_cast<sockaddr*>(&local_addr), &local_len) == 0)
+            local_ep = from_sockaddr_in(local_addr);
+        // Always cache remote endpoint; local may be default if getsockname failed
+        static_cast<kqueue_socket_impl*>(socket_impl_)->set_endpoints(local_ep, target_endpoint);
+    }
+
+    if (ec_out)
+    {
+        if (cancelled.load(std::memory_order_acquire))
+            *ec_out = capy::error::canceled;
+        else if (errn != 0)
+            *ec_out = make_err(errn);
+        else
+            *ec_out = {};
+    }
+
+    if (bytes_out)
+        *bytes_out = bytes_transferred;
+
+    // Move to stack before resuming. See kqueue_op::operator()() for rationale.
+    capy::executor_ref saved_ex( std::move( ex ) );
+    capy::coro saved_h( std::move( h ) );
+    auto prevent_premature_destruction = std::move(impl_ptr);
+    resume_coro(saved_ex, saved_h);
+}
+
+kqueue_socket_impl::
+kqueue_socket_impl(kqueue_socket_service& svc) noexcept
+    : svc_(svc)
+{
+}
+
+kqueue_socket_impl::
+~kqueue_socket_impl()
+{
+    if (read_initiator_handle_)
+        read_initiator_handle_.destroy();
+    if (write_initiator_handle_)
+        write_initiator_handle_.destroy();
+
+    // promise_type::operator delete is no-op, so free here
+    if (read_initiator_frame_)
+        ::operator delete(read_initiator_frame_);
+    if (write_initiator_frame_)
+        ::operator delete(write_initiator_frame_);
+}
+
+void
+kqueue_socket_impl::
+update_kqueue_events() noexcept
+{
+    // With EV_CLEAR, update_descriptor_events just provides a memory fence
+    svc_.scheduler().update_descriptor_events(fd_, &desc_data_, 0);
+}
+
+void
+kqueue_socket_impl::
+release()
+{
+    close_socket();
+    svc_.destroy_impl(*this);
+}
+
+void
+kqueue_socket_impl::
+connect(
+    std::coroutine_handle<> h,
+    capy::executor_ref ex,
+    endpoint ep,
+    std::stop_token token,
+    std::error_code* ec)
+{
+    auto& op = conn_;
+    op.reset();
+    op.h = h;
+    op.ex = ex;
+    op.ec_out = ec;
+    op.fd = fd_;
+    op.target_endpoint = ep;  // Store target for endpoint caching
+    op.start(token, this);
+
+    sockaddr_in addr = detail::to_sockaddr_in(ep);
+    int result = ::connect(fd_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
+
+    if (result == 0)
+    {
+        // Sync success - cache endpoints immediately
+        // Remote is always known; local may fail but we still cache remote
+        sockaddr_in local_addr{};
+        socklen_t local_len = sizeof(local_addr);
+        if (::getsockname(fd_, reinterpret_cast<sockaddr*>(&local_addr), &local_len) == 0)
+            local_endpoint_ = detail::from_sockaddr_in(local_addr);
+        remote_endpoint_ = ep;
+
+        op.complete(0, 0);
+        op.impl_ptr = shared_from_this();
+        svc_.post(&op);
+        return;
+    }
+
+    if (errno == EINPROGRESS)
+    {
+        svc_.work_started();
+        op.impl_ptr = shared_from_this();
+
+        desc_data_.connect_op.store(&op, std::memory_order_seq_cst);
+
+        if (desc_data_.write_ready.exchange(false, std::memory_order_seq_cst))
+        {
+            auto* claimed = desc_data_.connect_op.exchange(nullptr, std::memory_order_acq_rel);
+            if (claimed)
+            {
+                claimed->perform_io();
+                if (claimed->errn == EAGAIN || claimed->errn == EWOULDBLOCK)
+                {
+                    claimed->errn = 0;
+                    desc_data_.connect_op.store(claimed, std::memory_order_release);
+                }
+                else
+                {
+                    svc_.post(claimed);
+                    svc_.work_finished();
+                }
+                return;
+            }
+        }
+
+        if (op.cancelled.load(std::memory_order_acquire))
+        {
+            auto* claimed = desc_data_.connect_op.exchange(nullptr, std::memory_order_acq_rel);
+            if (claimed)
+            {
+                svc_.post(claimed);
+                svc_.work_finished();
+            }
+        }
+        return;
+    }
+
+    op.complete(errno, 0);
+    op.impl_ptr = shared_from_this();
+    svc_.post(&op);
+}
+
+read_initiator
+make_read_initiator(void*& cached, kqueue_socket_impl* impl)
+{
+    impl->do_read_io();
+    co_return;
+}
+
+write_initiator
+make_write_initiator(void*& cached, kqueue_socket_impl* impl)
+{
+    impl->do_write_io();
+    co_return;
+}
+
+void
+kqueue_socket_impl::
+do_read_io()
+{
+    auto& op = rd_;
+
+    ssize_t n = ::readv(fd_, op.iovecs, op.iovec_count);
+
+    if (n > 0)
+    {
+        desc_data_.read_ready.store(false, std::memory_order_relaxed);
+        op.complete(0, static_cast<std::size_t>(n));
+        svc_.post(&op);
+        return;
+    }
+
+    if (n == 0)
+    {
+        desc_data_.read_ready.store(false, std::memory_order_relaxed);
+        op.complete(0, 0);
+        svc_.post(&op);
+        return;
+    }
+
+    if (errno == EAGAIN || errno == EWOULDBLOCK)
+    {
+        // Check for EOF condition before registering - handles race with shutdown
+        if (check_eof_condition())
+        {
+            desc_data_.read_ready.store(false, std::memory_order_relaxed);
+            op.complete(0, 0);
+            svc_.post(&op);
+            return;
+        }
+
+        svc_.work_started();
+
+        desc_data_.read_op.store(&op, std::memory_order_seq_cst);
+
+        if (desc_data_.read_ready.exchange(false, std::memory_order_seq_cst))
+        {
+            auto* claimed = desc_data_.read_op.exchange(nullptr, std::memory_order_acq_rel);
+            if (claimed)
+            {
+                claimed->perform_io();
+                if (claimed->errn == EAGAIN || claimed->errn == EWOULDBLOCK)
+                {
+                    claimed->errn = 0;
+                    desc_data_.read_op.store(claimed, std::memory_order_release);
+                }
+                else
+                {
+                    svc_.post(claimed);
+                    svc_.work_finished();
+                }
+                return;
+            }
+        }
+
+        if (op.cancelled.load(std::memory_order_acquire))
+        {
+            auto* claimed = desc_data_.read_op.exchange(nullptr, std::memory_order_acq_rel);
+            if (claimed)
+            {
+                svc_.post(claimed);
+                svc_.work_finished();
+            }
+        }
+        return;
+    }
+
+    op.complete(errno, 0);
+    svc_.post(&op);
+}
+
+void
+kqueue_socket_impl::
+do_write_io()
+{
+    auto& op = wr_;
+
+    // Use writev() since SO_NOSIGPIPE is set at socket level
+    ssize_t n = ::writev(fd_, op.iovecs, op.iovec_count);
+
+    if (n > 0)
+    {
+        desc_data_.write_ready.store(false, std::memory_order_relaxed);
+        op.complete(0, static_cast<std::size_t>(n));
+        svc_.post(&op);
+        return;
+    }
+
+    if (errno == EAGAIN || errno == EWOULDBLOCK)
+    {
+        svc_.work_started();
+
+        desc_data_.write_op.store(&op, std::memory_order_seq_cst);
+
+        if (desc_data_.write_ready.exchange(false, std::memory_order_seq_cst))
+        {
+            auto* claimed = desc_data_.write_op.exchange(nullptr, std::memory_order_acq_rel);
+            if (claimed)
+            {
+                claimed->perform_io();
+                if (claimed->errn == EAGAIN || claimed->errn == EWOULDBLOCK)
+                {
+                    claimed->errn = 0;
+                    desc_data_.write_op.store(claimed, std::memory_order_release);
+                }
+                else
+                {
+                    svc_.post(claimed);
+                    svc_.work_finished();
+                }
+                return;
+            }
+        }
+
+        if (op.cancelled.load(std::memory_order_acquire))
+        {
+            auto* claimed = desc_data_.write_op.exchange(nullptr, std::memory_order_acq_rel);
+            if (claimed)
+            {
+                svc_.post(claimed);
+                svc_.work_finished();
+            }
+        }
+        return;
+    }
+
+    op.complete(errno ? errno : EIO, 0);
+    svc_.post(&op);
+}
+
+bool
+kqueue_socket_impl::
+check_eof_condition() const noexcept
+{
+    char dummy;
+    ssize_t n = ::recv(fd_, &dummy, 1, MSG_PEEK);
+    // Returns 0 = EOF, -1 = error/would block, >0 = data available
+    return (n == 0);
+}
+
+std::coroutine_handle<>
+kqueue_socket_impl::
+read_some(
+    std::coroutine_handle<> h,
+    capy::executor_ref ex,
+    io_buffer_param param,
+    std::stop_token token,
+    std::error_code* ec,
+    std::size_t* bytes_out)
+{
+    auto& op = rd_;
+    op.reset();
+    op.h = h;
+    op.ex = ex;
+    op.ec_out = ec;
+    op.bytes_out = bytes_out;
+    op.fd = fd_;
+    op.start(token, this);
+    op.impl_ptr = shared_from_this();
+
+    // Must prepare buffers before initiator runs
+    capy::mutable_buffer bufs[kqueue_read_op::max_buffers];
+    op.iovec_count = static_cast<int>(param.copy_to(bufs, kqueue_read_op::max_buffers));
+
+    if (op.iovec_count == 0 || (op.iovec_count == 1 && bufs[0].size() == 0))
+    {
+        op.empty_buffer_read = true;
+        op.complete(0, 0);
+        svc_.post(&op);
+        return std::noop_coroutine();
+    }
+
+    for (int i = 0; i < op.iovec_count; ++i)
+    {
+        op.iovecs[i].iov_base = bufs[i].data();
+        op.iovecs[i].iov_len = bufs[i].size();
+    }
+
+    if (read_initiator_handle_)
+        read_initiator_handle_.destroy();
+
+    auto initiator = make_read_initiator(read_initiator_frame_, this);
+    read_initiator_handle_ = initiator.h;
+
+    // Symmetric transfer ensures caller is suspended before I/O starts
+    return initiator.h;
+}
+
+std::coroutine_handle<>
+kqueue_socket_impl::
+write_some(
+    std::coroutine_handle<> h,
+    capy::executor_ref ex,
+    io_buffer_param param,
+    std::stop_token token,
+    std::error_code* ec,
+    std::size_t* bytes_out)
+{
+    auto& op = wr_;
+    op.reset();
+    op.h = h;
+    op.ex = ex;
+    op.ec_out = ec;
+    op.bytes_out = bytes_out;
+    op.fd = fd_;
+    op.start(token, this);
+    op.impl_ptr = shared_from_this();
+
+    // Must prepare buffers before initiator runs
+    capy::mutable_buffer bufs[kqueue_write_op::max_buffers];
+    op.iovec_count = static_cast<int>(param.copy_to(bufs, kqueue_write_op::max_buffers));
+
+    if (op.iovec_count == 0 || (op.iovec_count == 1 && bufs[0].size() == 0))
+    {
+        op.complete(0, 0);
+        svc_.post(&op);
+        return std::noop_coroutine();
+    }
+
+    for (int i = 0; i < op.iovec_count; ++i)
+    {
+        op.iovecs[i].iov_base = bufs[i].data();
+        op.iovecs[i].iov_len = bufs[i].size();
+    }
+
+    if (write_initiator_handle_)
+        write_initiator_handle_.destroy();
+
+    auto initiator = make_write_initiator(write_initiator_frame_, this);
+    write_initiator_handle_ = initiator.h;
+
+    // Symmetric transfer ensures caller is suspended before I/O starts
+    return initiator.h;
+}
+
+std::error_code
+kqueue_socket_impl::
+shutdown(tcp_socket::shutdown_type what) noexcept
+{
+    int how;
+    switch (what)
+    {
+    case tcp_socket::shutdown_receive: how = SHUT_RD;   break;
+    case tcp_socket::shutdown_send:    how = SHUT_WR;   break;
+    case tcp_socket::shutdown_both:    how = SHUT_RDWR; break;
+    default:
+        return make_err(EINVAL);
+    }
+    if (::shutdown(fd_, how) != 0)
+        return make_err(errno);
+    return {};
+}
+
+std::error_code
+kqueue_socket_impl::
+set_no_delay(bool value) noexcept
+{
+    int flag = value ? 1 : 0;
+    if (::setsockopt(fd_, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag)) != 0)
+        return make_err(errno);
+    return {};
+}
+
+bool
+kqueue_socket_impl::
+no_delay(std::error_code& ec) const noexcept
+{
+    int flag = 0;
+    socklen_t len = sizeof(flag);
+    if (::getsockopt(fd_, IPPROTO_TCP, TCP_NODELAY, &flag, &len) != 0)
+    {
+        ec = make_err(errno);
+        return false;
+    }
+    ec = {};
+    return flag != 0;
+}
+
+std::error_code
+kqueue_socket_impl::
+set_keep_alive(bool value) noexcept
+{
+    int flag = value ? 1 : 0;
+    if (::setsockopt(fd_, SOL_SOCKET, SO_KEEPALIVE, &flag, sizeof(flag)) != 0)
+        return make_err(errno);
+    return {};
+}
+
+bool
+kqueue_socket_impl::
+keep_alive(std::error_code& ec) const noexcept
+{
+    int flag = 0;
+    socklen_t len = sizeof(flag);
+    if (::getsockopt(fd_, SOL_SOCKET, SO_KEEPALIVE, &flag, &len) != 0)
+    {
+        ec = make_err(errno);
+        return false;
+    }
+    ec = {};
+    return flag != 0;
+}
+
+std::error_code
+kqueue_socket_impl::
+set_receive_buffer_size(int size) noexcept
+{
+    if (::setsockopt(fd_, SOL_SOCKET, SO_RCVBUF, &size, sizeof(size)) != 0)
+        return make_err(errno);
+    return {};
+}
+
+int
+kqueue_socket_impl::
+receive_buffer_size(std::error_code& ec) const noexcept
+{
+    int size = 0;
+    socklen_t len = sizeof(size);
+    if (::getsockopt(fd_, SOL_SOCKET, SO_RCVBUF, &size, &len) != 0)
+    {
+        ec = make_err(errno);
+        return 0;
+    }
+    ec = {};
+    return size;
+}
+
+std::error_code
+kqueue_socket_impl::
+set_send_buffer_size(int size) noexcept
+{
+    if (::setsockopt(fd_, SOL_SOCKET, SO_SNDBUF, &size, sizeof(size)) != 0)
+        return make_err(errno);
+    return {};
+}
+
+int
+kqueue_socket_impl::
+send_buffer_size(std::error_code& ec) const noexcept
+{
+    int size = 0;
+    socklen_t len = sizeof(size);
+    if (::getsockopt(fd_, SOL_SOCKET, SO_SNDBUF, &size, &len) != 0)
+    {
+        ec = make_err(errno);
+        return 0;
+    }
+    ec = {};
+    return size;
+}
+
+std::error_code
+kqueue_socket_impl::
+set_linger(bool enabled, int timeout) noexcept
+{
+    if (timeout < 0)
+        return make_err(EINVAL);
+    struct ::linger lg;
+    lg.l_onoff = enabled ? 1 : 0;
+    lg.l_linger = timeout;
+    if (::setsockopt(fd_, SOL_SOCKET, SO_LINGER, &lg, sizeof(lg)) != 0)
+        return make_err(errno);
+    return {};
+}
+
+tcp_socket::linger_options
+kqueue_socket_impl::
+linger(std::error_code& ec) const noexcept
+{
+    struct ::linger lg{};
+    socklen_t len = sizeof(lg);
+    if (::getsockopt(fd_, SOL_SOCKET, SO_LINGER, &lg, &len) != 0)
+    {
+        ec = make_err(errno);
+        return {};
+    }
+    ec = {};
+    return {.enabled = lg.l_onoff != 0, .timeout = lg.l_linger};
+}
+
+void
+kqueue_socket_impl::
+cancel() noexcept
+{
+    std::shared_ptr<kqueue_socket_impl> self;
+    try {
+        self = shared_from_this();
+    } catch (const std::bad_weak_ptr&) {
+        return;
+    }
+
+    // Use atomic exchange to claim operations - only one of cancellation
+    // or reactor will succeed
+    auto cancel_atomic_op = [this, &self](kqueue_op& op, std::atomic<kqueue_op*>& desc_op_ptr) {
+        op.request_cancel();
+        auto* claimed = desc_op_ptr.exchange(nullptr, std::memory_order_acq_rel);
+        if (claimed == &op)
+        {
+            op.impl_ptr = self;
+            svc_.post(&op);
+            svc_.work_finished();
+        }
+    };
+
+    cancel_atomic_op(conn_, desc_data_.connect_op);
+    cancel_atomic_op(rd_, desc_data_.read_op);
+    cancel_atomic_op(wr_, desc_data_.write_op);
+}
+
+void
+kqueue_socket_impl::
+cancel_single_op(kqueue_op& op) noexcept
+{
+    op.request_cancel();
+
+    std::atomic<kqueue_op*>* desc_op_ptr = nullptr;
+    if (&op == &conn_) desc_op_ptr = &desc_data_.connect_op;
+    else if (&op == &rd_) desc_op_ptr = &desc_data_.read_op;
+    else if (&op == &wr_) desc_op_ptr = &desc_data_.write_op;
+
+    if (desc_op_ptr)
+    {
+        // Use atomic exchange - only one of cancellation or reactor will succeed
+        auto* claimed = desc_op_ptr->exchange(nullptr, std::memory_order_acq_rel);
+        if (claimed == &op)
+        {
+            try {
+                op.impl_ptr = shared_from_this();
+            } catch (const std::bad_weak_ptr&) {}
+            svc_.post(&op);
+            svc_.work_finished();
+        }
+    }
+}
+
+void
+kqueue_socket_impl::
+close_socket() noexcept
+{
+    cancel();
+
+    if (fd_ >= 0)
+    {
+        if (desc_data_.registered_events != 0)
+            svc_.scheduler().deregister_descriptor(fd_);
+        ::close(fd_);
+        fd_ = -1;
+    }
+
+    desc_data_.fd = -1;
+    desc_data_.is_registered = false;
+    desc_data_.read_op.store(nullptr, std::memory_order_relaxed);
+    desc_data_.write_op.store(nullptr, std::memory_order_relaxed);
+    desc_data_.connect_op.store(nullptr, std::memory_order_relaxed);
+    desc_data_.read_ready.store(false, std::memory_order_relaxed);
+    desc_data_.write_ready.store(false, std::memory_order_relaxed);
+    desc_data_.registered_events = 0;
+
+    local_endpoint_ = endpoint{};
+    remote_endpoint_ = endpoint{};
+}
+
+kqueue_socket_service::
+kqueue_socket_service(capy::execution_context& ctx)
+    : state_(std::make_unique<kqueue_socket_state>(ctx.use_service<kqueue_scheduler>()))
+{
+}
+
+kqueue_socket_service::
+~kqueue_socket_service()
+{
+}
+
+void
+kqueue_socket_service::
+shutdown()
+{
+    std::lock_guard lock(state_->mutex_);
+
+    while (auto* impl = state_->socket_list_.pop_front())
+        impl->close_socket();
+
+    state_->socket_ptrs_.clear();
+}
+
+tcp_socket::socket_impl&
+kqueue_socket_service::
+create_impl()
+{
+    auto impl = std::make_shared<kqueue_socket_impl>(*this);
+    auto* raw = impl.get();
+
+    {
+        std::lock_guard lock(state_->mutex_);
+        state_->socket_list_.push_back(raw);
+        state_->socket_ptrs_.emplace(raw, std::move(impl));
+    }
+
+    return *raw;
+}
+
+void
+kqueue_socket_service::
+destroy_impl(tcp_socket::socket_impl& impl)
+{
+    auto* kqueue_impl = static_cast<kqueue_socket_impl*>(&impl);
+    std::lock_guard lock(state_->mutex_);
+    state_->socket_list_.remove(kqueue_impl);
+    state_->socket_ptrs_.erase(kqueue_impl);
+}
+
+std::error_code
+kqueue_socket_service::
+open_socket(tcp_socket::socket_impl& impl)
+{
+    auto* kqueue_impl = static_cast<kqueue_socket_impl*>(&impl);
+    kqueue_impl->close_socket();
+
+    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0)
+        return make_err(errno);
+
+    // Set non-blocking
+    int flags = ::fcntl(fd, F_GETFL, 0);
+    if (flags == -1)
+    {
+        int errn = errno;
+        ::close(fd);
+        return make_err(errn);
+    }
+    if (::fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1)
+    {
+        int errn = errno;
+        ::close(fd);
+        return make_err(errn);
+    }
+
+    // Set close-on-exec
+    if (::fcntl(fd, F_SETFD, FD_CLOEXEC) == -1)
+    {
+        int errn = errno;
+        ::close(fd);
+        return make_err(errn);
+    }
+
+    // Set SO_NOSIGPIPE (macOS/BSD only)
+    int one = 1;
+    if (::setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one)) < 0)
+    {
+        int errn = errno;
+        ::close(fd);
+        return make_err(errn);
+    }
+
+    kqueue_impl->fd_ = fd;
+
+    // Register fd with kqueue (edge-triggered mode)
+    kqueue_impl->desc_data_.fd = fd;
+    kqueue_impl->desc_data_.read_op.store(nullptr, std::memory_order_relaxed);
+    kqueue_impl->desc_data_.write_op.store(nullptr, std::memory_order_relaxed);
+    kqueue_impl->desc_data_.connect_op.store(nullptr, std::memory_order_relaxed);
+    scheduler().register_descriptor(fd, &kqueue_impl->desc_data_);
+
+    return {};
+}
+
+void
+kqueue_socket_service::
+post(kqueue_op* op)
+{
+    state_->sched_.post(op);
+}
+
+void
+kqueue_socket_service::
+work_started() noexcept
+{
+    state_->sched_.work_started();
+}
+
+void
+kqueue_socket_service::
+work_finished() noexcept
+{
+    state_->sched_.work_finished();
+}
+
+} // namespace boost::corosio::detail
+
+#endif // BOOST_COROSIO_HAS_KQUEUE

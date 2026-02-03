@@ -283,7 +283,7 @@ signal_state* get_signal_state()
 
 // Check if requested flags are supported on this platform.
 // Returns true if all flags are supported, false otherwise.
-bool flags_supported(signal_set::flags_t flags)
+bool flags_supported([[maybe_unused]] signal_set::flags_t flags)
 {
 #ifndef SA_NOCLDWAIT
     if (flags & signal_set::no_child_wait)
