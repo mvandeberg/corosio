@@ -88,6 +88,14 @@ int dispatch_backend(const char* backend, Func&& func)
     }
 #endif
 
+#if BOOST_COROSIO_HAS_KQUEUE
+    if (std::strcmp(backend, "kqueue") == 0)
+    {
+        func.template operator()<corosio::kqueue_context>("kqueue");
+        return 0;
+    }
+#endif
+
     std::cerr << "Error: Backend '" << backend << "' is not available on this platform.\n\n";
     print_available_backends();
     return 1;

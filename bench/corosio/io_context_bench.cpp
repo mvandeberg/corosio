@@ -272,5 +272,9 @@ template void run_io_context_benchmarks<corosio::select_context>(
 template void run_io_context_benchmarks<corosio::iocp_context>(
     bench::result_collector&, char const* );
 #endif
+#if BOOST_COROSIO_HAS_KQUEUE
+template void run_io_context_benchmarks<corosio::kqueue_context>(
+    bench::result_collector&, char const* );
+#endif
 
 } // namespace corosio_bench
