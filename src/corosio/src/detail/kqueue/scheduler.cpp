@@ -93,6 +93,15 @@ struct scheduler_context
 {
     kqueue_scheduler const* key;
     scheduler_context* next;
+    op_queue private_queue;
+    long private_outstanding_work;
+
+    scheduler_context(kqueue_scheduler const* k, scheduler_context* n)
+        : key(k)
+        , next(n)
+        , private_outstanding_work(0)
+    {
+    }
 };
 
 corosio::detail::thread_local_ptr<scheduler_context> context_stack;
@@ -103,16 +112,27 @@ struct thread_context_guard
 
     explicit thread_context_guard(
         kqueue_scheduler const* ctx) noexcept
-        : frame_{ctx, context_stack.get()}
+        : frame_(ctx, context_stack.get())
     {
         context_stack.set(&frame_);
     }
 
     ~thread_context_guard() noexcept
     {
+        if (!frame_.private_queue.empty())
+            frame_.key->drain_thread_queue(frame_.private_queue, frame_.private_outstanding_work);
         context_stack.set(frame_.next);
     }
 };
+
+scheduler_context*
+find_context(kqueue_scheduler const* self) noexcept
+{
+    for (auto* c = context_stack.get(); c != nullptr; c = c->next)
+        if (c->key == self)
+            return c;
+    return nullptr;
+}
 
 } // namespace
 
@@ -230,6 +250,17 @@ post(capy::coro h) const
     };
 
     auto ph = std::make_unique<post_handler>(h);
+
+    // Fast path: same thread posts to private queue without locking
+    if (auto* ctx = find_context(this))
+    {
+        outstanding_work_.fetch_add(1, std::memory_order_relaxed);
+        ++ctx->private_outstanding_work;
+        ctx->private_queue.push(ph.release());
+        return;
+    }
+
+    // Slow path: cross-thread post requires mutex
     outstanding_work_.fetch_add(1, std::memory_order_relaxed);
 
     std::unique_lock lock(mutex_);
@@ -241,6 +272,16 @@ void
 kqueue_scheduler::
 post(scheduler_op* h) const
 {
+    // Fast path: same thread posts to private queue without locking
+    if (auto* ctx = find_context(this))
+    {
+        outstanding_work_.fetch_add(1, std::memory_order_relaxed);
+        ++ctx->private_outstanding_work;
+        ctx->private_queue.push(h);
+        return;
+    }
+
+    // Slow path: cross-thread post requires mutex
     outstanding_work_.fetch_add(1, std::memory_order_relaxed);
 
     std::unique_lock lock(mutex_);
@@ -461,6 +502,17 @@ work_finished() const noexcept
             interrupt_reactor();
         }
     }
+}
+
+void
+kqueue_scheduler::
+drain_thread_queue(op_queue& queue, long count) const
+{
+    std::lock_guard lock(mutex_);
+    // Note: outstanding_work_ was already incremented when posting
+    completed_ops_.splice(queue);
+    if (count > 0)
+        wakeup_event_.notify_all();
 }
 
 void
@@ -715,12 +767,23 @@ run_reactor(std::unique_lock<std::mutex>& lock)
         }
     }
 
-    if (completions_queued > 0)
+    // Drain private queue (outstanding_work_ was already incremented when posting)
+    if (auto* ctx = find_context(this))
     {
-        if (completions_queued == 1)
+        if (!ctx->private_queue.empty())
+        {
+            completions_queued += ctx->private_outstanding_work;
+            ctx->private_outstanding_work = 0;
+            completed_ops_.splice(ctx->private_queue);
+        }
+    }
+
+    // Only wake threads that are actually idle, and only as many as we have work
+    if (completions_queued > 0 && idle_thread_count_ > 0)
+    {
+        int threads_to_wake = (std::min)(completions_queued, idle_thread_count_);
+        for (int i = 0; i < threads_to_wake; ++i)
             wakeup_event_.notify_one();
-        else
-            wakeup_event_.notify_all();
     }
 }
 
@@ -739,7 +802,10 @@ do_one(long timeout_us)
 
         if (op == &task_op_)
         {
-            bool more_handlers = !completed_ops_.empty();
+            // Check both global queue and private queue for pending handlers
+            auto* ctx = find_context(this);
+            bool more_handlers = !completed_ops_.empty() ||
+                (ctx && !ctx->private_queue.empty());
 
             if (!more_handlers)
             {
@@ -781,6 +847,17 @@ do_one(long timeout_us)
 
         if (timeout_us == 0)
             return 0;
+
+        // Drain private queue before blocking (outstanding_work_ was already incremented)
+        if (auto* ctx = find_context(this))
+        {
+            if (!ctx->private_queue.empty())
+            {
+                ctx->private_outstanding_work = 0;
+                completed_ops_.splice(ctx->private_queue);
+                continue;
+            }
+        }
 
         ++idle_thread_count_;
         if (timeout_us < 0)
