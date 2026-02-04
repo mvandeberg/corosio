@@ -695,6 +695,7 @@ struct accept_stress_test_impl
                     continue;
                 }
                 ++connections;
+                peer.set_linger(true, 0);
                 peer.close();
             }
         };
@@ -706,6 +707,7 @@ struct accept_stress_test_impl
             {
                 tcp_socket client(ioc);
                 client.open();
+                client.set_linger(true, 0);
                 auto [ec] = co_await client.connect(
                     endpoint(ipv4_address::loopback(), port));
                 (void)ec;
