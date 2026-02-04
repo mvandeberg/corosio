@@ -84,10 +84,22 @@ struct kqueue_platform_test
             auto write_task = [&]() -> capy::task<> {
                 try
                 {
-                    auto [ec, n] = co_await sock1.write_some(
-                        capy::const_buffer(large_data.data(), large_data.size()));
-                    write_ec = ec;
-                    bytes_written = n;
+                    // On macOS, the first write to a half-closed socket may
+                    // succeed if the kernel buffer has space before FIN is
+                    // processed. Loop until we get the expected error.
+                    while (true)
+                    {
+                        auto [ec, n] = co_await sock1.write_some(
+                            capy::const_buffer(large_data.data(), large_data.size()));
+                        if (ec)
+                        {
+                            write_ec = ec;
+                            break;
+                        }
+                        bytes_written += n;
+                        if (n == 0)
+                            break;
+                    }
                 }
                 catch (...)
                 {
