@@ -41,22 +41,25 @@ perform_io() noexcept
         int flags = ::fcntl(new_fd, F_GETFL, 0);
         if (flags == -1)
         {
+            int saved_errno = errno;
             ::close(new_fd);
-            complete(errno, 0);
+            complete(saved_errno, 0);
             return;
         }
         if (::fcntl(new_fd, F_SETFL, flags | O_NONBLOCK) == -1)
         {
+            int saved_errno = errno;
             ::close(new_fd);
-            complete(errno, 0);
+            complete(saved_errno, 0);
             return;
         }
 
         // Set close-on-exec
         if (::fcntl(new_fd, F_SETFD, FD_CLOEXEC) == -1)
         {
+            int saved_errno = errno;
             ::close(new_fd);
-            complete(errno, 0);
+            complete(saved_errno, 0);
             return;
         }
 
@@ -64,8 +67,9 @@ perform_io() noexcept
         int one = 1;
         if (::setsockopt(new_fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one)) < 0)
         {
+            int saved_errno = errno;
             ::close(new_fd);
-            complete(errno, 0);
+            complete(saved_errno, 0);
             return;
         }
 
@@ -234,15 +238,47 @@ accept(
     {
         // Set non-blocking
         int flags = ::fcntl(accepted, F_GETFL, 0);
-        if (flags != -1)
-            ::fcntl(accepted, F_SETFL, flags | O_NONBLOCK);
+        if (flags == -1)
+        {
+            int saved_errno = errno;
+            ::close(accepted);
+            op.complete(saved_errno, 0);
+            op.impl_ptr = shared_from_this();
+            svc_.post(&op);
+            return;
+        }
+        if (::fcntl(accepted, F_SETFL, flags | O_NONBLOCK) == -1)
+        {
+            int saved_errno = errno;
+            ::close(accepted);
+            op.complete(saved_errno, 0);
+            op.impl_ptr = shared_from_this();
+            svc_.post(&op);
+            return;
+        }
 
         // Set close-on-exec
-        ::fcntl(accepted, F_SETFD, FD_CLOEXEC);
+        if (::fcntl(accepted, F_SETFD, FD_CLOEXEC) == -1)
+        {
+            int saved_errno = errno;
+            ::close(accepted);
+            op.complete(saved_errno, 0);
+            op.impl_ptr = shared_from_this();
+            svc_.post(&op);
+            return;
+        }
 
         // Set SO_NOSIGPIPE
         int one = 1;
-        ::setsockopt(accepted, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
+        if (::setsockopt(accepted, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one)) < 0)
+        {
+            int saved_errno = errno;
+            ::close(accepted);
+            op.complete(saved_errno, 0);
+            op.impl_ptr = shared_from_this();
+            svc_.post(&op);
+            return;
+        }
 
         desc_data_.read_ready.store(false, std::memory_order_relaxed);
         op.accepted_fd = accepted;

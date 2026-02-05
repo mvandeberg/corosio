@@ -43,7 +43,7 @@ namespace boost::corosio {
     This is a type alias for the platform's default I/O backend:
     - Windows: `iocp_context` (I/O Completion Ports)
     - Linux: `epoll_context` (epoll)
-    - BSD/macOS: `kqueue_context` (kqueue) [future]
+    - BSD/macOS: `kqueue_context` (kqueue)
     - Other POSIX: `select_context` (select) [future]
 
     For explicit backend selection, use the concrete context types

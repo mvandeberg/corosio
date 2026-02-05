@@ -95,7 +95,7 @@ struct kqueue_op;
 */
 struct descriptor_data
 {
-    /// Currently registered events (EPOLLIN, EPOLLOUT, etc.)
+    /// Currently registered filters (EVFILT_READ, EVFILT_WRITE) with EV_ADD|EV_CLEAR
     std::uint32_t registered_events = 0;
 
     /// Pending read operation (nullptr if none)

@@ -671,7 +671,9 @@ cancel_single_op(kqueue_op& op) noexcept
         {
             try {
                 op.impl_ptr = shared_from_this();
-            } catch (const std::bad_weak_ptr&) {}
+            } catch (const std::bad_weak_ptr&) {
+                return;
+            }
             svc_.post(&op);
             svc_.work_finished();
         }

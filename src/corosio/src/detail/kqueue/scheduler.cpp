@@ -511,8 +511,13 @@ drain_thread_queue(op_queue& queue, long count) const
     std::lock_guard lock(mutex_);
     // Note: outstanding_work_ was already incremented when posting
     completed_ops_.splice(queue);
-    if (count > 0)
-        wakeup_event_.notify_all();
+    // Wake only as many threads as we have work items (wake-one-per-item design)
+    if (count > 0 && idle_thread_count_ > 0)
+    {
+        long threads_to_wake = (std::min)(count, static_cast<long>(idle_thread_count_));
+        for (long i = 0; i < threads_to_wake; ++i)
+            wakeup_event_.notify_one();
+    }
 }
 
 void
