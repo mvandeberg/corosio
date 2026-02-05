@@ -146,8 +146,8 @@ private:
     timer_service* timer_svc_ = nullptr;
 
     // Single reactor thread coordination
-    mutable bool reactor_running_ = false;
-    mutable bool reactor_interrupted_ = false;
+    mutable std::atomic<bool> reactor_running_{false};
+    mutable std::atomic<bool> reactor_interrupted_{false};
     mutable int idle_thread_count_ = 0;
 
     // Edge-triggered EVFILT_USER wakeup state

@@ -403,6 +403,9 @@ void
 kqueue_scheduler::
 register_descriptor(int fd, descriptor_data* desc) const
 {
+    // Caller must initialize desc fields before calling this function
+    // with a release fence to ensure visibility
+
     struct kevent changes[2];
     EV_SET(&changes[0], fd, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, desc);
     EV_SET(&changes[1], fd, EVFILT_WRITE, EV_ADD | EV_CLEAR, 0, 0, desc);
@@ -410,10 +413,7 @@ register_descriptor(int fd, descriptor_data* desc) const
     if (::kevent(kq_, changes, 2, nullptr, 0, nullptr) < 0)
         detail::throw_system_error(make_err(errno), "kevent register");
 
-    desc->is_registered = true;
-    desc->fd = fd;
-    desc->read_ready.store(false, std::memory_order_relaxed);
-    desc->write_ready.store(false, std::memory_order_relaxed);
+    desc->is_registered.store(true, std::memory_order_release);
 }
 
 void
@@ -454,9 +454,10 @@ work_finished() const noexcept
         // Both are needed because they target different blocking mechanisms.
         std::unique_lock lock(mutex_);
         wakeup_event_.notify_all();
-        if (reactor_running_ && !reactor_interrupted_)
+        if (reactor_running_.load(std::memory_order_acquire) &&
+            !reactor_interrupted_.load(std::memory_order_acquire))
         {
-            reactor_interrupted_ = true;
+            reactor_interrupted_.store(true, std::memory_order_release);
             lock.unlock();
             interrupt_reactor();
         }
@@ -487,9 +488,10 @@ wake_one_thread_and_unlock(std::unique_lock<std::mutex>& lock) const
         wakeup_event_.notify_one();
         lock.unlock();
     }
-    else if (reactor_running_ && !reactor_interrupted_)
+    else if (reactor_running_.load(std::memory_order_acquire) &&
+             !reactor_interrupted_.load(std::memory_order_acquire))
     {
-        reactor_interrupted_ = true;
+        reactor_interrupted_.store(true, std::memory_order_release);
         lock.unlock();
         interrupt_reactor();
     }
@@ -513,7 +515,7 @@ run_reactor(std::unique_lock<std::mutex>& lock)
     struct timespec* ts_ptr = nullptr;
     struct timespec ts;
 
-    if (reactor_interrupted_)
+    if (reactor_interrupted_.load(std::memory_order_acquire))
     {
         // Poll only
         ts.tv_sec = 0;
@@ -573,6 +575,12 @@ run_reactor(std::unique_lock<std::mutex>& lock)
         }
 
         auto* desc = static_cast<descriptor_data*>(events[i].udata);
+
+        // Skip events for descriptors that have been deregistered
+        // This can happen if close_socket() was called after kevent() returned
+        if (!desc->is_registered.load(std::memory_order_acquire))
+            continue;
+
         int err = 0;
 
         // Error handling: check EV_ERROR and EV_EOF
@@ -599,7 +607,7 @@ run_reactor(std::unique_lock<std::mutex>& lock)
 
         if (events[i].filter == EVFILT_READ)
         {
-            auto* op = desc->read_op.exchange(nullptr, std::memory_order_acq_rel);
+            auto* op = desc->read_op.exchange(nullptr, std::memory_order_seq_cst);
             if (op)
             {
                 if (err)
@@ -614,7 +622,16 @@ run_reactor(std::unique_lock<std::mutex>& lock)
                     if (op->errn == EAGAIN || op->errn == EWOULDBLOCK)
                     {
                         op->errn = 0;
-                        desc->read_op.store(op, std::memory_order_release);
+                        // Only re-register if descriptor is still active
+                        if (desc->is_registered.load(std::memory_order_acquire))
+                            desc->read_op.store(op, std::memory_order_seq_cst);
+                        else
+                        {
+                            // Descriptor was closed, complete with cancellation
+                            op->complete(ECANCELED, 0);
+                            completed_ops_.push(op);
+                            ++completions_queued;
+                        }
                     }
                     else
                     {
@@ -625,14 +642,51 @@ run_reactor(std::unique_lock<std::mutex>& lock)
             }
             else
             {
-                desc->read_ready.store(true, std::memory_order_release);
+                // Cache the ready state for later operation registration
+                desc->read_ready.store(true, std::memory_order_seq_cst);
+
+                // Double-check: an operation might have been registered between
+                // our exchange and setting ready. If so, we must process it now
+                // since this edge event won't be delivered again.
+                op = desc->read_op.exchange(nullptr, std::memory_order_seq_cst);
+                if (op)
+                {
+                    desc->read_ready.store(false, std::memory_order_seq_cst);
+                    if (err)
+                    {
+                        op->complete(err, 0);
+                        completed_ops_.push(op);
+                        ++completions_queued;
+                    }
+                    else
+                    {
+                        op->perform_io();
+                        if (op->errn == EAGAIN || op->errn == EWOULDBLOCK)
+                        {
+                            op->errn = 0;
+                            if (desc->is_registered.load(std::memory_order_acquire))
+                                desc->read_op.store(op, std::memory_order_seq_cst);
+                            else
+                            {
+                                op->complete(ECANCELED, 0);
+                                completed_ops_.push(op);
+                                ++completions_queued;
+                            }
+                        }
+                        else
+                        {
+                            completed_ops_.push(op);
+                            ++completions_queued;
+                        }
+                    }
+                }
             }
         }
 
         if (events[i].filter == EVFILT_WRITE)
         {
             // Connect uses write readiness - try it first
-            auto* conn_op = desc->connect_op.exchange(nullptr, std::memory_order_acq_rel);
+            auto* conn_op = desc->connect_op.exchange(nullptr, std::memory_order_seq_cst);
             if (conn_op)
             {
                 if (err)
@@ -647,7 +701,14 @@ run_reactor(std::unique_lock<std::mutex>& lock)
                     if (conn_op->errn == EAGAIN || conn_op->errn == EWOULDBLOCK)
                     {
                         conn_op->errn = 0;
-                        desc->connect_op.store(conn_op, std::memory_order_release);
+                        if (desc->is_registered.load(std::memory_order_acquire))
+                            desc->connect_op.store(conn_op, std::memory_order_seq_cst);
+                        else
+                        {
+                            conn_op->complete(ECANCELED, 0);
+                            completed_ops_.push(conn_op);
+                            ++completions_queued;
+                        }
                     }
                     else
                     {
@@ -657,7 +718,7 @@ run_reactor(std::unique_lock<std::mutex>& lock)
                 }
             }
 
-            auto* write_op = desc->write_op.exchange(nullptr, std::memory_order_acq_rel);
+            auto* write_op = desc->write_op.exchange(nullptr, std::memory_order_seq_cst);
             if (write_op)
             {
                 if (err)
@@ -672,7 +733,14 @@ run_reactor(std::unique_lock<std::mutex>& lock)
                     if (write_op->errn == EAGAIN || write_op->errn == EWOULDBLOCK)
                     {
                         write_op->errn = 0;
-                        desc->write_op.store(write_op, std::memory_order_release);
+                        if (desc->is_registered.load(std::memory_order_acquire))
+                            desc->write_op.store(write_op, std::memory_order_seq_cst);
+                        else
+                        {
+                            write_op->complete(ECANCELED, 0);
+                            completed_ops_.push(write_op);
+                            ++completions_queued;
+                        }
                     }
                     else
                     {
@@ -683,13 +751,85 @@ run_reactor(std::unique_lock<std::mutex>& lock)
             }
 
             if (!conn_op && !write_op)
-                desc->write_ready.store(true, std::memory_order_release);
+            {
+                // Cache the ready state for later operation registration
+                desc->write_ready.store(true, std::memory_order_seq_cst);
+
+                // Double-check: operations might have been registered between
+                // our exchanges and setting ready. If so, we must process them
+                // since this edge event won't be delivered again.
+                conn_op = desc->connect_op.exchange(nullptr, std::memory_order_seq_cst);
+                if (conn_op)
+                {
+                    desc->write_ready.store(false, std::memory_order_seq_cst);
+                    if (err)
+                    {
+                        conn_op->complete(err, 0);
+                        completed_ops_.push(conn_op);
+                        ++completions_queued;
+                    }
+                    else
+                    {
+                        conn_op->perform_io();
+                        if (conn_op->errn == EAGAIN || conn_op->errn == EWOULDBLOCK)
+                        {
+                            conn_op->errn = 0;
+                            if (desc->is_registered.load(std::memory_order_acquire))
+                                desc->connect_op.store(conn_op, std::memory_order_seq_cst);
+                            else
+                            {
+                                conn_op->complete(ECANCELED, 0);
+                                completed_ops_.push(conn_op);
+                                ++completions_queued;
+                            }
+                        }
+                        else
+                        {
+                            completed_ops_.push(conn_op);
+                            ++completions_queued;
+                        }
+                    }
+                }
+
+                write_op = desc->write_op.exchange(nullptr, std::memory_order_seq_cst);
+                if (write_op)
+                {
+                    desc->write_ready.store(false, std::memory_order_seq_cst);
+                    if (err)
+                    {
+                        write_op->complete(err, 0);
+                        completed_ops_.push(write_op);
+                        ++completions_queued;
+                    }
+                    else
+                    {
+                        write_op->perform_io();
+                        if (write_op->errn == EAGAIN || write_op->errn == EWOULDBLOCK)
+                        {
+                            write_op->errn = 0;
+                            if (desc->is_registered.load(std::memory_order_acquire))
+                                desc->write_op.store(write_op, std::memory_order_seq_cst);
+                            else
+                            {
+                                write_op->complete(ECANCELED, 0);
+                                completed_ops_.push(write_op);
+                                ++completions_queued;
+                            }
+                        }
+                        else
+                        {
+                            completed_ops_.push(write_op);
+                            ++completions_queued;
+                        }
+                    }
+                }
+            }
         }
 
         // Handle error for ops not processed above
         if (err && events[i].filter != EVFILT_READ && events[i].filter != EVFILT_WRITE)
         {
-            auto* read_op = desc->read_op.exchange(nullptr, std::memory_order_acq_rel);
+            auto* read_op = desc->read_op.exchange(nullptr, std::memory_order_seq_cst);
             if (read_op)
             {
                 read_op->complete(err, 0);
@@ -697,7 +837,7 @@ run_reactor(std::unique_lock<std::mutex>& lock)
                 ++completions_queued;
             }
 
-            auto* write_op = desc->write_op.exchange(nullptr, std::memory_order_acq_rel);
+            auto* write_op = desc->write_op.exchange(nullptr, std::memory_order_seq_cst);
             if (write_op)
             {
                 write_op->complete(err, 0);
@@ -705,7 +845,7 @@ run_reactor(std::unique_lock<std::mutex>& lock)
                 ++completions_queued;
             }
 
-            auto* conn_op = desc->connect_op.exchange(nullptr, std::memory_order_acq_rel);
+            auto* conn_op = desc->connect_op.exchange(nullptr, std::memory_order_seq_cst);
             if (conn_op)
             {
                 conn_op->complete(err, 0);
@@ -755,15 +895,15 @@ do_one(long timeout_us)
                 }
             }
 
-            reactor_interrupted_ = more_handlers || timeout_us == 0;
-            reactor_running_ = true;
+            reactor_interrupted_.store(more_handlers || timeout_us == 0, std::memory_order_release);
+            reactor_running_.store(true, std::memory_order_release);
 
             if (more_handlers && idle_thread_count_ > 0)
                 wakeup_event_.notify_one();
 
             run_reactor(lock);
 
-            reactor_running_ = false;
+            reactor_running_.store(false, std::memory_order_release);
             completed_ops_.push(&task_op_);
             continue;
         }

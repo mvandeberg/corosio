@@ -19,6 +19,7 @@
 #include <boost/corosio/detail/except.hpp>
 #include <boost/capy/buffers.hpp>
 
+#include <atomic>
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -187,22 +188,23 @@ connect(
         op.impl_ptr = shared_from_this();
 
         desc_data_.connect_op.store(&op, std::memory_order_seq_cst);
+        std::atomic_thread_fence(std::memory_order_seq_cst);
 
         if (desc_data_.write_ready.exchange(false, std::memory_order_seq_cst))
         {
-            auto* claimed = desc_data_.connect_op.exchange(nullptr, std::memory_order_acq_rel);
+            auto* claimed = desc_data_.connect_op.exchange(nullptr, std::memory_order_seq_cst);
             if (claimed)
             {
                 claimed->perform_io();
                 if (claimed->errn == EAGAIN || claimed->errn == EWOULDBLOCK)
                 {
                     claimed->errn = 0;
-                    desc_data_.connect_op.store(claimed, std::memory_order_release);
+                    desc_data_.connect_op.store(claimed, std::memory_order_seq_cst);
                 }
                 else
                 {
                     svc_.post(claimed);
-                    svc_.work_finished();
+                    // work_finished() is called by work_guard when op is processed
                 }
                 return;
             }
@@ -210,11 +212,11 @@ connect(
 
         if (op.cancelled.load(std::memory_order_acquire))
         {
-            auto* claimed = desc_data_.connect_op.exchange(nullptr, std::memory_order_acq_rel);
+            auto* claimed = desc_data_.connect_op.exchange(nullptr, std::memory_order_seq_cst);
             if (claimed)
             {
                 svc_.post(claimed);
-                svc_.work_finished();
+                // work_finished() is called by work_guard when op is processed
             }
         }
         return;
@@ -277,22 +279,23 @@ do_read_io()
         svc_.work_started();
 
         desc_data_.read_op.store(&op, std::memory_order_seq_cst);
+        std::atomic_thread_fence(std::memory_order_seq_cst);
 
         if (desc_data_.read_ready.exchange(false, std::memory_order_seq_cst))
         {
-            auto* claimed = desc_data_.read_op.exchange(nullptr, std::memory_order_acq_rel);
+            auto* claimed = desc_data_.read_op.exchange(nullptr, std::memory_order_seq_cst);
             if (claimed)
             {
                 claimed->perform_io();
                 if (claimed->errn == EAGAIN || claimed->errn == EWOULDBLOCK)
                 {
                     claimed->errn = 0;
-                    desc_data_.read_op.store(claimed, std::memory_order_release);
+                    desc_data_.read_op.store(claimed, std::memory_order_seq_cst);
                 }
                 else
                 {
                     svc_.post(claimed);
-                    svc_.work_finished();
+                    // work_finished() is called by work_guard when op is processed
                 }
                 return;
             }
@@ -300,11 +303,11 @@ do_read_io()
 
         if (op.cancelled.load(std::memory_order_acquire))
         {
-            auto* claimed = desc_data_.read_op.exchange(nullptr, std::memory_order_acq_rel);
+            auto* claimed = desc_data_.read_op.exchange(nullptr, std::memory_order_seq_cst);
             if (claimed)
             {
                 svc_.post(claimed);
-                svc_.work_finished();
+                // work_finished() is called by work_guard when op is processed
             }
         }
         return;
@@ -336,22 +339,23 @@ do_write_io()
         svc_.work_started();
 
         desc_data_.write_op.store(&op, std::memory_order_seq_cst);
+        std::atomic_thread_fence(std::memory_order_seq_cst);
 
         if (desc_data_.write_ready.exchange(false, std::memory_order_seq_cst))
         {
-            auto* claimed = desc_data_.write_op.exchange(nullptr, std::memory_order_acq_rel);
+            auto* claimed = desc_data_.write_op.exchange(nullptr, std::memory_order_seq_cst);
             if (claimed)
             {
                 claimed->perform_io();
                 if (claimed->errn == EAGAIN || claimed->errn == EWOULDBLOCK)
                 {
                     claimed->errn = 0;
-                    desc_data_.write_op.store(claimed, std::memory_order_release);
+                    desc_data_.write_op.store(claimed, std::memory_order_seq_cst);
                 }
                 else
                 {
                     svc_.post(claimed);
-                    svc_.work_finished();
+                    // work_finished() is called by work_guard when op is processed
                 }
                 return;
             }
@@ -359,11 +363,11 @@ do_write_io()
 
         if (op.cancelled.load(std::memory_order_acquire))
         {
-            auto* claimed = desc_data_.write_op.exchange(nullptr, std::memory_order_acq_rel);
+            auto* claimed = desc_data_.write_op.exchange(nullptr, std::memory_order_seq_cst);
             if (claimed)
             {
                 svc_.post(claimed);
-                svc_.work_finished();
+                // work_finished() is called by work_guard when op is processed
             }
         }
         return;
@@ -638,12 +642,12 @@ cancel() noexcept
     // or reactor will succeed
     auto cancel_atomic_op = [this, &self](kqueue_op& op, std::atomic<kqueue_op*>& desc_op_ptr) {
         op.request_cancel();
-        auto* claimed = desc_op_ptr.exchange(nullptr, std::memory_order_acq_rel);
+        auto* claimed = desc_op_ptr.exchange(nullptr, std::memory_order_seq_cst);
         if (claimed == &op)
         {
             op.impl_ptr = self;
             svc_.post(&op);
-            svc_.work_finished();
+            // work_finished() is called by work_guard when op is processed
         }
     };
 
@@ -666,14 +670,14 @@ cancel_single_op(kqueue_op& op) noexcept
     if (desc_op_ptr)
     {
         // Use atomic exchange - only one of cancellation or reactor will succeed
-        auto* claimed = desc_op_ptr->exchange(nullptr, std::memory_order_acq_rel);
+        auto* claimed = desc_op_ptr->exchange(nullptr, std::memory_order_seq_cst);
         if (claimed == &op)
         {
             try {
                 op.impl_ptr = shared_from_this();
             } catch (const std::bad_weak_ptr&) {}
             svc_.post(&op);
-            svc_.work_finished();
+            // work_finished() is called by work_guard when op is processed
         }
     }
 }
@@ -684,6 +688,10 @@ close_socket() noexcept
 {
     cancel();
 
+    // Mark as deregistered BEFORE closing to ensure reactor skips any
+    // pending events that were captured before we deregister
+    desc_data_.is_registered.store(false, std::memory_order_release);
+
     if (fd_ >= 0)
     {
         if (desc_data_.registered_events != 0)
@@ -692,11 +700,26 @@ close_socket() noexcept
         fd_ = -1;
     }
 
+    // Claim any remaining ops that may have been re-stored by reactor after
+    // cancel() ran. This handles the race where reactor claims op, gets EAGAIN,
+    // and re-stores it after cancel() already exchanged the op slots.
+    auto complete_remaining = [this](kqueue_op* op) {
+        if (op)
+        {
+            op->request_cancel();
+            try {
+                op->impl_ptr = shared_from_this();
+            } catch (const std::bad_weak_ptr&) {}
+            svc_.post(op);
+            // work_finished() is called by work_guard when op is processed
+        }
+    };
+
+    complete_remaining(desc_data_.read_op.exchange(nullptr, std::memory_order_seq_cst));
+    complete_remaining(desc_data_.write_op.exchange(nullptr, std::memory_order_seq_cst));
+    complete_remaining(desc_data_.connect_op.exchange(nullptr, std::memory_order_seq_cst));
+
     desc_data_.fd = -1;
-    desc_data_.is_registered = false;
-    desc_data_.read_op.store(nullptr, std::memory_order_relaxed);
-    desc_data_.write_op.store(nullptr, std::memory_order_relaxed);
-    desc_data_.connect_op.store(nullptr, std::memory_order_relaxed);
     desc_data_.read_ready.store(false, std::memory_order_relaxed);
     desc_data_.write_ready.store(false, std::memory_order_relaxed);
     desc_data_.registered_events = 0;
@@ -800,10 +823,18 @@ open_socket(tcp_socket::socket_impl& impl)
     kqueue_impl->fd_ = fd;
 
     // Register fd with kqueue (edge-triggered mode)
+    // Initialize all descriptor data before registration to avoid
+    // race with reactor thread that may immediately see events
     kqueue_impl->desc_data_.fd = fd;
     kqueue_impl->desc_data_.read_op.store(nullptr, std::memory_order_relaxed);
     kqueue_impl->desc_data_.write_op.store(nullptr, std::memory_order_relaxed);
     kqueue_impl->desc_data_.connect_op.store(nullptr, std::memory_order_relaxed);
+    kqueue_impl->desc_data_.read_ready.store(false, std::memory_order_relaxed);
+    kqueue_impl->desc_data_.write_ready.store(false, std::memory_order_relaxed);
+
+    // Ensure all descriptor data is visible before kqueue registration
+    std::atomic_thread_fence(std::memory_order_release);
+
     scheduler().register_descriptor(fd, &kqueue_impl->desc_data_);
 
     return {};

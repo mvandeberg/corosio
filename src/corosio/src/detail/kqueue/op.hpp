@@ -117,7 +117,8 @@ struct descriptor_data
     int fd = -1;
 
     /// Whether this descriptor is managed by persistent registration
-    bool is_registered = false;
+    /// Atomic to allow safe checking from reactor without holding locks
+    std::atomic<bool> is_registered{false};
 };
 
 struct kqueue_op : scheduler_op
@@ -192,6 +193,11 @@ struct kqueue_op : scheduler_op
         capy::executor_ref saved_ex( std::move( ex ) );
         capy::coro saved_h( std::move( h ) );
         auto prevent_premature_destruction = std::move(impl_ptr);
+
+        // Guard against double-completion or stale handle
+        if (!saved_h)
+            return;
+
         resume_coro(saved_ex, saved_h);
     }
 
