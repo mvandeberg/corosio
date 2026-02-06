@@ -135,9 +135,12 @@ struct descriptor_state : scheduler_op
     std::shared_ptr<void> impl_ref_;
 
     /// Add ready events atomically.
+    /// Release pairs with the consumer's acquire exchange on
+    /// ready_events_ so the consumer sees all flags. On x86 (TSO)
+    /// this compiles to the same LOCK OR as relaxed.
     void add_ready_events(std::uint32_t ev) noexcept
     {
-        ready_events_.fetch_or(ev, std::memory_order_relaxed);
+        ready_events_.fetch_or(ev, std::memory_order_release);
     }
 
     /// Perform deferred I/O and queue completions.

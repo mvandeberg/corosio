@@ -154,7 +154,13 @@ void
 descriptor_state::
 operator()()
 {
-    is_enqueued_.store(false, std::memory_order_relaxed);
+    // Release ensures the false is visible to the reactor's CAS on other
+    // cores. With relaxed, ARM's store buffer can delay the write,
+    // causing the reactor's CAS to see a stale 'true' and skip
+    // enqueue—permanently losing the edge-triggered event and
+    // eventually deadlocking. On x86 (TSO) release compiles to the
+    // same MOV as relaxed, so there is no cost there.
+    is_enqueued_.store(false, std::memory_order_release);
 
     // Take ownership of impl ref set by close_socket() to prevent
     // the owning impl from being freed while we're executing
@@ -252,13 +258,68 @@ operator()()
         }
     }
 
-    if (rd || wr)
+    // Re-register EAGAIN ops. A concurrent operator()() invocation may
+    // have set read_ready/write_ready while we held the op (no read_op
+    // was registered, so it cached the edge event). Check the flags
+    // under the same lock as re-registration so no edge is lost.
+    while (rd || wr)
     {
-        std::lock_guard lock(mutex);
+        bool retry = false;
+        {
+            std::lock_guard lock(mutex);
+            if (rd)
+            {
+                if (read_ready)
+                {
+                    read_ready = false;
+                    retry = true;
+                }
+                else
+                {
+                    read_op = rd;
+                    rd = nullptr;
+                }
+            }
+            if (wr)
+            {
+                if (write_ready)
+                {
+                    write_ready = false;
+                    retry = true;
+                }
+                else
+                {
+                    write_op = wr;
+                    wr = nullptr;
+                }
+            }
+        }
+
+        if (!retry)
+            break;
+
         if (rd)
-            read_op = rd;
+        {
+            rd->perform_io();
+            if (rd->errn == EAGAIN || rd->errn == EWOULDBLOCK)
+                rd->errn = 0;
+            else
+            {
+                local_ops.push(rd);
+                rd = nullptr;
+            }
+        }
         if (wr)
-            write_op = wr;
+        {
+            wr->perform_io();
+            if (wr->errn == EAGAIN || wr->errn == EWOULDBLOCK)
+                wr->errn = 0;
+            else
+            {
+                local_ops.push(wr);
+                wr = nullptr;
+            }
+        }
     }
 
     // Execute first handler inline — the scheduler's work_cleanup
@@ -688,10 +749,14 @@ void
 kqueue_scheduler::
 interrupt_reactor() const
 {
-    // Only trigger if not already armed to avoid redundant triggers
+    // Only trigger if not already armed to avoid redundant triggers.
+    // acq_rel: release makes the true store visible to the reactor;
+    // acquire on failure sees the reactor's release store of false,
+    // preventing a stale-true read that would silently drop the trigger.
+    // On x86 (TSO) this compiles to the same LOCK CMPXCHG as before.
     bool expected = false;
     if (user_event_armed_.compare_exchange_strong(expected, true,
-            std::memory_order_release, std::memory_order_relaxed))
+            std::memory_order_acq_rel, std::memory_order_acquire))
     {
         struct kevent ev;
         EV_SET(&ev, 0, EVFILT_USER, 0, NOTE_TRIGGER, 0, nullptr);
@@ -913,8 +978,12 @@ run_task(std::unique_lock<std::mutex>& lock, scheduler_context* ctx)
     {
         if (events[i].filter == EVFILT_USER)
         {
-            // Interrupt event - clear the armed flag
-            user_event_armed_.store(false, std::memory_order_relaxed);
+            // Interrupt event - clear the armed flag.
+            // Release pairs with the acquire CAS failure path in
+            // interrupt_reactor(), ensuring the reactor sees our
+            // store of false and can re-arm the EVFILT_USER trigger.
+            // On x86 (TSO) this compiles identically to relaxed.
+            user_event_armed_.store(false, std::memory_order_release);
             continue;
         }
 
@@ -947,10 +1016,17 @@ run_task(std::unique_lock<std::mutex>& lock, scheduler_context* ctx)
 
         desc->add_ready_events(ready);
 
-        // Only enqueue if not already enqueued
+        // Only enqueue if not already enqueued.
+        // acq_rel on success: release makes add_ready_events visible
+        // to the consumer's acquire exchange; acquire pairs with the
+        // consumer's release store of false so we read the latest
+        // value. acquire on failure: ensures the CAS load sees the
+        // consumer's release store on ARM (prevents stale reads from
+        // the store buffer). On x86 (TSO) these compile identically
+        // to the weaker orderings.
         bool expected = false;
         if (desc->is_enqueued_.compare_exchange_strong(expected, true,
-                std::memory_order_release, std::memory_order_relaxed))
+                std::memory_order_acq_rel, std::memory_order_acquire))
         {
             local_ops.push(desc);
             ++completions_queued;

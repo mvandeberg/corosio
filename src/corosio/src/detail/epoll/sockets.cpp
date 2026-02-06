@@ -184,17 +184,24 @@ connect(
 
         if (perform_now)
         {
-            op.perform_io();
-            if (op.errn == EAGAIN || op.errn == EWOULDBLOCK)
+            for (;;)
             {
+                op.perform_io();
+                if (op.errn != EAGAIN && op.errn != EWOULDBLOCK)
+                {
+                    svc_.post(&op);
+                    svc_.work_finished();
+                    break;
+                }
                 op.errn = 0;
                 std::lock_guard lock(desc_state_.mutex);
+                if (desc_state_.write_ready)
+                {
+                    desc_state_.write_ready = false;
+                    continue;
+                }
                 desc_state_.connect_op = &op;
-            }
-            else
-            {
-                svc_.post(&op);
-                svc_.work_finished();
+                break;
             }
             return std::noop_coroutine();
         }
@@ -274,17 +281,24 @@ do_read_io()
 
         if (perform_now)
         {
-            op.perform_io();
-            if (op.errn == EAGAIN || op.errn == EWOULDBLOCK)
+            for (;;)
             {
+                op.perform_io();
+                if (op.errn != EAGAIN && op.errn != EWOULDBLOCK)
+                {
+                    svc_.post(&op);
+                    svc_.work_finished();
+                    return;
+                }
                 op.errn = 0;
                 std::lock_guard lock(desc_state_.mutex);
+                if (desc_state_.read_ready)
+                {
+                    desc_state_.read_ready = false;
+                    continue;
+                }
                 desc_state_.read_op = &op;
-            }
-            else
-            {
-                svc_.post(&op);
-                svc_.work_finished();
+                break;
             }
             return;
         }
@@ -353,17 +367,24 @@ do_write_io()
 
         if (perform_now)
         {
-            op.perform_io();
-            if (op.errn == EAGAIN || op.errn == EWOULDBLOCK)
+            for (;;)
             {
+                op.perform_io();
+                if (op.errn != EAGAIN && op.errn != EWOULDBLOCK)
+                {
+                    svc_.post(&op);
+                    svc_.work_finished();
+                    return;
+                }
                 op.errn = 0;
                 std::lock_guard lock(desc_state_.mutex);
+                if (desc_state_.write_ready)
+                {
+                    desc_state_.write_ready = false;
+                    continue;
+                }
                 desc_state_.write_op = &op;
-            }
-            else
-            {
-                svc_.post(&op);
-                svc_.work_finished();
+                break;
             }
             return;
         }
