@@ -1,5 +1,6 @@
 //
 // Copyright (c) 2026 Steve Gerbino
+// Copyright (c) 2026 Michael Vandeberg
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -68,6 +69,14 @@ int dispatch_backend(const char* backend, Func&& func)
     if (std::strcmp(backend, "epoll") == 0)
     {
         func.template operator()<corosio::epoll_context>("epoll");
+        return 0;
+    }
+#endif
+
+#if BOOST_COROSIO_HAS_KQUEUE
+    if (std::strcmp(backend, "kqueue") == 0)
+    {
+        func.template operator()<corosio::kqueue_context>("kqueue");
         return 0;
     }
 #endif

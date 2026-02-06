@@ -233,6 +233,10 @@ void run_socket_latency_benchmarks(
 template void run_socket_latency_benchmarks<corosio::epoll_context>(
     bench::result_collector&, char const* );
 #endif
+#if BOOST_COROSIO_HAS_KQUEUE
+template void run_socket_latency_benchmarks<corosio::kqueue_context>(
+    bench::result_collector&, char const* );
+#endif
 #if BOOST_COROSIO_HAS_SELECT
 template void run_socket_latency_benchmarks<corosio::select_context>(
     bench::result_collector&, char const* );

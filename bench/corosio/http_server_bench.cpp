@@ -382,6 +382,10 @@ void run_http_server_benchmarks(
 template void run_http_server_benchmarks<corosio::epoll_context>(
     bench::result_collector&, char const* );
 #endif
+#if BOOST_COROSIO_HAS_KQUEUE
+template void run_http_server_benchmarks<corosio::kqueue_context>(
+    bench::result_collector&, char const* );
+#endif
 #if BOOST_COROSIO_HAS_SELECT
 template void run_http_server_benchmarks<corosio::select_context>(
     bench::result_collector&, char const* );
