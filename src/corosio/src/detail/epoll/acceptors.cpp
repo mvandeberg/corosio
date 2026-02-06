@@ -24,6 +24,15 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+/*
+    Edge-triggered epoll accept with retry semantics. When accept4() returns
+    EAGAIN the op is parked as desc_state_.read_op; the reactor's edge event
+    sets read_ready and dispatches the descriptor_state, which retries
+    accept4() in a loop until it either succeeds or gets EAGAIN again (at
+    which point the op is re-parked). Completions are always posted to the
+    scheduler queue so the coroutine never resumes inside the reactor.
+*/
+
 namespace boost::corosio::detail {
 
 void

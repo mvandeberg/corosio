@@ -146,20 +146,19 @@ public:
         remote_endpoint_ = remote;
     }
 
+    // Public for internal integration with the scheduler and reactor —
+    // not part of the external API. The descriptor_state is accessed by
+    // the reactor thread (lock-free atomics) and by op completion under
+    // desc_state_.mutex; the op slots and initiators are only touched
+    // by the thread that owns the current I/O call.
     kqueue_connect_op conn_;
     kqueue_read_op rd_;
     kqueue_write_op wr_;
-
-    /// Per-descriptor state for persistent kqueue registration
     descriptor_state desc_state_;
-
     cached_initiator read_initiator_;
     cached_initiator write_initiator_;
 
-    /// Execute the read I/O operation (called by initiator coroutine).
     void do_read_io();
-
-    /// Execute the write I/O operation (called by initiator coroutine).
     void do_write_io();
 
 private:

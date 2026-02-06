@@ -381,11 +381,11 @@ struct kqueue_accept_op : kqueue_op
 
     void perform_io() noexcept override
     {
-        sockaddr_in addr{};
-        socklen_t addrlen = sizeof(addr);
+        sockaddr_storage addr_storage{};
+        socklen_t addrlen = sizeof(addr_storage);
 
         // FreeBSD: Can use accept4(fd, addr, len, SOCK_NONBLOCK | SOCK_CLOEXEC)
-        int new_fd = ::accept(fd, reinterpret_cast<sockaddr*>(&addr), &addrlen);
+        int new_fd = ::accept(fd, reinterpret_cast<sockaddr*>(&addr_storage), &addrlen);
 
         if (new_fd >= 0)
         {
@@ -410,7 +410,7 @@ struct kqueue_accept_op : kqueue_op
 
             // Suppress SIGPIPE on accepted sockets
             int one = 1;
-            ::setsockopt(new_fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
+            (void)::setsockopt(new_fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
 
             accepted_fd = new_fd;
             complete(0, 0);

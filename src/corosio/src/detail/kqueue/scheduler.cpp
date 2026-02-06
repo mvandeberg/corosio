@@ -75,7 +75,7 @@ struct scheduler_context
     kqueue_scheduler const* key;
     scheduler_context* next;
     op_queue private_queue;
-    long private_outstanding_work;
+    std::int64_t private_outstanding_work;
 
     scheduler_context(kqueue_scheduler const* k, scheduler_context* n)
         : key(k)
@@ -121,7 +121,7 @@ find_context(kqueue_scheduler const* self) noexcept
 void
 flush_private_work(
     scheduler_context* ctx,
-    std::atomic<long>& outstanding_work) noexcept
+    std::atomic<std::int64_t>& outstanding_work) noexcept
 {
     if (ctx && ctx->private_outstanding_work > 0)
     {
@@ -137,7 +137,7 @@ flush_private_work(
 bool
 drain_private_queue(
     scheduler_context* ctx,
-    std::atomic<long>& outstanding_work,
+    std::atomic<std::int64_t>& outstanding_work,
     op_queue& completed_ops) noexcept
 {
     if (!ctx || ctx->private_queue.empty())
@@ -360,8 +360,8 @@ kqueue_scheduler(
         detail::throw_system_error(make_err(errn), "fcntl (kqueue FD_CLOEXEC)");
     }
 
-    // Register EVFILT_USER for reactor interruption.
-    // FreeBSD: EVFILT_USER has known bugs on some versions. Use self-pipe fallback.
+    // Register EVFILT_USER for reactor interruption (no self-pipe fallback).
+    // Requires FreeBSD 11+ or macOS 10.6+; fails with throw on older kernels.
     struct kevent ev;
     EV_SET(&ev, 0, EVFILT_USER, EV_ADD | EV_CLEAR, 0, 0, nullptr);
     if (::kevent(kq_fd_, &ev, 1, nullptr, 0, nullptr) < 0)
@@ -441,6 +441,9 @@ post(capy::coro h) const
         {
             auto h = h_;
             delete this;
+            // Acquire fence on *this thread* (not the deleted object) ensures
+            // stores made by the posting thread (e.g. coroutine state written
+            // before the cross-thread post) are visible before we resume.
             std::atomic_thread_fence(std::memory_order_acquire);
             h.resume();
         }
@@ -655,7 +658,7 @@ register_descriptor(int fd, descriptor_state* desc) const
     if (::kevent(kq_fd_, changes, 2, nullptr, 0, nullptr) < 0)
         detail::throw_system_error(make_err(errno), "kevent (register)");
 
-    desc->registered_events = 0x3; // both read+write registered
+    desc->registered_events = kqueue_event_read | kqueue_event_write;
     desc->fd = fd;
     desc->scheduler_ = this;
 
@@ -716,7 +719,7 @@ compensating_work_started() const noexcept
 
 void
 kqueue_scheduler::
-drain_thread_queue(op_queue& queue, long count) const
+drain_thread_queue(op_queue& queue, std::int64_t count) const
 {
     // Note: outstanding_work_ was already incremented when posting
     std::unique_lock lock(mutex_);
@@ -808,11 +811,14 @@ void
 kqueue_scheduler::
 wait_for_signal(std::unique_lock<std::mutex>& lock) const
 {
+    // state_ encoding: bit 0 = signaled flag, bits 1+ = waiter count.
+    // (state_ & 1) checks the signaled bit; +=2 / -=2 adjusts
+    // the waiter count without disturbing the signaled bit.
     while ((state_ & 1) == 0)
     {
-        state_ += 2;
+        state_ += 2;  // register waiter
         cond_.wait(lock);
-        state_ -= 2;
+        state_ -= 2;  // unregister waiter
     }
 }
 
@@ -822,11 +828,11 @@ wait_for_signal_for(
     std::unique_lock<std::mutex>& lock,
     long timeout_us) const
 {
-    if ((state_ & 1) == 0)
+    if ((state_ & 1) == 0)  // not yet signaled
     {
-        state_ += 2;
+        state_ += 2;  // register waiter
         cond_.wait_for(lock, std::chrono::microseconds(timeout_us));
-        state_ -= 2;
+        state_ -= 2;  // unregister waiter
     }
 }
 
@@ -867,12 +873,18 @@ calculate_timeout(long requested_timeout_us) const
     auto timer_timeout_us = std::chrono::duration_cast<
         std::chrono::microseconds>(nearest - now).count();
 
-    if (requested_timeout_us < 0)
-        return static_cast<long>(timer_timeout_us);
+    // Clamp to [0, LONG_MAX] to prevent truncation on 32-bit long platforms
+    constexpr auto long_max =
+        static_cast<long long>((std::numeric_limits<long>::max)());
+    auto capped_timer_us = std::min(
+        std::max(timer_timeout_us, static_cast<long long>(0)), long_max);
 
+    if (requested_timeout_us < 0)
+        return static_cast<long>(capped_timer_us);
+
+    // requested_timeout_us is already long, so min() result fits in long
     return static_cast<long>(std::min(
-        static_cast<long long>(requested_timeout_us),
-        static_cast<long long>(timer_timeout_us)));
+        static_cast<long long>(requested_timeout_us), capped_timer_us));
 }
 
 /** RAII guard for handler execution work accounting.
@@ -895,7 +907,7 @@ struct work_cleanup
     {
         if (ctx)
         {
-            long produced = ctx->private_outstanding_work;
+            std::int64_t produced = ctx->private_outstanding_work;
             if (produced > 1)
                 scheduler->outstanding_work_.fetch_add(produced - 1, std::memory_order_relaxed);
             else if (produced < 1)

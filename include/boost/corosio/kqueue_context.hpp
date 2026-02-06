@@ -37,6 +37,9 @@ namespace boost::corosio {
     run_async(ex)(my_coroutine());
     ctx.run();  // Process all queued work
     @endcode
+
+    @see basic_io_context, basic_io_context::get_executor,
+         basic_io_context::run, capy::execution_context
 */
 class BOOST_COROSIO_DECL kqueue_context : public basic_io_context
 {
@@ -46,6 +49,9 @@ public:
         The concurrency hint is set to the number of hardware threads
         available on the system. If more than one thread is available,
         thread-safe synchronization is used.
+
+        @throws std::system_error if creating the kqueue file descriptor
+            or registering the EVFILT_USER interrupt event fails.
     */
     kqueue_context();
 
@@ -54,16 +60,25 @@ public:
         @param concurrency_hint A hint for the number of threads that
             will call `run()`. If greater than 1, thread-safe
             synchronization is used internally.
+
+        @throws std::system_error if creating the kqueue file descriptor
+            or registering the EVFILT_USER interrupt event fails.
     */
     explicit
     kqueue_context(unsigned concurrency_hint);
 
-    /** Destructor. */
+    /** Destructor.
+
+        Calls `shutdown()` and `destroy()` to release all resources.
+        Does not throw.
+    */
     ~kqueue_context();
 
-    // Non-copyable
+    // Non-copyable, non-movable
     kqueue_context(kqueue_context const&) = delete;
     kqueue_context& operator=(kqueue_context const&) = delete;
+    kqueue_context(kqueue_context&&) = delete;
+    kqueue_context& operator=(kqueue_context&&) = delete;
 };
 
 } // namespace boost::corosio

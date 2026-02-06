@@ -21,6 +21,44 @@
 
 #include <utility>
 
+/*
+    kqueue socket implementation
+    ============================
+
+    Each kqueue_socket_impl owns a descriptor_state that is persistently
+    registered with kqueue (EVFILT_READ + EVFILT_WRITE, both EV_CLEAR for
+    edge-triggered semantics). The descriptor_state tracks three operation
+    slots (read_op, write_op, connect_op) and two ready flags
+    (read_ready, write_ready) under a per-descriptor mutex.
+
+    Ready-flag protocol
+    -------------------
+    When a kqueue event fires and no operation is pending for that
+    direction, the reactor sets the corresponding ready flag instead of
+    dropping the event. When a new operation starts and finds the ready
+    flag set, it performs I/O immediately rather than parking in the
+    descriptor_state slot. This prevents lost wakeups under edge-triggered
+    notification.
+
+    Edge-triggered retry
+    --------------------
+    Because EV_CLEAR delivers each transition exactly once, a single
+    event may correspond to more data than one I/O call can consume. The
+    retry loops in connect(), do_read_io(), and do_write_io() repeat
+    perform_io() while EAGAIN/EWOULDBLOCK is returned and the ready flag
+    has been re-set. When the flag is clear the operation parks in its
+    descriptor_state slot and waits for the next kqueue event.
+
+    Symmetric transfer and the cached_initiator
+    --------------------------------------------
+    read_some() and write_some() return a coroutine_handle<> for symmetric
+    transfer so the caller is fully suspended before any I/O is attempted.
+    The cached_initiator manages a reusable coroutine frame that calls
+    do_read_io / do_write_io after the caller suspends. This avoids a
+    heap allocation per operation and guarantees the caller's state is
+    consistent if a cancellation races with completion.
+*/
+
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -831,10 +869,15 @@ open_socket(tcp_socket::socket_impl& impl)
         return make_err(errn);
     }
 
-    // Suppress SIGPIPE on this socket
-    // FreeBSD: Supports MSG_NOSIGNAL on sendmsg(), SO_NOSIGPIPE not needed
+    // Suppress SIGPIPE on this socket; writev() has no MSG_NOSIGNAL
+    // equivalent, so SO_NOSIGPIPE is required on macOS/FreeBSD.
     int one = 1;
-    ::setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
+    if (::setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one)) != 0)
+    {
+        int errn = errno;
+        ::close(fd);
+        return make_err(errn);
+    }
 
     kq_impl->fd_ = fd;
 

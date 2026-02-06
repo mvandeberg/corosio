@@ -65,17 +65,27 @@ public:
 
     /** Construct the scheduler.
 
-        Creates a kqueue instance and registers EVFILT_USER for
-        reactor interruption.
+        Creates a kqueue file descriptor via kqueue(), sets
+        close-on-exec, and registers EVFILT_USER for reactor
+        interruption. On failure the kqueue fd is closed before
+        throwing.
 
         @param ctx Reference to the owning execution_context.
         @param concurrency_hint Hint for expected thread count (unused).
+
+        @throws std::system_error if kqueue() fails, if setting
+            FD_CLOEXEC on the kqueue fd fails, or if registering
+            the EVFILT_USER event fails. The error code contains
+            the errno from the failed syscall.
     */
     kqueue_scheduler(
         capy::execution_context& ctx,
         int concurrency_hint = -1);
 
-    /// Destroy the scheduler.
+    /** Destructor.
+
+        Closes the kqueue file descriptor if valid. Does not throw.
+    */
     ~kqueue_scheduler();
 
     kqueue_scheduler(kqueue_scheduler const&) = delete;
@@ -84,6 +94,9 @@ public:
     void shutdown() override;
     void post(capy::coro h) const override;
     void post(scheduler_op* h) const override;
+    // scheduler::on_work_started / on_work_finished — non-const, for executors.
+    // Tracks work that keeps run() alive; the scheduler stops when the
+    // count drops to zero.
     void on_work_started() noexcept override;
     void on_work_finished() noexcept override;
     bool running_in_this_thread() const noexcept override;
@@ -107,26 +120,42 @@ public:
 
     /** Register a descriptor for persistent monitoring.
 
-        The fd is registered once with EVFILT_READ and EVFILT_WRITE
-        (both EV_CLEAR) and stays registered until explicitly
-        deregistered. Events are dispatched via descriptor_state which
-        tracks pending read/write/connect operations.
+        Adds EVFILT_READ and EVFILT_WRITE (both EV_CLEAR) for @a fd
+        and stores @a desc in the kevent udata field so that the
+        reactor can dispatch events to the correct descriptor_state.
+
+        The caller retains ownership of @a desc. It must remain valid
+        until deregister_descriptor() is called and all pending
+        read/write/connect operations referencing it have completed.
+        The scheduler accesses @a desc asynchronously from the reactor
+        thread when kevent delivers events.
 
         @param fd The file descriptor to register.
-        @param desc Pointer to descriptor data (stored in kevent udata).
+        @param desc Pointer to the caller-owned descriptor_state.
+
+        @throws std::system_error if kevent(EV_ADD) fails.
     */
     void register_descriptor(int fd, descriptor_state* desc) const;
 
     /** Deregister a persistently registered descriptor.
 
+        Issues kevent(EV_DELETE) for both EVFILT_READ and EVFILT_WRITE.
+        Errors are silently ignored because the fd may already be
+        closed and kqueue automatically removes closed descriptors.
+
+        After this call returns, the reactor will not deliver any
+        further events for @a fd, so the associated descriptor_state
+        may be safely destroyed once all previously queued completions
+        have been processed.
+
         @param fd The file descriptor to deregister.
     */
     void deregister_descriptor(int fd) const;
 
-    /** For use by I/O operations to track pending work. */
+    // scheduler::work_started / work_finished — const, for I/O services.
+    // Adjusts outstanding_work_ and wakes blocked threads but does not
+    // stop the scheduler when the count reaches zero.
     void work_started() const noexcept override;
-
-    /** For use by I/O operations to track completed work. */
     void work_finished() const noexcept override;
 
     /** Offset a forthcoming work_finished from work_cleanup.
@@ -144,7 +173,7 @@ public:
         @param queue The private queue to drain.
         @param count Item count for wakeup decisions (wakes other threads if positive).
     */
-    void drain_thread_queue(op_queue& queue, long count) const;
+    void drain_thread_queue(op_queue& queue, std::int64_t count) const;
 
     /** Post completed operations for deferred invocation.
 
@@ -241,7 +270,7 @@ private:
     mutable std::mutex mutex_;
     mutable std::condition_variable cond_;
     mutable op_queue completed_ops_;
-    mutable std::atomic<long> outstanding_work_;
+    mutable std::atomic<std::int64_t> outstanding_work_;
     bool stopped_;
     bool shutdown_;
     timer_service* timer_svc_ = nullptr;

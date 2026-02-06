@@ -18,6 +18,49 @@
 
 #include <utility>
 
+/*
+    kqueue async accept implementation
+    ===================================
+
+    kqueue_acceptor_impl registers its listening fd with kqueue once
+    (EVFILT_READ, EV_CLEAR for edge-triggered semantics) via
+    desc_state_. A single accept operation can be pending at a time,
+    stored in desc_state_.read_op since accept is a read-like event.
+
+    Async accept control flow
+    -------------------------
+    accept() first attempts a synchronous ::accept(). On EAGAIN the
+    ready flag is checked under the desc_state_ mutex: if set, a retry
+    loop calls perform_io() until the accept succeeds or the flag is
+    exhausted. Otherwise the op is parked in desc_state_.read_op for
+    the reactor to wake later. After parking, a cancellation race-check
+    reclaims the op if a stop was requested between parking and the
+    check.
+
+    Completion and coroutine resumption
+    ------------------------------------
+    kqueue_accept_op::operator()() runs on the scheduler thread. On
+    success it creates a kqueue_socket_impl for the accepted fd,
+    registers it with kqueue, sets SO_NOSIGPIPE, and caches both
+    endpoints. The coroutine is resumed via saved_ex.dispatch() after
+    all member state has been moved to stack locals.
+
+    Lifetime management
+    -------------------
+    shared_from_this() is captured in op.impl_ptr whenever an op is
+    posted to the scheduler. This shared_ptr prevents the acceptor
+    impl from being destroyed while completions are in flight. The
+    desc_state_.impl_ref_ similarly prevents destruction while the
+    descriptor_state itself is enqueued in the scheduler's ready queue.
+
+    Cancellation
+    ------------
+    cancel() and cancel_single_op() set the cancelled flag, then claim
+    the op from desc_state_.read_op under the mutex. If claimed, the
+    op is posted for completion with a cancelled error code and the
+    extra work_started() from registration is balanced by work_finished().
+*/
+
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -75,8 +118,7 @@ operator()()
                 }
                 socket_svc->scheduler().register_descriptor(accepted_fd, &impl.desc_state_);
 
-                // Set SO_NOSIGPIPE on the accepted socket
-                // FreeBSD: Supports MSG_NOSIGNAL on sendmsg(), SO_NOSIGPIPE not needed
+                // Suppress SIGPIPE on the accepted socket; macOS lacks MSG_NOSIGNAL
                 int one = 1;
                 ::setsockopt(accepted_fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
 
@@ -369,9 +411,7 @@ kqueue_acceptor_service(capy::execution_context& ctx)
 }
 
 kqueue_acceptor_service::
-~kqueue_acceptor_service()
-{
-}
+~kqueue_acceptor_service() = default;
 
 void
 kqueue_acceptor_service::

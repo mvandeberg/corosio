@@ -17,11 +17,22 @@
 
 #include <thread>
 
+/*
+    kqueue_context owns the lifecycle of all kqueue-based I/O services.
+    Construction creates the kqueue_scheduler first (passing the concurrency
+    hint), then registers kqueue_socket_service and kqueue_acceptor_service.
+    Those services are keyed by their base classes (socket_service /
+    acceptor_service), so higher-level code discovers them through
+    execution_context::use_service without knowing the kqueue concrete type.
+    The scheduler must outlive both services because they post completions
+    and track outstanding work through it.
+*/
+
 namespace boost::corosio {
 
 kqueue_context::
 kqueue_context()
-    : kqueue_context(std::thread::hardware_concurrency())
+    : kqueue_context(std::thread::hardware_concurrency() ?: 1u)
 {
 }
 

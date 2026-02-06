@@ -28,7 +28,56 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+/*
+    Edge-triggered epoll socket operations with retry semantics.
+
+    Each socket's desc_state_ tracks pending ops (read_op, write_op,
+    connect_op) and cached readiness flags (read_ready, write_ready),
+    all protected by desc_state_.mutex. When an I/O call returns EAGAIN,
+    the op is parked in desc_state_ for the reactor; if a readiness edge
+    arrived in the meantime (flag already set), retry_io() retries
+    immediately in a loop. Completions are always posted to the scheduler
+    via svc_.post() — coroutines never resume inline from the initiator —
+    and svc_.work_finished() balances the earlier work_started() call.
+*/
+
 namespace boost::corosio::detail {
+
+namespace {
+
+// Retry I/O until success, hard error, or EAGAIN with no cached readiness.
+// On completion (not EAGAIN): posts op and calls work_finished.
+// On EAGAIN with no readiness: parks op as desc_op for the reactor.
+void
+retry_io(
+    epoll_op& op,
+    std::mutex& mutex,
+    bool& ready_flag,
+    epoll_op*& desc_op,
+    epoll_socket_service& svc)
+{
+    for (;;)
+    {
+        op.perform_io();
+        if (op.errn != EAGAIN && op.errn != EWOULDBLOCK)
+        {
+            svc.post(&op);
+            svc.work_finished();
+            return;
+        }
+        op.errn = 0;
+        std::lock_guard lock(mutex);
+        if (ready_flag)
+        {
+            ready_flag = false;
+            continue;
+        }
+        desc_op = &op;
+        return;
+    }
+}
+
+} // namespace
 
 void
 epoll_op::canceller::
@@ -184,25 +233,8 @@ connect(
 
         if (perform_now)
         {
-            for (;;)
-            {
-                op.perform_io();
-                if (op.errn != EAGAIN && op.errn != EWOULDBLOCK)
-                {
-                    svc_.post(&op);
-                    svc_.work_finished();
-                    break;
-                }
-                op.errn = 0;
-                std::lock_guard lock(desc_state_.mutex);
-                if (desc_state_.write_ready)
-                {
-                    desc_state_.write_ready = false;
-                    continue;
-                }
-                desc_state_.connect_op = &op;
-                break;
-            }
+            retry_io(op, desc_state_.mutex, desc_state_.write_ready,
+                     desc_state_.connect_op, svc_);
             return std::noop_coroutine();
         }
 
@@ -281,25 +313,8 @@ do_read_io()
 
         if (perform_now)
         {
-            for (;;)
-            {
-                op.perform_io();
-                if (op.errn != EAGAIN && op.errn != EWOULDBLOCK)
-                {
-                    svc_.post(&op);
-                    svc_.work_finished();
-                    return;
-                }
-                op.errn = 0;
-                std::lock_guard lock(desc_state_.mutex);
-                if (desc_state_.read_ready)
-                {
-                    desc_state_.read_ready = false;
-                    continue;
-                }
-                desc_state_.read_op = &op;
-                break;
-            }
+            retry_io(op, desc_state_.mutex, desc_state_.read_ready,
+                     desc_state_.read_op, svc_);
             return;
         }
 
@@ -367,25 +382,8 @@ do_write_io()
 
         if (perform_now)
         {
-            for (;;)
-            {
-                op.perform_io();
-                if (op.errn != EAGAIN && op.errn != EWOULDBLOCK)
-                {
-                    svc_.post(&op);
-                    svc_.work_finished();
-                    return;
-                }
-                op.errn = 0;
-                std::lock_guard lock(desc_state_.mutex);
-                if (desc_state_.write_ready)
-                {
-                    desc_state_.write_ready = false;
-                    continue;
-                }
-                desc_state_.write_op = &op;
-                break;
-            }
+            retry_io(op, desc_state_.mutex, desc_state_.write_ready,
+                     desc_state_.write_op, svc_);
             return;
         }
 
