@@ -375,7 +375,11 @@ kqueue_scheduler(
     timer_svc_->set_on_earliest_changed(
         timer_service::callback(
             this,
-            [](void* p) { static_cast<kqueue_scheduler*>(p)->interrupt_reactor(); }));
+            [](void* p) {
+                auto* self = static_cast<kqueue_scheduler*>(p);
+                if (self->task_running_.load(std::memory_order_acquire))
+                    self->interrupt_reactor();
+            }));
 
     // Initialize resolver service
     get_resolver_service(ctx, *this);
@@ -698,7 +702,7 @@ work_finished() const noexcept
         // Both are needed because they target different blocking mechanisms.
         std::unique_lock lock(mutex_);
         signal_all(lock);
-        if (task_running_ && !task_interrupted_)
+        if (task_running_.load(std::memory_order_relaxed) && !task_interrupted_)
         {
             task_interrupted_ = true;
             lock.unlock();
@@ -843,7 +847,7 @@ wake_one_thread_and_unlock(std::unique_lock<std::mutex>& lock) const
     if (maybe_unlock_and_signal_one(lock))
         return;
 
-    if (task_running_ && !task_interrupted_)
+    if (task_running_.load(std::memory_order_relaxed) && !task_interrupted_)
     {
         task_interrupted_ = true;
         lock.unlock();
@@ -1105,7 +1109,7 @@ do_one(std::unique_lock<std::mutex>& lock, long timeout_us, scheduler_context* c
             }
 
             task_interrupted_ = more_handlers || timeout_us == 0;
-            task_running_ = true;
+            task_running_.store(true, std::memory_order_release);
 
             if (more_handlers)
                 unlock_and_signal_one(lock);
@@ -1116,11 +1120,11 @@ do_one(std::unique_lock<std::mutex>& lock, long timeout_us, scheduler_context* c
             }
             catch (...)
             {
-                task_running_ = false;
+                task_running_.store(false, std::memory_order_relaxed);
                 throw;
             }
 
-            task_running_ = false;
+            task_running_.store(false, std::memory_order_relaxed);
             completed_ops_.push(&task_op_);
             continue;
         }

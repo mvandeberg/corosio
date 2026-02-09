@@ -278,7 +278,7 @@ private:
     // True while a thread is blocked in kevent(). Used by
     // wake_one_thread_and_unlock and work_finished to know when
     // an EVFILT_USER interrupt is needed instead of a condvar signal.
-    mutable bool task_running_ = false;
+    mutable std::atomic<bool> task_running_{false};
 
     // True when the reactor has been told to do a non-blocking poll
     // (more handlers queued or poll mode). Prevents redundant EVFILT_USER
