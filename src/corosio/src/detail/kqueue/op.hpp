@@ -135,6 +135,7 @@ struct descriptor_state : scheduler_op
     // Set during registration only (no mutex needed)
     std::uint32_t registered_events = 0;
     int fd = -1;
+    bool one_thread = false;
 
     // For deferred I/O - set by reactor, read by scheduler
     std::atomic<std::uint32_t> ready_events_{0};

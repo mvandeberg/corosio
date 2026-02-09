@@ -71,7 +71,9 @@ public:
         throwing.
 
         @param ctx Reference to the owning execution_context.
-        @param concurrency_hint Hint for expected thread count (unused).
+        @param concurrency_hint Hint for expected thread count.
+            When 1, scheduler and per-descriptor locking is
+            elided for single-threaded operation.
 
         @throws std::system_error if kqueue() fails, if setting
             FD_CLOEXEC on the kqueue fd fails, or if registering
@@ -267,6 +269,7 @@ private:
         long timeout_us) const;
 
     int kq_fd_;
+    bool one_thread_ = false;
     mutable std::mutex mutex_;
     mutable std::condition_variable cond_;
     mutable op_queue completed_ops_;

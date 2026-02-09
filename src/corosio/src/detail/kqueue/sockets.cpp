@@ -206,7 +206,8 @@ connect(
 
         bool perform_now = false;
         {
-            std::lock_guard lock(desc_state_.mutex);
+            std::unique_lock lock(desc_state_.mutex, std::defer_lock);
+            if (!desc_state_.one_thread) lock.lock();
             if (desc_state_.write_ready)
             {
                 desc_state_.write_ready = false;
@@ -230,7 +231,8 @@ connect(
                     break;
                 }
                 op.errn = 0;
-                std::lock_guard lock(desc_state_.mutex);
+                std::unique_lock lock(desc_state_.mutex, std::defer_lock);
+            if (!desc_state_.one_thread) lock.lock();
                 if (desc_state_.write_ready)
                 {
                     desc_state_.write_ready = false;
@@ -246,7 +248,8 @@ connect(
         {
             kqueue_op* claimed = nullptr;
             {
-                std::lock_guard lock(desc_state_.mutex);
+                std::unique_lock lock(desc_state_.mutex, std::defer_lock);
+            if (!desc_state_.one_thread) lock.lock();
                 if (desc_state_.connect_op == &op)
                     claimed = std::exchange(desc_state_.connect_op, nullptr);
             }
@@ -276,7 +279,8 @@ do_read_io()
     if (n > 0)
     {
         {
-            std::lock_guard lock(desc_state_.mutex);
+            std::unique_lock lock(desc_state_.mutex, std::defer_lock);
+            if (!desc_state_.one_thread) lock.lock();
             desc_state_.read_ready = false;
         }
         op.complete(0, static_cast<std::size_t>(n));
@@ -287,7 +291,8 @@ do_read_io()
     if (n == 0)
     {
         {
-            std::lock_guard lock(desc_state_.mutex);
+            std::unique_lock lock(desc_state_.mutex, std::defer_lock);
+            if (!desc_state_.one_thread) lock.lock();
             desc_state_.read_ready = false;
         }
         op.complete(0, 0);
@@ -301,7 +306,8 @@ do_read_io()
 
         bool perform_now = false;
         {
-            std::lock_guard lock(desc_state_.mutex);
+            std::unique_lock lock(desc_state_.mutex, std::defer_lock);
+            if (!desc_state_.one_thread) lock.lock();
             if (desc_state_.read_ready)
             {
                 desc_state_.read_ready = false;
@@ -325,7 +331,8 @@ do_read_io()
                     return;
                 }
                 op.errn = 0;
-                std::lock_guard lock(desc_state_.mutex);
+                std::unique_lock lock(desc_state_.mutex, std::defer_lock);
+            if (!desc_state_.one_thread) lock.lock();
                 if (desc_state_.read_ready)
                 {
                     desc_state_.read_ready = false;
@@ -341,7 +348,8 @@ do_read_io()
         {
             kqueue_op* claimed = nullptr;
             {
-                std::lock_guard lock(desc_state_.mutex);
+                std::unique_lock lock(desc_state_.mutex, std::defer_lock);
+            if (!desc_state_.one_thread) lock.lock();
                 if (desc_state_.read_op == &op)
                     claimed = std::exchange(desc_state_.read_op, nullptr);
             }
@@ -371,7 +379,8 @@ do_write_io()
     if (n >= 0)
     {
         {
-            std::lock_guard lock(desc_state_.mutex);
+            std::unique_lock lock(desc_state_.mutex, std::defer_lock);
+            if (!desc_state_.one_thread) lock.lock();
             desc_state_.write_ready = false;
         }
         op.complete(0, static_cast<std::size_t>(n));
@@ -385,7 +394,8 @@ do_write_io()
 
         bool perform_now = false;
         {
-            std::lock_guard lock(desc_state_.mutex);
+            std::unique_lock lock(desc_state_.mutex, std::defer_lock);
+            if (!desc_state_.one_thread) lock.lock();
             if (desc_state_.write_ready)
             {
                 desc_state_.write_ready = false;
@@ -409,7 +419,8 @@ do_write_io()
                     return;
                 }
                 op.errn = 0;
-                std::lock_guard lock(desc_state_.mutex);
+                std::unique_lock lock(desc_state_.mutex, std::defer_lock);
+            if (!desc_state_.one_thread) lock.lock();
                 if (desc_state_.write_ready)
                 {
                     desc_state_.write_ready = false;
@@ -425,7 +436,8 @@ do_write_io()
         {
             kqueue_op* claimed = nullptr;
             {
-                std::lock_guard lock(desc_state_.mutex);
+                std::unique_lock lock(desc_state_.mutex, std::defer_lock);
+            if (!desc_state_.one_thread) lock.lock();
                 if (desc_state_.write_op == &op)
                     claimed = std::exchange(desc_state_.write_op, nullptr);
             }
@@ -744,7 +756,8 @@ cancel() noexcept
     kqueue_op* rd_claimed = nullptr;
     kqueue_op* wr_claimed = nullptr;
     {
-        std::lock_guard lock(desc_state_.mutex);
+        std::unique_lock lock(desc_state_.mutex, std::defer_lock);
+        if (!desc_state_.one_thread) lock.lock();
         if (desc_state_.connect_op == &conn_)
             conn_claimed = std::exchange(desc_state_.connect_op, nullptr);
         if (desc_state_.read_op == &rd_)
@@ -788,7 +801,8 @@ cancel_single_op(kqueue_op& op) noexcept
     {
         kqueue_op* claimed = nullptr;
         {
-            std::lock_guard lock(desc_state_.mutex);
+            std::unique_lock lock(desc_state_.mutex, std::defer_lock);
+            if (!desc_state_.one_thread) lock.lock();
             if (*desc_op_ptr == &op)
                 claimed = std::exchange(*desc_op_ptr, nullptr);
         }
@@ -831,7 +845,8 @@ close_socket() noexcept
 
     desc_state_.fd = -1;
     {
-        std::lock_guard lock(desc_state_.mutex);
+        std::unique_lock lock(desc_state_.mutex, std::defer_lock);
+        if (!desc_state_.one_thread) lock.lock();
         desc_state_.read_op = nullptr;
         desc_state_.write_op = nullptr;
         desc_state_.connect_op = nullptr;
@@ -949,7 +964,8 @@ open_socket(tcp_socket::socket_impl& impl)
     // Register fd with kqueue (edge-triggered mode via EV_CLEAR)
     kq_impl->desc_state_.fd = fd;
     {
-        std::lock_guard lock(kq_impl->desc_state_.mutex);
+        std::unique_lock lock(kq_impl->desc_state_.mutex, std::defer_lock);
+        if (!kq_impl->desc_state_.one_thread) lock.lock();
         kq_impl->desc_state_.read_op = nullptr;
         kq_impl->desc_state_.write_op = nullptr;
         kq_impl->desc_state_.connect_op = nullptr;

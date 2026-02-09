@@ -189,7 +189,8 @@ operator()()
     kqueue_op* wr = nullptr;
     kqueue_op* cn = nullptr;
     {
-        std::lock_guard lock(mutex);
+        std::unique_lock lock(mutex, std::defer_lock);
+        if (!one_thread) lock.lock();
         if (ev & kqueue_event_read)
         {
             rd = std::exchange(read_op, nullptr);
@@ -266,7 +267,8 @@ operator()()
     {
         bool retry = false;
         {
-            std::lock_guard lock(mutex);
+            std::unique_lock lock(mutex, std::defer_lock);
+            if (!one_thread) lock.lock();
             if (rd)
             {
                 if (read_ready)
@@ -339,8 +341,9 @@ operator()()
 kqueue_scheduler::
 kqueue_scheduler(
     capy::execution_context& ctx,
-    int)
+    int concurrency_hint)
     : kq_fd_(-1)
+    , one_thread_(concurrency_hint == 1)
     , outstanding_work_(0)
     , stopped_(false)
     , shutdown_(false)
@@ -562,7 +565,8 @@ run()
     }
 
     thread_context_guard ctx(this);
-    std::unique_lock lock(mutex_);
+    std::unique_lock lock(mutex_, std::defer_lock);
+    if (!one_thread_) lock.lock();
 
     std::size_t n = 0;
     for (;;)
@@ -571,7 +575,7 @@ run()
             break;
         if (n != (std::numeric_limits<std::size_t>::max)())
             ++n;
-        if (!lock.owns_lock())
+        if (!one_thread_ && !lock.owns_lock())
             lock.lock();
     }
     return n;
@@ -588,7 +592,8 @@ run_one()
     }
 
     thread_context_guard ctx(this);
-    std::unique_lock lock(mutex_);
+    std::unique_lock lock(mutex_, std::defer_lock);
+    if (!one_thread_) lock.lock();
     return do_one(lock, -1, &ctx.frame_);
 }
 
@@ -603,7 +608,8 @@ wait_one(long usec)
     }
 
     thread_context_guard ctx(this);
-    std::unique_lock lock(mutex_);
+    std::unique_lock lock(mutex_, std::defer_lock);
+    if (!one_thread_) lock.lock();
     return do_one(lock, usec, &ctx.frame_);
 }
 
@@ -618,7 +624,8 @@ poll()
     }
 
     thread_context_guard ctx(this);
-    std::unique_lock lock(mutex_);
+    std::unique_lock lock(mutex_, std::defer_lock);
+    if (!one_thread_) lock.lock();
 
     std::size_t n = 0;
     for (;;)
@@ -627,7 +634,7 @@ poll()
             break;
         if (n != (std::numeric_limits<std::size_t>::max)())
             ++n;
-        if (!lock.owns_lock())
+        if (!one_thread_ && !lock.owns_lock())
             lock.lock();
     }
     return n;
@@ -644,7 +651,8 @@ poll_one()
     }
 
     thread_context_guard ctx(this);
-    std::unique_lock lock(mutex_);
+    std::unique_lock lock(mutex_, std::defer_lock);
+    if (!one_thread_) lock.lock();
     return do_one(lock, 0, &ctx.frame_);
 }
 
@@ -664,8 +672,10 @@ register_descriptor(int fd, descriptor_state* desc) const
     desc->registered_events = kqueue_event_read | kqueue_event_write;
     desc->fd = fd;
     desc->scheduler_ = this;
+    desc->one_thread = one_thread_;
 
-    std::lock_guard lock(desc->mutex);
+    std::unique_lock lock(desc->mutex, std::defer_lock);
+    if (!one_thread_) lock.lock();
     desc->read_ready = false;
     desc->write_ready = false;
 }
@@ -696,6 +706,9 @@ work_finished() const noexcept
 {
     if (outstanding_work_.fetch_sub(1, std::memory_order_acq_rel) == 1)
     {
+        if (one_thread_)
+            return;
+
         // Last work item completed - wake all threads so they can exit.
         // signal_all() wakes threads waiting on the condvar.
         // interrupt_reactor() wakes the reactor thread blocked in kevent().
@@ -729,9 +742,10 @@ drain_thread_queue(op_queue& queue, std::int64_t count) const
     if (count > 0)
         outstanding_work_.fetch_add(count, std::memory_order_relaxed);
 
-    std::unique_lock lock(mutex_);
+    std::unique_lock lock(mutex_, std::defer_lock);
+    if (!one_thread_) lock.lock();
     completed_ops_.splice(queue);
-    if (count > 0)
+    if (!one_thread_ && count > 0)
         maybe_unlock_and_signal_one(lock);
 }
 
@@ -921,7 +935,7 @@ struct work_cleanup
 
             if (!ctx->private_queue.empty())
             {
-                lock->lock();
+                if (!scheduler->one_thread_) lock->lock();
                 scheduler->completed_ops_.splice(ctx->private_queue);
             }
         }
@@ -1053,7 +1067,7 @@ run_task(std::unique_lock<std::mutex>& lock, scheduler_context* ctx)
     timer_svc_->process_expired();
 
     // --- Acquire mutex only for queue operations ---
-    lock.lock();
+    if (!one_thread_) lock.lock();
 
     if (!local_ops.empty())
         completed_ops_.splice(local_ops);
@@ -1074,7 +1088,7 @@ run_task(std::unique_lock<std::mutex>& lock, scheduler_context* ctx)
     }
 
     // Signal and wake one waiter if work is queued
-    if (completions_queued > 0)
+    if (!one_thread_ && completions_queued > 0)
     {
         if (maybe_unlock_and_signal_one(lock))
             lock.lock();
@@ -1111,7 +1125,7 @@ do_one(std::unique_lock<std::mutex>& lock, long timeout_us, scheduler_context* c
             task_interrupted_ = more_handlers || timeout_us == 0;
             task_running_.store(true, std::memory_order_release);
 
-            if (more_handlers)
+            if (!one_thread_ && more_handlers)
                 unlock_and_signal_one(lock);
 
             try
@@ -1132,7 +1146,11 @@ do_one(std::unique_lock<std::mutex>& lock, long timeout_us, scheduler_context* c
         // Handle operation
         if (op != nullptr)
         {
-            if (!completed_ops_.empty())
+            if (one_thread_)
+            {
+                // No locking in single-threaded mode
+            }
+            else if (!completed_ops_.empty())
                 unlock_and_signal_one(lock);
             else
                 lock.unlock();
@@ -1153,11 +1171,14 @@ do_one(std::unique_lock<std::mutex>& lock, long timeout_us, scheduler_context* c
             timeout_us == 0)
             return 0;
 
-        clear_signal();
-        if (timeout_us < 0)
-            wait_for_signal(lock);
-        else
-            wait_for_signal_for(lock, timeout_us);
+        if (!one_thread_)
+        {
+            clear_signal();
+            if (timeout_us < 0)
+                wait_for_signal(lock);
+            else
+                wait_for_signal_for(lock, timeout_us);
+        }
     }
 }
 

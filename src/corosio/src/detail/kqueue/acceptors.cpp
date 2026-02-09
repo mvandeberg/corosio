@@ -112,7 +112,8 @@ operator()()
                 // Register accepted socket with kqueue (edge-triggered via EV_CLEAR)
                 impl.desc_state_.fd = accepted_fd;
                 {
-                    std::lock_guard lock(impl.desc_state_.mutex);
+                    std::unique_lock lock(impl.desc_state_.mutex, std::defer_lock);
+                    if (!impl.desc_state_.one_thread) lock.lock();
                     impl.desc_state_.read_op = nullptr;
                     impl.desc_state_.write_op = nullptr;
                     impl.desc_state_.connect_op = nullptr;
@@ -258,7 +259,8 @@ accept(
         }
 
         {
-            std::lock_guard lock(desc_state_.mutex);
+            std::unique_lock lock(desc_state_.mutex, std::defer_lock);
+            if (!desc_state_.one_thread) lock.lock();
             desc_state_.read_ready = false;
         }
         op.accepted_fd = accepted;
@@ -275,7 +277,8 @@ accept(
 
         bool perform_now = false;
         {
-            std::lock_guard lock(desc_state_.mutex);
+            std::unique_lock lock(desc_state_.mutex, std::defer_lock);
+            if (!desc_state_.one_thread) lock.lock();
             if (desc_state_.read_ready)
             {
                 desc_state_.read_ready = false;
@@ -299,7 +302,8 @@ accept(
                     break;
                 }
                 op.errn = 0;
-                std::lock_guard lock(desc_state_.mutex);
+                std::unique_lock lock(desc_state_.mutex, std::defer_lock);
+                if (!desc_state_.one_thread) lock.lock();
                 if (desc_state_.read_ready)
                 {
                     desc_state_.read_ready = false;
@@ -315,7 +319,8 @@ accept(
         {
             kqueue_op* claimed = nullptr;
             {
-                std::lock_guard lock(desc_state_.mutex);
+                std::unique_lock lock(desc_state_.mutex, std::defer_lock);
+                if (!desc_state_.one_thread) lock.lock();
                 if (desc_state_.read_op == &op)
                     claimed = std::exchange(desc_state_.read_op, nullptr);
             }
@@ -349,7 +354,8 @@ cancel() noexcept
 
     kqueue_op* claimed = nullptr;
     {
-        std::lock_guard lock(desc_state_.mutex);
+        std::unique_lock lock(desc_state_.mutex, std::defer_lock);
+        if (!desc_state_.one_thread) lock.lock();
         if (desc_state_.read_op == &acc_)
             claimed = std::exchange(desc_state_.read_op, nullptr);
     }
@@ -369,7 +375,8 @@ cancel_single_op(kqueue_op& op) noexcept
 
     kqueue_op* claimed = nullptr;
     {
-        std::lock_guard lock(desc_state_.mutex);
+        std::unique_lock lock(desc_state_.mutex, std::defer_lock);
+        if (!desc_state_.one_thread) lock.lock();
         if (desc_state_.read_op == &op)
             claimed = std::exchange(desc_state_.read_op, nullptr);
     }
@@ -406,7 +413,8 @@ close_socket() noexcept
 
     desc_state_.fd = -1;
     {
-        std::lock_guard lock(desc_state_.mutex);
+        std::unique_lock lock(desc_state_.mutex, std::defer_lock);
+        if (!desc_state_.one_thread) lock.lock();
         desc_state_.read_op = nullptr;
         desc_state_.read_ready = false;
         desc_state_.write_ready = false;
@@ -526,7 +534,8 @@ open_acceptor(
     // Register fd with kqueue (edge-triggered via EV_CLEAR)
     kq_impl->desc_state_.fd = fd;
     {
-        std::lock_guard lock(kq_impl->desc_state_.mutex);
+        std::unique_lock lock(kq_impl->desc_state_.mutex, std::defer_lock);
+        if (!kq_impl->desc_state_.one_thread) lock.lock();
         kq_impl->desc_state_.read_op = nullptr;
     }
     scheduler().register_descriptor(fd, &kq_impl->desc_state_);
