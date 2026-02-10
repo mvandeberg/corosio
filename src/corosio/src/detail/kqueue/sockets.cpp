@@ -500,9 +500,19 @@ read_some(
 
     if (n > 0)
     {
-        op.complete(0, static_cast<std::size_t>(n));
-        svc_.post(&op);
-        return std::noop_coroutine();
+        // Inline completion via symmetric transfer — bypasses the scheduler
+        // queue entirely.  The caller resumes directly with the result.
+        op.stop_cb.reset();
+        if (op.ec_out)
+        {
+            if (op.cancelled.load(std::memory_order_acquire))
+                *op.ec_out = capy::error::canceled;
+            else
+                *op.ec_out = {};
+        }
+        if (op.bytes_out)
+            *op.bytes_out = static_cast<std::size_t>(n);
+        return h;
     }
 
     if (n == 0)
@@ -569,9 +579,19 @@ write_some(
 
     if (n > 0)
     {
-        op.complete(0, static_cast<std::size_t>(n));
-        svc_.post(&op);
-        return std::noop_coroutine();
+        // Inline completion via symmetric transfer — bypasses the scheduler
+        // queue entirely.  The caller resumes directly with the result.
+        op.stop_cb.reset();
+        if (op.ec_out)
+        {
+            if (op.cancelled.load(std::memory_order_acquire))
+                *op.ec_out = capy::error::canceled;
+            else
+                *op.ec_out = {};
+        }
+        if (op.bytes_out)
+            *op.bytes_out = static_cast<std::size_t>(n);
+        return h;
     }
 
     if (n == 0)
