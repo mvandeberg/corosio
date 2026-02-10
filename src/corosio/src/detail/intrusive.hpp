@@ -208,6 +208,21 @@ public:
         other.tail_ = nullptr;
     }
 
+    /// Prepend all elements of @p other before this queue's elements.
+    void
+    splice_front(intrusive_queue& other) noexcept
+    {
+        if(other.empty())
+            return;
+        if(head_)
+            other.tail_->next_ = head_;
+        else
+            tail_ = other.tail_;
+        head_ = other.head_;
+        other.head_ = nullptr;
+        other.tail_ = nullptr;
+    }
+
     T*
     pop() noexcept
     {

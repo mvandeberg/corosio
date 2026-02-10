@@ -296,6 +296,20 @@ private:
     // EVFILT_USER idempotency: prevents redundant NOTE_TRIGGER writes
     mutable std::atomic<bool> user_event_armed_{false};
 
+    // Maximum number of handler executions between forced reactor polls.
+    // Higher values improve throughput for pure handler/timer workloads
+    // by skipping kevent() syscalls, at the cost of delaying I/O event
+    // delivery. At ~25ns/handler, 1024 ≈ 25μs max reactor delay.
+    static constexpr int max_reactor_skip = 1024;
+
+    // Adaptive reactor skip: when the reactor repeatedly returns 0 I/O
+    // events, grow reactor_skip_limit_ so work_cleanup can use splice_front
+    // (placing items before task_op_). When I/O events arrive, immediately
+    // reset to 0 so the reactor runs on every cycle. Accessed under mutex_
+    // in multi-threaded mode; safe without lock in single-threaded mode.
+    mutable int reactor_skip_count_ = 0;
+    mutable int reactor_skip_limit_ = 0;
+
     // Sentinel operation for interleaving reactor runs with handler execution.
     // Ensures the reactor runs periodically even when handlers are continuously
     // posted, preventing starvation of I/O events, timers, and signals.

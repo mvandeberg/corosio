@@ -936,7 +936,21 @@ struct work_cleanup
             if (!ctx->private_queue.empty())
             {
                 if (!scheduler->one_thread_) lock->lock();
-                scheduler->completed_ops_.splice(ctx->private_queue);
+                // Adaptive reactor skip: when the reactor has been idle
+                // (no I/O events), prepend items before task_op_ so
+                // continuations execute without a wasted kevent() syscall.
+                // When I/O is active, reactor_skip_limit_ is 0 and we
+                // always append after task_op_ for prompt event delivery.
+                if (scheduler->reactor_skip_count_ < scheduler->reactor_skip_limit_)
+                {
+                    ++scheduler->reactor_skip_count_;
+                    scheduler->completed_ops_.splice_front(ctx->private_queue);
+                }
+                else
+                {
+                    scheduler->reactor_skip_count_ = 0;
+                    scheduler->completed_ops_.splice(ctx->private_queue);
+                }
             }
         }
         else
@@ -1063,11 +1077,30 @@ run_task(std::unique_lock<std::mutex>& lock, scheduler_context* ctx)
         }
     }
 
+    // Snapshot I/O completion count before timer/private-queue additions
+    bool had_io_events = (completions_queued > 0);
+
     // Process timers after kevent returns
     timer_svc_->process_expired();
 
     // --- Acquire mutex only for queue operations ---
     if (!one_thread_) lock.lock();
+
+    // Adaptive reactor skip: when the reactor consistently returns no I/O
+    // events, grow the skip limit so work_cleanup can use splice_front
+    // (handlers execute without a wasted kevent() round-trip). When I/O
+    // events arrive, immediately reset so the reactor polls every cycle.
+    if (had_io_events)
+    {
+        reactor_skip_limit_ = 0;
+        reactor_skip_count_ = 0;
+    }
+    else
+    {
+        if (reactor_skip_limit_ < max_reactor_skip)
+            reactor_skip_limit_ = std::min(reactor_skip_limit_ * 2 + 1, max_reactor_skip);
+        reactor_skip_count_ = 0;
+    }
 
     if (!local_ops.empty())
         completed_ops_.splice(local_ops);
@@ -1109,8 +1142,21 @@ do_one(std::unique_lock<std::mutex>& lock, long timeout_us, scheduler_context* c
         // Handle reactor sentinel - time to poll for I/O
         if (op == &task_op_)
         {
-            bool more_handlers = !completed_ops_.empty() ||
-                (ctx && !ctx->private_queue.empty());
+            // If the private queue has ready handlers, drain them to
+            // completed_ops_ with the sentinel at the back. This lets
+            // ready handlers execute without a wasted kevent(timeout=0)
+            // that would almost certainly return 0 events. The reactor
+            // runs when it eventually reaches the sentinel again with
+            // an empty private queue.
+            if (ctx && !ctx->private_queue.empty())
+            {
+                flush_private_work(ctx, outstanding_work_);
+                completed_ops_.splice(ctx->private_queue);
+                completed_ops_.push(&task_op_);
+                continue;
+            }
+
+            bool more_handlers = !completed_ops_.empty();
 
             // Nothing to run the reactor for: no pending work to wait on,
             // or caller requested a non-blocking poll

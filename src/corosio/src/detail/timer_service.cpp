@@ -116,11 +116,28 @@ struct timer_impl
         void destroy() override {}
     };
 
+    // Lightweight op for the already-expired fast path — resumes the
+    // coroutine directly without going through the executor's post(coro)
+    // path (which heap-allocates a wrapper). Yields to the scheduler
+    // so other queued work can execute.
+    struct fast_resume_op final : scheduler_op
+    {
+        std::coroutine_handle<> h_;
+
+        void operator()() override { h_.resume(); }
+        void destroy() override {}
+    };
+
     timer_service_impl* svc_ = nullptr;
     time_point expiry_;
     std::size_t heap_index_ = (std::numeric_limits<std::size_t>::max)();
     // Lets cancel_timer() skip the lock when no wait() was ever issued
     bool might_have_pending_waits_ = false;
+
+    // Set by expires_after() when the duration is <= 0; lets wait()
+    // skip the redundant clock_gettime and resume the caller inline
+    // via symmetric transfer (no scheduler round-trip).
+    bool pre_expired_ = false;
 
     // Wait operation state
     std::coroutine_handle<> h_;
@@ -130,6 +147,7 @@ struct timer_impl
     bool waiting_ = false;
 
     completion_op op_;
+    fast_resume_op fast_op_;
     std::error_code ec_value_;
 
     // Free list linkage (reused when impl is on free_list)
@@ -536,11 +554,19 @@ wait(
 {
     if (heap_index_ == (std::numeric_limits<std::size_t>::max)())
     {
-        if (expiry_ <= clock_type::now())
+        // Short-circuit: pre_expired_ skips the redundant clock_gettime
+        // that expires_after() already performed; the fallback still
+        // handles expires_at() and edge cases.
+        if (pre_expired_ || expiry_ <= clock_type::now())
         {
+            pre_expired_ = false;
             if (ec)
                 *ec = {};
-            d.post(h);
+            // Post the embedded fast_resume_op to the scheduler —
+            // avoids the heap allocation in post(coro) while still
+            // yielding to the scheduler so other queued work can run.
+            fast_op_.h_ = h;
+            svc_->get_scheduler().post(&fast_op_);
             return std::noop_coroutine();
         }
 
@@ -637,6 +663,7 @@ timer_service_expires_at(timer::timer_impl& base, timer::time_point t)
 {
     auto& impl = static_cast<timer_impl&>(base);
     impl.expiry_ = t;
+    impl.pre_expired_ = false;
     impl.svc_->update_timer(impl, t);
 }
 
@@ -645,6 +672,7 @@ timer_service_expires_after(timer::timer_impl& base, timer::duration d)
 {
     auto& impl = static_cast<timer_impl&>(base);
     impl.expiry_ = timer::clock_type::now() + d;
+    impl.pre_expired_ = (d <= timer::duration::zero());
     impl.svc_->update_timer(impl, impl.expiry_);
 }
 
