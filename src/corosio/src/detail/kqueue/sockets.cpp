@@ -764,6 +764,10 @@ close_socket() noexcept
 
     if (fd_ >= 0)
     {
+        // Send FIN so the peer gets a reliable kqueue notification
+        // before we deregister and close the descriptor.
+        ::shutdown(fd_, SHUT_WR);
+
         if (desc_state_.registered_events != 0)
             svc_.scheduler().deregister_descriptor(fd_);
         ::close(fd_);
@@ -805,7 +809,13 @@ shutdown()
     while (auto* impl = state_->socket_list_.pop_front())
         impl->close_socket();
 
-    state_->socket_ptrs_.clear();
+    // Don't clear socket_ptrs_ here. The scheduler shuts down after us and
+    // drains completed_ops_, calling destroy() on each queued op. If we
+    // released our shared_ptrs now, a kqueue_op::destroy() could free the
+    // last ref to an impl whose embedded descriptor_state is still linked
+    // in the queue — use-after-free on the next pop(). Letting ~state_
+    // release the ptrs (during service destruction, after scheduler
+    // shutdown) keeps every impl alive until all ops have been drained.
 }
 
 tcp_socket::socket_impl&
