@@ -181,6 +181,8 @@ operator()()
 kqueue_socket_impl::
 kqueue_socket_impl(kqueue_socket_service& svc) noexcept
     : svc_(svc)
+    , desc_state_(svc.scheduler().locking_enabled(),
+                  svc.scheduler().io_locking_spin_count())
 {
 }
 

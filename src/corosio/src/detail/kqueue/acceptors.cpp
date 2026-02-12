@@ -202,6 +202,8 @@ operator()()
 kqueue_acceptor_impl::
 kqueue_acceptor_impl(kqueue_acceptor_service& svc) noexcept
     : svc_(svc)
+    , desc_state_(svc.scheduler().locking_enabled(),
+                  svc.scheduler().io_locking_spin_count())
 {
 }
 
