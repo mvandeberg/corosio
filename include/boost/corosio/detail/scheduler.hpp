@@ -40,6 +40,17 @@ struct scheduler
     virtual void work_finished() const noexcept = 0;
 
     virtual bool running_in_this_thread() const noexcept = 0;
+
+    /** Reset the thread's inline completion budget.
+        Called at the start of each handler invocation in do_one().
+    */
+    virtual void reset_inline_budget() const noexcept {}
+
+    /** Consume one unit of inline budget if available.
+        @return True if budget was available and consumed.
+    */
+    virtual bool try_consume_inline_budget() const noexcept { return false; }
+
     virtual void stop() = 0;
     virtual bool stopped() const noexcept = 0;
     virtual void restart() = 0;

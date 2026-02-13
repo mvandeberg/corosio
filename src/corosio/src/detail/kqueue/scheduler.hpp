@@ -122,13 +122,13 @@ public:
         Called at the start of each posted completion handler to
         grant a fresh budget for speculative inline completions.
     */
-    void reset_inline_budget() const noexcept;
+    void reset_inline_budget() const noexcept override;
 
     /** Consume one unit of inline budget if available.
 
         @return True if budget was available and consumed.
     */
-    bool try_consume_inline_budget() const noexcept;
+    bool try_consume_inline_budget() const noexcept override;
 
     /** Register a descriptor for persistent monitoring.
 
@@ -287,10 +287,10 @@ private:
     std::atomic<bool> stopped_{false};
     bool shutdown_ = false;
 
-    // True while a thread is blocked in kevent(). Used by
-    // wake_one_thread_and_unlock and work_finished to know when
-    // an EVFILT_USER interrupt is needed instead of a condvar signal.
-    mutable bool task_running_ = false;
+    // True while a thread is blocked in kevent(). Read without the
+    // mutex by the timer on_earliest_changed callback, so must be
+    // atomic (not conditional_atomic — always needs barrier).
+    mutable std::atomic<bool> task_running_{false};
 
     // True when the reactor has been told to do a non-blocking poll
     // (more handlers queued or poll mode). Prevents redundant EVFILT_USER

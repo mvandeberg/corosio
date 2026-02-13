@@ -401,7 +401,14 @@ kqueue_scheduler(
     timer_svc_->set_on_earliest_changed(
         timer_service::callback(
             this,
-            [](void* p) { static_cast<kqueue_scheduler*>(p)->interrupt_reactor(); }));
+            [](void* p) {
+                auto* self = static_cast<kqueue_scheduler*>(p);
+                // Only interrupt if a thread is actually blocked in
+                // kevent(); avoids wasted EVFILT_USER triggers when
+                // timers fire inline from a handler.
+                if (self->task_running_.load(std::memory_order_acquire))
+                    self->interrupt_reactor();
+            }));
 
     // Initialize resolver service
     get_resolver_service(ctx, *this);
@@ -724,7 +731,7 @@ work_finished() const noexcept
         // Both are needed because they target different blocking mechanisms.
         std::unique_lock lock(mutex_);
         signal_all(lock);
-        if (task_running_ && !task_interrupted_)
+        if (task_running_.load(std::memory_order_relaxed) && !task_interrupted_)
         {
             task_interrupted_ = true;
             lock.unlock();
@@ -869,7 +876,7 @@ wake_one_thread_and_unlock(std::unique_lock<std::mutex>& lock) const
     if (maybe_unlock_and_signal_one(lock))
         return;
 
-    if (task_running_ && !task_interrupted_)
+    if (task_running_.load(std::memory_order_relaxed) && !task_interrupted_)
     {
         task_interrupted_ = true;
         lock.unlock();
@@ -1117,8 +1124,18 @@ do_one(std::unique_lock<std::mutex>& lock, long timeout_us, scheduler_context* c
         // Handle reactor sentinel - time to poll for I/O
         if (op == &task_op_)
         {
-            bool more_handlers = !completed_ops_.empty() ||
-                (ctx && !ctx->private_queue.empty());
+            // Fast drain: skip reactor when private queue has ready
+            // handlers — avoids a wasted kevent(timeout=0) that would
+            // almost certainly return 0 events.
+            if (ctx && !ctx->private_queue.empty())
+            {
+                flush_private_work(ctx, outstanding_work_);
+                completed_ops_.splice(ctx->private_queue);
+                completed_ops_.push(&task_op_);
+                continue;
+            }
+
+            bool more_handlers = !completed_ops_.empty();
 
             // Nothing to run the reactor for: no pending work to wait on,
             // or caller requested a non-blocking poll
@@ -1131,7 +1148,7 @@ do_one(std::unique_lock<std::mutex>& lock, long timeout_us, scheduler_context* c
             }
 
             task_interrupted_ = more_handlers || timeout_us == 0;
-            task_running_ = true;
+            task_running_.store(true, std::memory_order_release);
 
             if (more_handlers)
                 unlock_and_signal_one(lock);
@@ -1142,11 +1159,11 @@ do_one(std::unique_lock<std::mutex>& lock, long timeout_us, scheduler_context* c
             }
             catch (...)
             {
-                task_running_ = false;
+                task_running_.store(false, std::memory_order_relaxed);
                 throw;
             }
 
-            task_running_ = false;
+            task_running_.store(false, std::memory_order_relaxed);
             completed_ops_.push(&task_op_);
             continue;
         }
@@ -1162,6 +1179,7 @@ do_one(std::unique_lock<std::mutex>& lock, long timeout_us, scheduler_context* c
             work_cleanup on_exit{this, &lock, ctx};
             (void)on_exit;
 
+            reset_inline_budget();
             (*op)();
             return 1;
         }

@@ -171,8 +171,21 @@ struct timer_impl
     using time_point = clock_type::time_point;
     using duration = clock_type::duration;
 
+    // Lightweight op for the already-expired fast path — resumes the
+    // coroutine directly without going through the executor's post(coro)
+    // path (which heap-allocates a wrapper). Yields to the scheduler
+    // so other queued work can execute.
+    struct fast_resume_op final : scheduler_op
+    {
+        std::coroutine_handle<> h_;
+
+        void operator()() override { h_.resume(); }
+        void destroy() override {}
+    };
+
     timer_service_impl* svc_ = nullptr;
     intrusive_list<waiter_node> waiters_;
+    fast_resume_op fast_op_;
 
     // Free list linkage (reused when impl is on free_list)
     timer_impl* next_free_ = nullptr;
@@ -694,8 +707,9 @@ wait(
     std::error_code* ec)
 {
     // Already-expired fast path — no waiter_node, no mutex.
-    // Post instead of dispatch so the coroutine yields to the
-    // scheduler, allowing other queued work to run.
+    // time_point::min() sentinel from expires_after(d<=0) skips
+    // the clock_gettime; the fallback handles expires_at() and
+    // edge cases.
     if (heap_index_ == (std::numeric_limits<std::size_t>::max)())
     {
         if (expiry_ == (time_point::min)() ||
@@ -703,7 +717,14 @@ wait(
         {
             if (ec)
                 *ec = {};
-            d.post(h);
+            // Level 1: inline resume via symmetric transfer when budget
+            // allows — no allocation, no syscall, no queue round-trip.
+            if (svc_->get_scheduler().try_consume_inline_budget())
+                return h;
+            // Level 2: zero-alloc post via embedded op — yields to
+            // scheduler for fairness but avoids heap allocation.
+            fast_op_.h_ = h;
+            svc_->get_scheduler().post(&fast_op_);
             return std::noop_coroutine();
         }
     }
