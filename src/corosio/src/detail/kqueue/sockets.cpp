@@ -26,8 +26,9 @@
     ============================
 
     Each kqueue_socket_impl owns a descriptor_state that is persistently
-    registered with kqueue (EVFILT_READ + EVFILT_WRITE, both EV_CLEAR for
-    edge-triggered semantics). The descriptor_state tracks three operation
+    registered with kqueue. EVFILT_READ (EV_CLEAR) is registered at socket
+    creation; EVFILT_WRITE (EV_CLEAR) is lazily added on the first write
+    or connect that needs it. The descriptor_state tracks three operation
     slots (read_op, write_op, connect_op) and two ready flags
     (read_ready, write_ready) under a per-descriptor mutex.
 
@@ -243,7 +244,9 @@ connect(
         return std::noop_coroutine();
     }
 
-    // EINPROGRESS — async path
+    // EINPROGRESS — async path: need EVFILT_WRITE for connect completion
+    ensure_write_registered();
+
     op.reset();
     op.h = h;
     op.ex = ex;
@@ -256,6 +259,14 @@ connect(
     register_op(op, desc_state_.connect_op, desc_state_.write_ready,
         desc_state_.connect_cancel_pending);
     return std::noop_coroutine();
+}
+
+void
+kqueue_socket_impl::
+ensure_write_registered()
+{
+    if (!(desc_state_.registered_events & kqueue_event_write))
+        svc_.scheduler().register_write_filter(fd_, &desc_state_);
 }
 
 // Register an op with the reactor, handling cached edge events.
@@ -455,7 +466,9 @@ write_some(
         return std::noop_coroutine();
     }
 
-    // EAGAIN — register with reactor
+    // EAGAIN — register with reactor; need EVFILT_WRITE for write readiness
+    ensure_write_registered();
+
     op.h = h;
     op.ex = ex;
     op.ec_out = ec;
@@ -725,7 +738,7 @@ close_socket() noexcept
         ::shutdown(fd_, SHUT_WR);
 
         if (desc_state_.registered_events != 0)
-            svc_.scheduler().deregister_descriptor(fd_);
+            svc_.scheduler().deregister_descriptor(fd_, desc_state_.registered_events);
         ::close(fd_);
         fd_ = -1;
     }
@@ -858,7 +871,10 @@ open_socket(tcp_socket::socket_impl& impl)
         kq_impl->desc_state_.write_op = nullptr;
         kq_impl->desc_state_.connect_op = nullptr;
     }
-    scheduler().register_descriptor(fd, &kq_impl->desc_state_);
+    // Client sockets eagerly register EVFILT_WRITE alongside READ because
+    // they will connect or write immediately. This avoids an extra kevent
+    // syscall in the connect(EINPROGRESS) path.
+    scheduler().register_descriptor(fd, &kq_impl->desc_state_, /*include_write=*/true);
 
     return {};
 }

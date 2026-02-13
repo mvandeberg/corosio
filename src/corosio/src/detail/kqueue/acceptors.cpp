@@ -402,7 +402,7 @@ close_socket() noexcept
     if (fd_ >= 0)
     {
         if (desc_state_.registered_events != 0)
-            svc_.scheduler().deregister_descriptor(fd_);
+            svc_.scheduler().deregister_descriptor(fd_, desc_state_.registered_events);
         ::close(fd_);
         fd_ = -1;
     }

@@ -672,18 +672,25 @@ poll_one()
 
 void
 kqueue_scheduler::
-register_descriptor(int fd, descriptor_state* desc) const
+register_descriptor(int fd, descriptor_state* desc, bool include_write) const
 {
     struct kevent changes[2];
+    int nchanges = 1;
     EV_SET(&changes[0], static_cast<uintptr_t>(fd), EVFILT_READ,
            EV_ADD | EV_CLEAR, 0, 0, desc);
-    EV_SET(&changes[1], static_cast<uintptr_t>(fd), EVFILT_WRITE,
-           EV_ADD | EV_CLEAR, 0, 0, desc);
 
-    if (::kevent(kq_fd_, changes, 2, nullptr, 0, nullptr) < 0)
+    desc->registered_events = kqueue_event_read;
+
+    if (include_write)
+    {
+        EV_SET(&changes[1], static_cast<uintptr_t>(fd), EVFILT_WRITE,
+               EV_ADD | EV_CLEAR, 0, 0, desc);
+        desc->registered_events |= kqueue_event_write;
+        nchanges = 2;
+    }
+
+    if (::kevent(kq_fd_, changes, nchanges, nullptr, 0, nullptr) < 0)
         detail::throw_system_error(make_err(errno), "kevent (register)");
-
-    desc->registered_events = kqueue_event_read | kqueue_event_write;
     desc->fd = fd;
     desc->scheduler_ = this;
 
@@ -694,15 +701,34 @@ register_descriptor(int fd, descriptor_state* desc) const
 
 void
 kqueue_scheduler::
-deregister_descriptor(int fd) const
+register_write_filter(int fd, descriptor_state* desc) const
+{
+    struct kevent changes[1];
+    EV_SET(&changes[0], static_cast<uintptr_t>(fd), EVFILT_WRITE,
+           EV_ADD | EV_CLEAR, 0, 0, desc);
+
+    if (::kevent(kq_fd_, changes, 1, nullptr, 0, nullptr) < 0)
+        detail::throw_system_error(make_err(errno), "kevent (register write)");
+    desc->registered_events |= kqueue_event_write;
+}
+
+void
+kqueue_scheduler::
+deregister_descriptor(int fd, std::uint32_t registered_events) const
 {
     struct kevent changes[2];
-    EV_SET(&changes[0], static_cast<uintptr_t>(fd), EVFILT_READ,
-           EV_DELETE, 0, 0, nullptr);
-    EV_SET(&changes[1], static_cast<uintptr_t>(fd), EVFILT_WRITE,
-           EV_DELETE, 0, 0, nullptr);
-    // Ignore errors - fd may already be closed (kqueue auto-removes on close)
-    ::kevent(kq_fd_, changes, 2, nullptr, 0, nullptr);
+    int nchanges = 0;
+
+    if (registered_events & kqueue_event_read)
+        EV_SET(&changes[nchanges++], static_cast<uintptr_t>(fd), EVFILT_READ,
+               EV_DELETE, 0, 0, nullptr);
+    if (registered_events & kqueue_event_write)
+        EV_SET(&changes[nchanges++], static_cast<uintptr_t>(fd), EVFILT_WRITE,
+               EV_DELETE, 0, 0, nullptr);
+
+    if (nchanges > 0)
+        // Ignore errors - fd may already be closed (kqueue auto-removes on close)
+        ::kevent(kq_fd_, changes, nchanges, nullptr, 0, nullptr);
 }
 
 void

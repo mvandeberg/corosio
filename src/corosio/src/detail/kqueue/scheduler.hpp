@@ -132,37 +132,52 @@ public:
 
     /** Register a descriptor for persistent monitoring.
 
-        Adds EVFILT_READ and EVFILT_WRITE (both EV_CLEAR) for @a fd
-        and stores @a desc in the kevent udata field so that the
-        reactor can dispatch events to the correct descriptor_state.
+        Adds EVFILT_READ (EV_CLEAR) for @a fd. When @a include_write
+        is true, also adds EVFILT_WRITE (EV_CLEAR) in the same kevent
+        call. Pass true for client sockets that will connect or write
+        immediately; pass false for accepted sockets and acceptors to
+        defer EVFILT_WRITE registration until the first write op needs
+        it (via register_write_filter).
 
         The caller retains ownership of @a desc. It must remain valid
         until deregister_descriptor() is called and all pending
         read/write/connect operations referencing it have completed.
-        The scheduler accesses @a desc asynchronously from the reactor
-        thread when kevent delivers events.
 
         @param fd The file descriptor to register.
+        @param desc Pointer to the caller-owned descriptor_state.
+        @param include_write Register EVFILT_WRITE alongside READ.
+
+        @throws std::system_error if kevent(EV_ADD) fails.
+    */
+    void register_descriptor(int fd, descriptor_state* desc,
+        bool include_write = false) const;
+
+    /** Register EVFILT_WRITE for an already-registered descriptor.
+
+        Adds EVFILT_WRITE (EV_CLEAR) for @a fd. Called lazily on the
+        first write or connect operation that needs write-readiness
+        notifications. Safe to call from the socket-owning coroutine;
+        the reactor never reads registered_events.
+
+        @param fd The file descriptor (must already have EVFILT_READ).
         @param desc Pointer to the caller-owned descriptor_state.
 
         @throws std::system_error if kevent(EV_ADD) fails.
     */
-    void register_descriptor(int fd, descriptor_state* desc) const;
+    void register_write_filter(int fd, descriptor_state* desc) const;
 
     /** Deregister a persistently registered descriptor.
 
-        Issues kevent(EV_DELETE) for both EVFILT_READ and EVFILT_WRITE.
-        Errors are silently ignored because the fd may already be
-        closed and kqueue automatically removes closed descriptors.
-
-        After this call returns, the reactor will not deliver any
-        further events for @a fd, so the associated descriptor_state
-        may be safely destroyed once all previously queued completions
-        have been processed.
+        Issues kevent(EV_DELETE) for the filters indicated by
+        @a registered_events. Errors are silently ignored because
+        the fd may already be closed and kqueue automatically removes
+        closed descriptors.
 
         @param fd The file descriptor to deregister.
+        @param registered_events Bitmask of registered filters.
     */
-    void deregister_descriptor(int fd) const;
+    void deregister_descriptor(int fd,
+        std::uint32_t registered_events) const;
 
     // scheduler::work_started / work_finished — const, for I/O services.
     // Adjusts outstanding_work_ and wakes blocked threads but does not

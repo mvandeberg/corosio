@@ -162,6 +162,9 @@ public:
         bool& ready_flag,
         bool& cancel_flag) noexcept;
 
+    // Lazily register EVFILT_WRITE with kqueue on first write/connect.
+    void ensure_write_registered();
+
 private:
     kqueue_socket_service& svc_;
     int fd_ = -1;
