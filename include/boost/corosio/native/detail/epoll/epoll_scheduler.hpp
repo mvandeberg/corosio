@@ -515,6 +515,7 @@ descriptor_state::operator()()
         std::lock_guard lock(mutex);
         if (ev & EPOLLIN)
         {
+            try_speculative_read = true;
             if (read_op)
             {
                 auto* rd = read_op;
@@ -529,6 +530,9 @@ descriptor_state::operator()()
                 }
                 else
                 {
+                    if (rd->errn == 0 &&
+                        rd->bytes_transferred < rd->total_buffer_size())
+                        try_speculative_read = false;
                     read_op = nullptr;
                     local_ops.push(rd);
                 }
@@ -540,6 +544,7 @@ descriptor_state::operator()()
         }
         if (ev & EPOLLOUT)
         {
+            try_speculative_write = true;
             bool had_write_op = (connect_op || write_op);
             if (connect_op)
             {
@@ -565,6 +570,9 @@ descriptor_state::operator()()
                 }
                 else
                 {
+                    if (wr->errn == 0 &&
+                        wr->bytes_transferred < wr->total_buffer_size())
+                        try_speculative_write = false;
                     write_op = nullptr;
                     local_ops.push(wr);
                 }

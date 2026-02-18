@@ -561,12 +561,14 @@ descriptor_state::operator()()
         std::lock_guard lock(mutex);
         if (ev & kqueue_event_read)
         {
+            try_speculative_read = true;
             rd = std::exchange(read_op, nullptr);
             if (!rd)
                 read_ready = true;
         }
         if (ev & kqueue_event_write)
         {
+            try_speculative_write = true;
             cn = std::exchange(connect_op, nullptr);
             wr = std::exchange(write_op, nullptr);
             if (!cn && !wr)
@@ -594,6 +596,8 @@ descriptor_state::operator()()
         }
         else
         {
+            if (rd->errn == 0 && rd->bytes_transferred < rd->total_buffer_size())
+                try_speculative_read = false;
             local_ops.push(rd);
             rd = nullptr;
         }
@@ -622,6 +626,8 @@ descriptor_state::operator()()
         }
         else
         {
+            if (wr->errn == 0 && wr->bytes_transferred < wr->total_buffer_size())
+                try_speculative_write = false;
             local_ops.push(wr);
             wr = nullptr;
         }

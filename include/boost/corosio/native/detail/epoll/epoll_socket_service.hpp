@@ -387,42 +387,51 @@ epoll_socket::read_some(
         op.iovecs[i].iov_len  = bufs[i].size();
     }
 
-    // Speculative read
-    ssize_t n;
-    do
+    // Speculative read: gated by try_speculative_read. Disabled after a
+    // partial transfer (buffer drained), re-enabled by the next reactor event.
+    if (desc_state_.try_speculative_read)
     {
-        n = ::readv(fd_, op.iovecs, op.iovec_count);
-    }
-    while (n < 0 && errno == EINTR);
-
-    if (n >= 0 || (errno != EAGAIN && errno != EWOULDBLOCK))
-    {
-        int err    = (n < 0) ? errno : 0;
-        auto bytes = (n > 0) ? static_cast<std::size_t>(n) : std::size_t(0);
-
-        if (svc_.scheduler().try_consume_inline_budget())
+        ssize_t n;
+        do
         {
-            if (err)
-                *ec = make_err(err);
-            else if (n == 0)
-                *ec = capy::error::eof;
-            else
-                *ec = {};
-            *bytes_out = bytes;
-            return dispatch_coro(ex, h);
+            n = ::readv(fd_, op.iovecs, op.iovec_count);
         }
-        op.h         = h;
-        op.ex        = ex;
-        op.ec_out    = ec;
-        op.bytes_out = bytes_out;
-        op.start(token, this);
-        op.impl_ptr = shared_from_this();
-        op.complete(err, bytes);
-        svc_.post(&op);
-        return std::noop_coroutine();
+        while (n < 0 && errno == EINTR);
+
+        if (n >= 0 || (errno != EAGAIN && errno != EWOULDBLOCK))
+        {
+            int err    = (n < 0) ? errno : 0;
+            auto bytes = (n > 0) ? static_cast<std::size_t>(n) : std::size_t(0);
+
+            // Partial transfer: buffer likely drained, disable speculation
+            if (!err && bytes < op.total_buffer_size())
+                desc_state_.try_speculative_read = false;
+
+            if (svc_.scheduler().try_consume_inline_budget())
+            {
+                if (err)
+                    *ec = make_err(err);
+                else if (n == 0)
+                    *ec = capy::error::eof;
+                else
+                    *ec = {};
+                *bytes_out = bytes;
+                return dispatch_coro(ex, h);
+            }
+            op.h         = h;
+            op.ex        = ex;
+            op.ec_out    = ec;
+            op.bytes_out = bytes_out;
+            op.start(token, this);
+            op.impl_ptr = shared_from_this();
+            op.complete(err, bytes);
+            svc_.post(&op);
+            return std::noop_coroutine();
+        }
+        // EAGAIN: flag stays true, fall through to register_op
     }
 
-    // EAGAIN — register with reactor
+    // Speculation disabled or EAGAIN — register with reactor
     op.h         = h;
     op.ex        = ex;
     op.ec_out    = ec;
@@ -472,41 +481,49 @@ epoll_socket::write_some(
         op.iovecs[i].iov_len  = bufs[i].size();
     }
 
-    // Speculative write
-    msghdr msg{};
-    msg.msg_iov    = op.iovecs;
-    msg.msg_iovlen = static_cast<std::size_t>(op.iovec_count);
-
-    ssize_t n;
-    do
+    // Speculative write: gated by try_speculative_write.
+    if (desc_state_.try_speculative_write)
     {
-        n = ::sendmsg(fd_, &msg, MSG_NOSIGNAL);
-    }
-    while (n < 0 && errno == EINTR);
+        msghdr msg{};
+        msg.msg_iov    = op.iovecs;
+        msg.msg_iovlen = static_cast<std::size_t>(op.iovec_count);
 
-    if (n >= 0 || (errno != EAGAIN && errno != EWOULDBLOCK))
-    {
-        int err    = (n < 0) ? errno : 0;
-        auto bytes = (n > 0) ? static_cast<std::size_t>(n) : std::size_t(0);
-
-        if (svc_.scheduler().try_consume_inline_budget())
+        ssize_t n;
+        do
         {
-            *ec        = err ? make_err(err) : std::error_code{};
-            *bytes_out = bytes;
-            return dispatch_coro(ex, h);
+            n = ::sendmsg(fd_, &msg, MSG_NOSIGNAL);
         }
-        op.h         = h;
-        op.ex        = ex;
-        op.ec_out    = ec;
-        op.bytes_out = bytes_out;
-        op.start(token, this);
-        op.impl_ptr = shared_from_this();
-        op.complete(err, bytes);
-        svc_.post(&op);
-        return std::noop_coroutine();
+        while (n < 0 && errno == EINTR);
+
+        if (n >= 0 || (errno != EAGAIN && errno != EWOULDBLOCK))
+        {
+            int err    = (n < 0) ? errno : 0;
+            auto bytes = (n > 0) ? static_cast<std::size_t>(n) : std::size_t(0);
+
+            // Partial transfer: send buffer likely full, disable speculation
+            if (!err && bytes < op.total_buffer_size())
+                desc_state_.try_speculative_write = false;
+
+            if (svc_.scheduler().try_consume_inline_budget())
+            {
+                *ec        = err ? make_err(err) : std::error_code{};
+                *bytes_out = bytes;
+                return dispatch_coro(ex, h);
+            }
+            op.h         = h;
+            op.ex        = ex;
+            op.ec_out    = ec;
+            op.bytes_out = bytes_out;
+            op.start(token, this);
+            op.impl_ptr = shared_from_this();
+            op.complete(err, bytes);
+            svc_.post(&op);
+            return std::noop_coroutine();
+        }
+        // EAGAIN: flag stays true, fall through to register_op
     }
 
-    // EAGAIN — register with reactor
+    // Speculation disabled or EAGAIN — register with reactor
     op.h         = h;
     op.ex        = ex;
     op.ec_out    = ec;
@@ -774,6 +791,8 @@ epoll_socket::close_socket() noexcept
             desc_state_.read_cancel_pending    = false;
             desc_state_.write_cancel_pending   = false;
             desc_state_.connect_cancel_pending = false;
+            desc_state_.try_speculative_read   = true;
+            desc_state_.try_speculative_write  = true;
         }
 
         if (conn_claimed)

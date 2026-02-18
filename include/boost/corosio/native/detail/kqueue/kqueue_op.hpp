@@ -130,6 +130,12 @@ struct descriptor_state final : scheduler_op
     bool read_ready  = false;
     bool write_ready = false;
 
+    // Speculative I/O gate: disabled when the last speculative or deferred
+    // I/O completed with a partial transfer (buffer likely drained).
+    // Re-enabled by a reactor event proving new data arrived.
+    bool try_speculative_read  = true;
+    bool try_speculative_write = true;
+
     // Deferred cancellation: set by cancel() when the target op is not
     // parked (e.g. completing inline via speculative I/O). Checked when
     // the next op parks; if set, the op is immediately self-cancelled.
@@ -263,6 +269,14 @@ struct kqueue_op : scheduler_op
     }
 
     virtual void perform_io() noexcept {}
+
+    /// Total iovec buffer size. Overridden by read/write ops for
+    /// exhaustion detection. Returns SIZE_MAX so the exhaustion check
+    /// (bytes_transferred < total_buffer_size()) is a no-op by default.
+    virtual std::size_t total_buffer_size() const noexcept
+    {
+        return SIZE_MAX;
+    }
 };
 
 struct kqueue_connect_op final : kqueue_op
@@ -309,6 +323,14 @@ struct kqueue_read_op final : kqueue_op
         empty_buffer_read = false;
     }
 
+    std::size_t total_buffer_size() const noexcept override
+    {
+        std::size_t total = 0;
+        for (int i = 0; i < iovec_count; ++i)
+            total += iovecs[i].iov_len;
+        return total;
+    }
+
     void perform_io() noexcept override
     {
         ssize_t n = ::readv(fd, iovecs, iovec_count);
@@ -326,6 +348,14 @@ struct kqueue_write_op final : kqueue_op
     static constexpr std::size_t max_buffers = 16;
     iovec iovecs[max_buffers];
     int iovec_count = 0;
+
+    std::size_t total_buffer_size() const noexcept override
+    {
+        std::size_t total = 0;
+        for (int i = 0; i < iovec_count; ++i)
+            total += iovecs[i].iov_len;
+        return total;
+    }
 
     void reset() noexcept
     {

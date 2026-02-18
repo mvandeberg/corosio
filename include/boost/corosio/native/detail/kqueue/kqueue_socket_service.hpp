@@ -432,43 +432,53 @@ kqueue_socket::read_some(
     // a tight pump loop for back-to-back reads on a hot socket.
     // Budget limits consecutive inline completions to prevent starvation
     // of other connections competing for scheduler time.
-    ssize_t n;
-    do
+    // try_speculative_read gates the attempt: disabled after a partial
+    // transfer (buffer drained), re-enabled by the next reactor event.
+    if (desc_state_.try_speculative_read)
     {
-        n = ::readv(fd_, op.iovecs, op.iovec_count);
-    }
-    while (n < 0 && errno == EINTR);
-
-    if (n >= 0 || (errno != EAGAIN && errno != EWOULDBLOCK))
-    {
-        int err    = (n < 0) ? errno : 0;
-        auto bytes = (n > 0) ? static_cast<std::size_t>(n) : std::size_t(0);
-
-        if (svc_.scheduler().try_consume_inline_budget())
+        ssize_t n;
+        do
         {
-            if (err)
-                *ec = make_err(err);
-            else if (n == 0)
-                *ec = capy::error::eof;
-            else
-                *ec = {};
-            *bytes_out = bytes;
-            return dispatch_coro(ex, h);
+            n = ::readv(fd_, op.iovecs, op.iovec_count);
         }
+        while (n < 0 && errno == EINTR);
 
-        // Budget exhausted — fall through to queue
-        op.h         = h;
-        op.ex        = ex;
-        op.ec_out    = ec;
-        op.bytes_out = bytes_out;
-        op.start(token, this);
-        op.impl_ptr = shared_from_this();
-        op.complete(err, bytes);
-        svc_.post(&op);
-        return std::noop_coroutine();
+        if (n >= 0 || (errno != EAGAIN && errno != EWOULDBLOCK))
+        {
+            int err    = (n < 0) ? errno : 0;
+            auto bytes = (n > 0) ? static_cast<std::size_t>(n) : std::size_t(0);
+
+            // Partial transfer: buffer likely drained, disable speculation
+            if (!err && bytes < op.total_buffer_size())
+                desc_state_.try_speculative_read = false;
+
+            if (svc_.scheduler().try_consume_inline_budget())
+            {
+                if (err)
+                    *ec = make_err(err);
+                else if (n == 0)
+                    *ec = capy::error::eof;
+                else
+                    *ec = {};
+                *bytes_out = bytes;
+                return dispatch_coro(ex, h);
+            }
+
+            // Budget exhausted — fall through to queue
+            op.h         = h;
+            op.ex        = ex;
+            op.ec_out    = ec;
+            op.bytes_out = bytes_out;
+            op.start(token, this);
+            op.impl_ptr = shared_from_this();
+            op.complete(err, bytes);
+            svc_.post(&op);
+            return std::noop_coroutine();
+        }
+        // EAGAIN: flag stays true, fall through to register_op
     }
 
-    // EAGAIN — register with reactor
+    // Speculation disabled or EAGAIN — register with reactor
     op.h         = h;
     op.ex        = ex;
     op.ec_out    = ec;
@@ -522,38 +532,46 @@ kqueue_socket::write_some(
     // symmetric transfer without touching the scheduler queue — this creates
     // a tight pump loop for back-to-back writes on a hot socket.
     // Budget limits consecutive inline completions to prevent starvation.
-    ssize_t n;
-    do
+    if (desc_state_.try_speculative_write)
     {
-        n = ::writev(fd_, op.iovecs, op.iovec_count);
-    }
-    while (n < 0 && errno == EINTR);
-
-    if (n >= 0 || (errno != EAGAIN && errno != EWOULDBLOCK))
-    {
-        int err    = (n < 0) ? errno : 0;
-        auto bytes = (n > 0) ? static_cast<std::size_t>(n) : std::size_t(0);
-
-        if (svc_.scheduler().try_consume_inline_budget())
+        ssize_t n;
+        do
         {
-            *ec        = err ? make_err(err) : std::error_code{};
-            *bytes_out = bytes;
-            return dispatch_coro(ex, h);
+            n = ::writev(fd_, op.iovecs, op.iovec_count);
         }
+        while (n < 0 && errno == EINTR);
 
-        // Budget exhausted — fall through to queue
-        op.h         = h;
-        op.ex        = ex;
-        op.ec_out    = ec;
-        op.bytes_out = bytes_out;
-        op.start(token, this);
-        op.impl_ptr = shared_from_this();
-        op.complete(err, bytes);
-        svc_.post(&op);
-        return std::noop_coroutine();
+        if (n >= 0 || (errno != EAGAIN && errno != EWOULDBLOCK))
+        {
+            int err    = (n < 0) ? errno : 0;
+            auto bytes = (n > 0) ? static_cast<std::size_t>(n) : std::size_t(0);
+
+            // Partial transfer: send buffer likely full, disable speculation
+            if (!err && bytes < op.total_buffer_size())
+                desc_state_.try_speculative_write = false;
+
+            if (svc_.scheduler().try_consume_inline_budget())
+            {
+                *ec        = err ? make_err(err) : std::error_code{};
+                *bytes_out = bytes;
+                return dispatch_coro(ex, h);
+            }
+
+            // Budget exhausted — fall through to queue
+            op.h         = h;
+            op.ex        = ex;
+            op.ec_out    = ec;
+            op.bytes_out = bytes_out;
+            op.start(token, this);
+            op.impl_ptr = shared_from_this();
+            op.complete(err, bytes);
+            svc_.post(&op);
+            return std::noop_coroutine();
+        }
+        // EAGAIN: flag stays true, fall through to register_op
     }
 
-    // EAGAIN — register with reactor
+    // Speculation disabled or EAGAIN — register with reactor
     op.h         = h;
     op.ex        = ex;
     op.ec_out    = ec;
@@ -822,6 +840,8 @@ kqueue_socket::close_socket() noexcept
             desc_state_.read_cancel_pending    = false;
             desc_state_.write_cancel_pending   = false;
             desc_state_.connect_cancel_pending = false;
+            desc_state_.try_speculative_read   = true;
+            desc_state_.try_speculative_write  = true;
         }
 
         if (conn_claimed)
