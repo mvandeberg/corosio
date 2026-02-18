@@ -125,7 +125,8 @@ public:
         kqueue_op& op,
         kqueue_op*& desc_slot,
         bool& ready_flag,
-        bool& cancel_flag) noexcept;
+        bool& cancel_flag,
+        bool try_io = false) noexcept;
 
 private:
     kqueue_socket_service& svc_;

@@ -354,18 +354,22 @@ kqueue_socket::connect(
 
 // Register an op with the reactor, handling cached edge events.
 // Called under the EAGAIN path when speculative I/O failed.
+// try_io: when true, attempt I/O under mutex even if ready_flag is
+// false. Used when speculative I/O was skipped (try_speculative=false)
+// so register_op acts as the synchronized speculative attempt.
 inline void
 kqueue_socket::register_op(
     kqueue_op& op,
     kqueue_op*& desc_slot,
     bool& ready_flag,
-    bool& cancel_flag) noexcept
+    bool& cancel_flag,
+    bool try_io) noexcept
 {
     svc_.work_started();
 
     std::lock_guard lock(desc_state_.mutex);
     bool io_done = false;
-    if (ready_flag)
+    if (ready_flag || try_io)
     {
         ready_flag = false;
         op.perform_io();
@@ -448,10 +452,6 @@ kqueue_socket::read_some(
             int err    = (n < 0) ? errno : 0;
             auto bytes = (n > 0) ? static_cast<std::size_t>(n) : std::size_t(0);
 
-            // Partial transfer: buffer likely drained, disable speculation
-            if (!err && bytes < op.total_buffer_size())
-                desc_state_.try_speculative_read = false;
-
             if (svc_.scheduler().try_consume_inline_budget())
             {
                 if (err)
@@ -489,7 +489,8 @@ kqueue_socket::read_some(
 
     register_op(
         op, desc_state_.read_op, desc_state_.read_ready,
-        desc_state_.read_cancel_pending);
+        desc_state_.read_cancel_pending,
+        !desc_state_.try_speculative_read);
     return std::noop_coroutine();
 }
 
@@ -546,10 +547,6 @@ kqueue_socket::write_some(
             int err    = (n < 0) ? errno : 0;
             auto bytes = (n > 0) ? static_cast<std::size_t>(n) : std::size_t(0);
 
-            // Partial transfer: send buffer likely full, disable speculation
-            if (!err && bytes < op.total_buffer_size())
-                desc_state_.try_speculative_write = false;
-
             if (svc_.scheduler().try_consume_inline_budget())
             {
                 *ec        = err ? make_err(err) : std::error_code{};
@@ -582,7 +579,8 @@ kqueue_socket::write_some(
 
     register_op(
         op, desc_state_.write_op, desc_state_.write_ready,
-        desc_state_.write_cancel_pending);
+        desc_state_.write_cancel_pending,
+        !desc_state_.try_speculative_write);
     return std::noop_coroutine();
 }
 

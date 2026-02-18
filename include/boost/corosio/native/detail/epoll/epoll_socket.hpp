@@ -127,7 +127,8 @@ private:
         epoll_op& op,
         epoll_op*& desc_slot,
         bool& ready_flag,
-        bool& cancel_flag) noexcept;
+        bool& cancel_flag,
+        bool try_io = false) noexcept;
 
     friend struct epoll_op;
     friend struct epoll_connect_op;
