@@ -127,6 +127,7 @@ private:
     std::vector<heap_entry> heap_;
     implementation* free_list_     = nullptr;
     waiter_node* waiter_free_list_ = nullptr;
+    unsigned free_list_size_       = 0;
     callback on_earliest_changed_;
     // Avoids mutex in nearest_expiry() and empty()
     mutable std::atomic<std::int64_t> cached_nearest_ns_{
@@ -150,6 +151,14 @@ public:
 
     timer_service(timer_service const&)            = delete;
     timer_service& operator=(timer_service const&) = delete;
+
+    /// Runtime toggle for timer node recycling.
+    /// When false, destroy_impl/destroy_waiter delete immediately.
+    bool recycle_nodes_ = true;
+
+    /// Maximum number of recycled nodes to retain (impl + waiter combined).
+    /// 0 means unlimited.
+    unsigned max_recycled_nodes_ = 0;
 
     /// Register a callback invoked when the earliest expiry changes.
     inline void set_on_earliest_changed(callback cb)
@@ -409,30 +418,31 @@ timer_service::shutdown()
 inline io_object::implementation*
 timer_service::construct()
 {
-    implementation* impl = try_pop_tl_cache(this);
-    if (impl)
+    if (recycle_nodes_)
     {
-        impl->svc_        = this;
-        impl->heap_index_ = (std::numeric_limits<std::size_t>::max)();
-        impl->might_have_pending_waits_ = false;
-        return impl;
-    }
+        implementation* impl = try_pop_tl_cache(this);
+        if (impl)
+        {
+            impl->svc_        = this;
+            impl->heap_index_ = (std::numeric_limits<std::size_t>::max)();
+            impl->might_have_pending_waits_ = false;
+            return impl;
+        }
 
-    std::lock_guard lock(mutex_);
-    if (free_list_)
-    {
-        impl              = free_list_;
-        free_list_        = impl->next_free_;
-        impl->next_free_  = nullptr;
-        impl->svc_        = this;
-        impl->heap_index_ = (std::numeric_limits<std::size_t>::max)();
-        impl->might_have_pending_waits_ = false;
+        std::lock_guard lock(mutex_);
+        if (free_list_)
+        {
+            impl              = free_list_;
+            free_list_        = impl->next_free_;
+            impl->next_free_  = nullptr;
+            impl->svc_        = this;
+            impl->heap_index_ = (std::numeric_limits<std::size_t>::max)();
+            impl->might_have_pending_waits_ = false;
+            --free_list_size_;
+            return impl;
+        }
     }
-    else
-    {
-        impl = new implementation(*this);
-    }
-    return impl;
+    return new implementation(*this);
 }
 
 inline void
@@ -453,27 +463,43 @@ timer_service::destroy_impl(implementation& impl)
         refresh_cached_nearest();
     }
 
+    if (!recycle_nodes_)
+    {
+        delete &impl;
+        return;
+    }
+
     if (try_push_tl_cache(&impl))
         return;
 
     std::lock_guard lock(mutex_);
+    if (max_recycled_nodes_ > 0 && free_list_size_ >= max_recycled_nodes_)
+    {
+        delete &impl;
+        return;
+    }
     impl.next_free_ = free_list_;
     free_list_      = &impl;
+    ++free_list_size_;
 }
 
 inline waiter_node*
 timer_service::create_waiter()
 {
-    if (auto* w = try_pop_waiter_tl_cache())
-        return w;
-
-    std::lock_guard lock(mutex_);
-    if (waiter_free_list_)
+    if (recycle_nodes_)
     {
-        auto* w           = waiter_free_list_;
-        waiter_free_list_ = w->next_free_;
-        w->next_free_     = nullptr;
-        return w;
+        if (auto* w = try_pop_waiter_tl_cache())
+            return w;
+
+        std::lock_guard lock(mutex_);
+        if (waiter_free_list_)
+        {
+            auto* w           = waiter_free_list_;
+            waiter_free_list_ = w->next_free_;
+            w->next_free_     = nullptr;
+            --free_list_size_;
+            return w;
+        }
     }
 
     return new waiter_node();
@@ -482,12 +508,24 @@ timer_service::create_waiter()
 inline void
 timer_service::destroy_waiter(waiter_node* w)
 {
+    if (!recycle_nodes_)
+    {
+        delete w;
+        return;
+    }
+
     if (try_push_waiter_tl_cache(w))
         return;
 
     std::lock_guard lock(mutex_);
+    if (max_recycled_nodes_ > 0 && free_list_size_ >= max_recycled_nodes_)
+    {
+        delete w;
+        return;
+    }
     w->next_free_     = waiter_free_list_;
     waiter_free_list_ = w;
+    ++free_list_size_;
 }
 
 inline std::size_t

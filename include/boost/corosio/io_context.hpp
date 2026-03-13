@@ -25,6 +25,29 @@
 
 namespace boost::corosio {
 
+/** Runtime configuration options for io_context.
+
+    These options control runtime behaviour of the type-erased
+    io_context path. For zero-overhead compile-time configuration,
+    use native_io_context with a custom backend config instead.
+
+    All defaults match the compile-time defaults, so constructing
+    an io_context with default options produces identical behaviour
+    to the no-options constructor.
+*/
+struct io_context_options
+{
+    /// Recycle post_handler nodes via a per-thread + global free list.
+    bool recycle_post_nodes = true;
+
+    /// Recycle timer implementation and waiter nodes via free lists.
+    bool recycle_timer_nodes = true;
+
+    /// Maximum number of recycled nodes (post + timer) to retain.
+    /// 0 means unlimited.
+    unsigned max_recycled_nodes = 0;
+};
+
 namespace detail {
 struct timer_service_access;
 } // namespace detail
@@ -78,6 +101,20 @@ public:
             that will call `run()`.
     */
     explicit io_context(unsigned concurrency_hint);
+
+    /** Construct with runtime options and default concurrency.
+
+        @param opts Runtime configuration options.
+    */
+    explicit io_context(io_context_options opts);
+
+    /** Construct with a concurrency hint and runtime options.
+
+        @param concurrency_hint Hint for the number of threads
+            that will call `run()`.
+        @param opts Runtime configuration options.
+    */
+    io_context(unsigned concurrency_hint, io_context_options opts);
 
     /** Construct with an explicit backend tag.
 

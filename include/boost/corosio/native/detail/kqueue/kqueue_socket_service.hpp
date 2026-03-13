@@ -123,12 +123,12 @@ namespace boost::corosio::detail {
 class kqueue_socket_state
 {
 public:
-    explicit kqueue_socket_state(kqueue_scheduler& sched) noexcept
+    explicit kqueue_socket_state(kqueue_scheduler_core& sched) noexcept
         : sched_(sched)
     {
     }
 
-    kqueue_scheduler& sched_;
+    kqueue_scheduler_core& sched_;
     std::mutex mutex_;
     intrusive_list<kqueue_socket> socket_list_;
     std::unordered_map<kqueue_socket*, std::shared_ptr<kqueue_socket>>
@@ -160,7 +160,7 @@ public:
         int type,
         int protocol) override;
 
-    kqueue_scheduler& scheduler() const noexcept
+    kqueue_scheduler_core& scheduler() const noexcept
     {
         return state_->sched_;
     }
@@ -777,7 +777,7 @@ inline kqueue_socket_service::kqueue_socket_service(
     capy::execution_context& ctx)
     : state_(
           std::make_unique<kqueue_socket_state>(
-              ctx.use_service<kqueue_scheduler>()))
+              *ctx.find_service<kqueue_scheduler_core>()))
 {
 }
 

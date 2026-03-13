@@ -84,7 +84,7 @@ class epoll_acceptor;
 struct epoll_op;
 
 // Forward declaration
-class epoll_scheduler;
+class epoll_scheduler_core;
 
 /** Per-descriptor state for persistent epoll registration.
 
@@ -136,7 +136,7 @@ struct descriptor_state final : scheduler_op
     // For deferred I/O - set by reactor, read by scheduler
     std::atomic<std::uint32_t> ready_events_{0};
     std::atomic<bool> is_enqueued_{false};
-    epoll_scheduler const* scheduler_ = nullptr;
+    epoll_scheduler_core const* scheduler_ = nullptr;
 
     // Prevents impl destruction while this descriptor_state is queued.
     // Set by close_socket() when is_enqueued_ is true, cleared by operator().

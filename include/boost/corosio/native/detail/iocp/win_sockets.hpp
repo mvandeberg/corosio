@@ -28,7 +28,7 @@
 
 namespace boost::corosio::detail {
 
-class win_scheduler;
+class win_scheduler_core;
 class win_acceptor;
 class win_acceptor_internal;
 class win_acceptor_service;
@@ -168,7 +168,7 @@ private:
 
     void load_extension_functions();
 
-    win_scheduler& sched_;
+    win_scheduler_core& sched_;
     win_mutex mutex_;
     intrusive_list<win_socket_internal> socket_list_;
     intrusive_list<win_acceptor_internal> acceptor_list_;

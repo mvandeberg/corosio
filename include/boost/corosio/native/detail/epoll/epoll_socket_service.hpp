@@ -94,11 +94,11 @@ namespace boost::corosio::detail {
 class epoll_socket_state
 {
 public:
-    explicit epoll_socket_state(epoll_scheduler& sched) noexcept : sched_(sched)
+    explicit epoll_socket_state(epoll_scheduler_core& sched) noexcept : sched_(sched)
     {
     }
 
-    epoll_scheduler& sched_;
+    epoll_scheduler_core& sched_;
     std::mutex mutex_;
     intrusive_list<epoll_socket> socket_list_;
     std::unordered_map<epoll_socket*, std::shared_ptr<epoll_socket>>
@@ -130,7 +130,7 @@ public:
         int type,
         int protocol) override;
 
-    epoll_scheduler& scheduler() const noexcept
+    epoll_scheduler_core& scheduler() const noexcept
     {
         return state_->sched_;
     }
@@ -726,7 +726,7 @@ epoll_socket::close_socket() noexcept
 inline epoll_socket_service::epoll_socket_service(capy::execution_context& ctx)
     : state_(
           std::make_unique<epoll_socket_state>(
-              ctx.use_service<epoll_scheduler>()))
+              *ctx.find_service<epoll_scheduler_core>()))
 {
 }
 

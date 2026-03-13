@@ -755,7 +755,7 @@ win_socket::get_internal() const noexcept
 // win_sockets
 
 inline win_sockets::win_sockets(capy::execution_context& ctx)
-    : sched_(ctx.use_service<win_scheduler>())
+    : sched_(*ctx.find_service<win_scheduler_core>())
     , iocp_(sched_.native_handle())
 {
     load_extension_functions();
@@ -764,7 +764,7 @@ inline win_sockets::win_sockets(capy::execution_context& ctx)
 inline win_sockets::~win_sockets()
 {
     // Delete wrappers that survived shutdown. This runs after
-    // win_scheduler is destroyed (reverse creation order), so
+    // win_scheduler_core is destroyed (reverse creation order), so
     // all coroutine frames and their tcp_socket members are gone.
     for (auto* w = socket_wrapper_list_.pop_front(); w != nullptr;
          w       = socket_wrapper_list_.pop_front())

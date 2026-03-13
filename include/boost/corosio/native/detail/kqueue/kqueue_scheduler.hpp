@@ -16,6 +16,7 @@
 #if BOOST_COROSIO_HAS_KQUEUE
 
 #include <boost/corosio/detail/config.hpp>
+#include <boost/corosio/backend.hpp>
 #include <boost/capy/ex/execution_context.hpp>
 
 #include <boost/corosio/native/native_scheduler.hpp>
@@ -44,42 +45,6 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-/*
-    kqueue Scheduler - Single Reactor Model
-    ========================================
-
-    This scheduler uses the same thread coordination strategy as the epoll
-    backend to provide handler parallelism and avoid the thundering herd problem.
-    Instead of all threads blocking on kevent(), one thread becomes the
-    "reactor" while others wait on a condition variable for handler work.
-
-    Thread Model
-    ------------
-    - ONE thread runs kevent() at a time (the reactor thread)
-    - OTHER threads wait on cond_ (condition variable) for handlers
-    - When work is posted, exactly one waiting thread wakes via notify_one()
-    - This matches Windows IOCP semantics where N posted items wake N threads
-
-    Event Loop Structure (do_one)
-    -----------------------------
-    1. Lock mutex, try to pop handler from queue
-    2. If got handler: execute it (unlocked), return
-    3. If queue empty and no reactor running: become reactor
-       - Run kevent() (unlocked), queue I/O completions, loop back
-    4. If queue empty and reactor running: wait on condvar for work
-
-    kqueue-Specific Design
-    ----------------------
-    - Uses EVFILT_USER for reactor interruption (no extra fd needed)
-    - Uses EV_CLEAR for edge-triggered semantics (equivalent to EPOLLET)
-    - Timer expiry computed from timer_service, passed as kevent() timeout
-    - No timerfd equivalent; uses software timer queue
-
-    Signaling State (state_)
-    ------------------------
-    Same as epoll: bit 0 = signaled, upper bits = waiter count.
-*/
-
 namespace boost::corosio::detail {
 
 struct kqueue_op;
@@ -88,74 +53,32 @@ namespace kqueue {
 struct BOOST_COROSIO_SYMBOL_VISIBLE scheduler_context;
 } // namespace kqueue
 
-/** macOS/BSD scheduler using kqueue for I/O multiplexing.
+/* kqueue_scheduler_core — non-template base class
 
-    This scheduler implements the scheduler interface using the BSD kqueue
-    API for efficient I/O event notification. It uses a single reactor model
-    where one thread runs kevent() while other threads
-    wait on a condition variable for handler work. This design provides:
+    Contains all data members, thread context management, and methods
+    that don't depend on kqueue_config template parameters. Services
+    (kqueue_socket_service, kqueue_acceptor_service) reference this type
+    rather than the templated kqueue_scheduler<Config>, avoiding a
+    cascade of template parameters through the service layer.
 
-    - Handler parallelism: N posted handlers can execute on N threads
-    - No thundering herd: condition_variable wakes exactly one thread
-    - IOCP parity: Behavior matches Windows I/O completion port semantics
-
-    When threads call run(), they first try to execute queued handlers.
-    If the queue is empty and no reactor is running, one thread becomes
-    the reactor and runs kevent(). Other threads wait on a condition
-    variable until handlers are available.
-
-    kqueue uses EV_CLEAR for edge-triggered semantics (equivalent to
-    epoll's EPOLLET). File descriptors are registered once with both
-    EVFILT_READ and EVFILT_WRITE and stay registered until closed.
-
-    @par Thread Safety
-    All public member functions are thread-safe.
+    Config-dependent behavior (event array sizing, post node recycling)
+    lives on the derived kqueue_scheduler<Config>.
 */
-class BOOST_COROSIO_DECL kqueue_scheduler final
+
+class BOOST_COROSIO_DECL kqueue_scheduler_core
     : public native_scheduler
     , public capy::execution_context::service
 {
 public:
-    using key_type = scheduler;
+    /** Service lookup key.
 
-    /** Construct the scheduler.
-
-        Creates a kqueue file descriptor via kqueue(), sets
-        close-on-exec, and registers EVFILT_USER for reactor
-        interruption. On failure the kqueue fd is closed before
-        throwing.
-
-        @param ctx Reference to the owning execution_context.
-        @param concurrency_hint Hint for expected thread count (unused).
-
-        @throws std::system_error if kqueue() fails, if setting
-            FD_CLOEXEC on the kqueue fd fails, or if registering
-            the EVFILT_USER event fails. The error code contains
-            the errno from the failed syscall.
+        Allows services to find this scheduler via
+        ctx.use_service<kqueue_scheduler_core>().
     */
-    kqueue_scheduler(capy::execution_context& ctx, int concurrency_hint = -1);
+    using key_type = kqueue_scheduler_core;
 
-    /** Destructor.
-
-        Closes the kqueue file descriptor if valid. Does not throw.
-    */
-    ~kqueue_scheduler();
-
-    kqueue_scheduler(kqueue_scheduler const&)            = delete;
-    kqueue_scheduler& operator=(kqueue_scheduler const&) = delete;
-
-    void shutdown() override;
-    void post(std::coroutine_handle<> h) const override;
-    void post(scheduler_op* h) const override;
-    bool running_in_this_thread() const noexcept override;
-    void stop() override;
-    bool stopped() const noexcept override;
-    void restart() override;
-    std::size_t run() override;
-    std::size_t run_one() override;
-    std::size_t wait_one(long usec) override;
-    std::size_t poll() override;
-    std::size_t poll_one() override;
+    kqueue_scheduler_core(kqueue_scheduler_core const&)            = delete;
+    kqueue_scheduler_core& operator=(kqueue_scheduler_core const&) = delete;
 
     /** Return the kqueue file descriptor.
 
@@ -178,13 +101,14 @@ public:
 
         - **Adaptive** (default): the effective cap ramps up when
           the previous cycle fully consumed its budget (doubles up
-          to 16) and ramps down to the floor (2) when budget was
-          only partially consumed, tracking actual inline demand.
+          to budget_max_) and ramps down to the floor (budget_initial_)
+          when budget was only partially consumed, tracking actual
+          inline demand.
         - **Unassisted**: entered when no other thread was available
           to signal (unlock_and_signal_one returned false). Applies
-          a fixed conservative cap (4) to amortize scheduling
-          overhead for small buffers while avoiding bursty I/O that
-          fills socket buffers and stalls large transfers.
+          a fixed conservative cap (budget_unassisted_) to amortize
+          scheduling overhead for small buffers while avoiding bursty
+          I/O that fills socket buffers and stalls large transfers.
     */
     void reset_inline_budget() const noexcept;
 
@@ -261,10 +185,32 @@ public:
     */
     void post_deferred_completions(op_queue& ops) const;
 
-private:
+    scheduler_op* try_acquire_post_node() const;
+    void release_post_node(scheduler_op* node) const;
+
+    // scheduler interface overrides (non-Config-dependent)
+    void post(scheduler_op* h) const override;
+    bool running_in_this_thread() const noexcept override;
+    void stop() override;
+    bool stopped() const noexcept override;
+    void restart() override;
+
+protected:
+    kqueue_scheduler_core(
+        capy::execution_context& ctx,
+        int concurrency_hint,
+        unsigned budget_initial,
+        unsigned budget_max,
+        unsigned budget_unassisted);
+    ~kqueue_scheduler_core();
+
+    void shutdown() override;
+
+    friend struct descriptor_state;
+
     struct work_cleanup
     {
-        kqueue_scheduler* scheduler;
+        kqueue_scheduler_core* scheduler;
         std::unique_lock<std::mutex>* lock;
         kqueue::scheduler_context* ctx;
         ~work_cleanup();
@@ -272,17 +218,11 @@ private:
 
     struct task_cleanup
     {
-        kqueue_scheduler const* scheduler;
+        kqueue_scheduler_core const* scheduler;
         kqueue::scheduler_context* ctx;
         ~task_cleanup();
     };
 
-    std::size_t do_one(
-        std::unique_lock<std::mutex>& lock,
-        long timeout_us,
-        kqueue::scheduler_context* ctx);
-    void run_task(
-        std::unique_lock<std::mutex>& lock, kqueue::scheduler_context* ctx);
     void wake_one_thread_and_unlock(std::unique_lock<std::mutex>& lock) const;
     void interrupt_reactor() const;
     long calculate_timeout(long requested_timeout_us) const;
@@ -357,6 +297,11 @@ private:
     void wait_for_signal_for(
         std::unique_lock<std::mutex>& lock, long timeout_us) const;
 
+    // Budget config values (set from Config in derived constructor)
+    unsigned budget_initial_;
+    unsigned budget_max_;
+    unsigned budget_unassisted_;
+
     int kq_fd_;
     mutable std::mutex mutex_;
     mutable std::condition_variable cond_;
@@ -391,28 +336,150 @@ private:
         void destroy() override {}
     };
     task_op task_op_;
+
+    mutable scheduler_op* post_free_list_ = nullptr;
 };
 
-// -- Implementation ---------------------------------------------------------
+/** macOS/BSD scheduler using kqueue for I/O multiplexing.
+
+    This scheduler implements the scheduler interface using the BSD kqueue
+    API for efficient I/O event notification. It uses a single reactor model
+    where one thread runs kevent() while other threads
+    wait on a condition variable for handler work. This design provides:
+
+    - Handler parallelism: N posted handlers can execute on N threads
+    - No thundering herd: condition_variable wakes exactly one thread
+    - IOCP parity: Behavior matches Windows I/O completion port semantics
+
+    When threads call run(), they first try to execute queued handlers.
+    If the queue is empty and no reactor is running, one thread becomes
+    the reactor and runs kevent(). Other threads wait on a condition
+    variable until handlers are available.
+
+    kqueue uses EV_CLEAR for edge-triggered semantics (equivalent to
+    epoll's EPOLLET). File descriptors are registered once with both
+    EVFILT_READ and EVFILT_WRITE and stay registered until closed.
+
+    @par Thread Safety
+    All public member functions are thread-safe.
+*/
+template<kqueue_config Config = kqueue_config{}>
+class kqueue_scheduler final
+    : public kqueue_scheduler_core
+{
+public:
+    /** Construct the scheduler.
+
+        Creates a kqueue file descriptor via kqueue(), sets
+        close-on-exec, and registers EVFILT_USER for reactor
+        interruption. On failure the kqueue fd is closed before
+        throwing.
+
+        @param ctx Reference to the owning execution_context.
+        @param concurrency_hint Hint for expected thread count (unused).
+
+        @throws std::system_error if kqueue() fails, if setting
+            FD_CLOEXEC on the kqueue fd fails, or if registering
+            the EVFILT_USER event fails. The error code contains
+            the errno from the failed syscall.
+    */
+    kqueue_scheduler(capy::execution_context& ctx, int concurrency_hint = -1);
+
+    /** Destructor.
+
+        Closes the kqueue file descriptor if valid. Does not throw.
+    */
+    ~kqueue_scheduler() override = default;
+
+    kqueue_scheduler(kqueue_scheduler const&)            = delete;
+    kqueue_scheduler& operator=(kqueue_scheduler const&) = delete;
+
+    using kqueue_scheduler_core::post;
+
+    // Config-dependent overrides
+    void post(std::coroutine_handle<> h) const override;
+    std::size_t run() override;
+    std::size_t run_one() override;
+    std::size_t wait_one(long usec) override;
+    std::size_t poll() override;
+    std::size_t poll_one() override;
+
+private:
+    std::size_t do_one(
+        std::unique_lock<std::mutex>& lock,
+        long timeout_us,
+        kqueue::scheduler_context* ctx);
+    void run_task(
+        std::unique_lock<std::mutex>& lock, kqueue::scheduler_context* ctx);
+};
+
+//--------------------------------------------------------------------------
+//
+// Implementation
+//
+//--------------------------------------------------------------------------
+
+/*
+    kqueue Scheduler - Single Reactor Model
+    ========================================
+
+    This scheduler uses the same thread coordination strategy as the epoll
+    backend to provide handler parallelism and avoid the thundering herd problem.
+    Instead of all threads blocking on kevent(), one thread becomes the
+    "reactor" while others wait on a condition variable for handler work.
+
+    Thread Model
+    ------------
+    - ONE thread runs kevent() at a time (the reactor thread)
+    - OTHER threads wait on cond_ (condition variable) for handlers
+    - When work is posted, exactly one waiting thread wakes via notify_one()
+    - This matches Windows IOCP semantics where N posted items wake N threads
+
+    Event Loop Structure (do_one)
+    -----------------------------
+    1. Lock mutex, try to pop handler from queue
+    2. If got handler: execute it (unlocked), return
+    3. If queue empty and no reactor running: become reactor
+       - Run kevent() (unlocked), queue I/O completions, loop back
+    4. If queue empty and reactor running: wait on condvar for work
+
+    kqueue-Specific Design
+    ----------------------
+    - Uses EVFILT_USER for reactor interruption (no extra fd needed)
+    - Uses EV_CLEAR for edge-triggered semantics (equivalent to EPOLLET)
+    - Timer expiry computed from timer_service, passed as kevent() timeout
+    - No timerfd equivalent; uses software timer queue
+
+    Signaling State (state_)
+    ------------------------
+    Same as epoll: bit 0 = signaled, upper bits = waiter count.
+*/
 
 namespace kqueue {
 
+/** Per-thread context for a scheduler thread.
+
+    Stores private queue for lock-free fast-path posting and
+    inline completion budget state.
+*/
 struct BOOST_COROSIO_SYMBOL_VISIBLE scheduler_context
 {
-    kqueue_scheduler const* key;
+    void const* key;
     scheduler_context* next;
     op_queue private_queue;
     std::int64_t private_outstanding_work;
     int inline_budget;
     int inline_budget_max;
     bool unassisted;
+    scheduler_op* post_cache = nullptr;
 
-    scheduler_context(kqueue_scheduler const* k, scheduler_context* n)
+    scheduler_context(
+        void const* k, scheduler_context* n, int budget_initial)
         : key(k)
         , next(n)
         , private_outstanding_work(0)
         , inline_budget(0)
-        , inline_budget_max(2)
+        , inline_budget_max(budget_initial)
         , unassisted(false)
     {
     }
@@ -424,23 +491,27 @@ struct thread_context_guard
 {
     scheduler_context frame_;
 
-    explicit thread_context_guard(kqueue_scheduler const* ctx) noexcept
-        : frame_(ctx, context_stack.get())
+    thread_context_guard(
+        void const* key, int budget_initial) noexcept
+        : frame_(key, context_stack.get(), budget_initial)
     {
         context_stack.set(&frame_);
     }
 
     ~thread_context_guard() noexcept
     {
+        auto* core = static_cast<kqueue_scheduler_core const*>(frame_.key);
         if (!frame_.private_queue.empty())
-            frame_.key->drain_thread_queue(
+            core->drain_thread_queue(
                 frame_.private_queue, frame_.private_outstanding_work);
+        if (frame_.post_cache)
+            core->release_post_node(frame_.post_cache);
         context_stack.set(frame_.next);
     }
 };
 
 inline scheduler_context*
-find_context(kqueue_scheduler const* self) noexcept
+find_context(void const* self) noexcept
 {
     for (auto* c = context_stack.get(); c != nullptr; c = c->next)
         if (c->key == self)
@@ -481,32 +552,40 @@ drain_private_queue(
 
 } // namespace kqueue
 
+//--------------------------------------------------------------------------
+// kqueue_scheduler_core implementation
+//--------------------------------------------------------------------------
+
 inline void
-kqueue_scheduler::reset_inline_budget() const noexcept
+kqueue_scheduler_core::reset_inline_budget() const noexcept
 {
     if (auto* ctx = kqueue::find_context(this))
     {
         // Cap when no other thread absorbed queued work. A moderate
-        // cap (4) amortizes scheduling for small buffers while avoiding
+        // cap amortizes scheduling for small buffers while avoiding
         // bursty I/O that fills socket buffers and stalls large transfers.
         if (ctx->unassisted)
         {
-            ctx->inline_budget_max = 4;
-            ctx->inline_budget     = 4;
+            ctx->inline_budget_max =
+                static_cast<int>(budget_unassisted_);
+            ctx->inline_budget =
+                static_cast<int>(budget_unassisted_);
             return;
         }
         // Ramp up when previous cycle fully consumed budget.
         // Reset on partial consumption (EAGAIN hit or peer got scheduled).
         if (ctx->inline_budget == 0)
-            ctx->inline_budget_max = (std::min)(ctx->inline_budget_max * 2, 16);
+            ctx->inline_budget_max = (std::min)(
+                ctx->inline_budget_max * 2,
+                static_cast<int>(budget_max_));
         else if (ctx->inline_budget < ctx->inline_budget_max)
-            ctx->inline_budget_max = 2;
+            ctx->inline_budget_max = static_cast<int>(budget_initial_);
         ctx->inline_budget = ctx->inline_budget_max;
     }
 }
 
 inline bool
-kqueue_scheduler::try_consume_inline_budget() const noexcept
+kqueue_scheduler_core::try_consume_inline_budget() const noexcept
 {
     if (auto* ctx = kqueue::find_context(this))
     {
@@ -517,6 +596,24 @@ kqueue_scheduler::try_consume_inline_budget() const noexcept
         }
     }
     return false;
+}
+
+inline scheduler_op*
+kqueue_scheduler_core::try_acquire_post_node() const
+{
+    std::lock_guard lock(mutex_);
+    auto* node = post_free_list_;
+    if (node)
+        post_free_list_ = node->recycle_next_;
+    return node;
+}
+
+inline void
+kqueue_scheduler_core::release_post_node(scheduler_op* node) const
+{
+    std::lock_guard lock(mutex_);
+    node->recycle_next_ = post_free_list_;
+    post_free_list_ = node;
 }
 
 inline void
@@ -704,8 +801,16 @@ descriptor_state::operator()()
     }
 }
 
-inline kqueue_scheduler::kqueue_scheduler(capy::execution_context& ctx, int)
-    : kq_fd_(-1)
+inline kqueue_scheduler_core::kqueue_scheduler_core(
+    capy::execution_context& ctx,
+    int,
+    unsigned budget_initial,
+    unsigned budget_max,
+    unsigned budget_unassisted)
+    : budget_initial_(budget_initial)
+    , budget_max_(budget_max)
+    , budget_unassisted_(budget_unassisted)
+    , kq_fd_(-1)
     , outstanding_work_(0)
     , stopped_(false)
     , task_running_(false)
@@ -738,7 +843,7 @@ inline kqueue_scheduler::kqueue_scheduler(capy::execution_context& ctx, int)
     timer_svc_ = &get_timer_service(ctx, *this);
     timer_svc_->set_on_earliest_changed(
         timer_service::callback(this, [](void* p) {
-            static_cast<kqueue_scheduler*>(p)->interrupt_reactor();
+            static_cast<kqueue_scheduler_core*>(p)->interrupt_reactor();
         }));
 
     // Initialize resolver service
@@ -751,14 +856,14 @@ inline kqueue_scheduler::kqueue_scheduler(capy::execution_context& ctx, int)
     completed_ops_.push(&task_op_);
 }
 
-inline kqueue_scheduler::~kqueue_scheduler()
+inline kqueue_scheduler_core::~kqueue_scheduler_core()
 {
     if (kq_fd_ >= 0)
         ::close(kq_fd_);
 }
 
 inline void
-kqueue_scheduler::shutdown()
+kqueue_scheduler_core::shutdown()
 {
     {
         std::unique_lock lock(mutex_);
@@ -772,6 +877,13 @@ kqueue_scheduler::shutdown()
             lock.lock();
         }
 
+        while (post_free_list_)
+        {
+            auto* next = post_free_list_->recycle_next_;
+            delete post_free_list_;
+            post_free_list_ = next;
+        }
+
         signal_all(lock);
     }
 
@@ -780,56 +892,7 @@ kqueue_scheduler::shutdown()
 }
 
 inline void
-kqueue_scheduler::post(std::coroutine_handle<> h) const
-{
-    struct post_handler final : scheduler_op
-    {
-        std::coroutine_handle<> h_;
-
-        explicit post_handler(std::coroutine_handle<> h) : h_(h) {}
-
-        ~post_handler() = default;
-
-        void operator()() override
-        {
-            auto h = h_;
-            delete this;
-            // Acquire fence on *this thread* (not the deleted object) ensures
-            // stores made by the posting thread (e.g. coroutine state written
-            // before the cross-thread post) are visible before we resume.
-            std::atomic_thread_fence(std::memory_order_acquire);
-            h.resume();
-        }
-
-        void destroy() override
-        {
-            auto h = h_;
-            delete this;
-            h.destroy();
-        }
-    };
-
-    auto ph = std::make_unique<post_handler>(h);
-
-    // Fast path: same thread posts to private queue
-    // Only count locally; work_cleanup batches to global counter
-    if (auto* ctx = kqueue::find_context(this))
-    {
-        ++ctx->private_outstanding_work;
-        ctx->private_queue.push(ph.release());
-        return;
-    }
-
-    // Slow path: cross-thread post requires mutex
-    outstanding_work_.fetch_add(1, std::memory_order_relaxed);
-
-    std::unique_lock lock(mutex_);
-    completed_ops_.push(ph.release());
-    wake_one_thread_and_unlock(lock);
-}
-
-inline void
-kqueue_scheduler::post(scheduler_op* h) const
+kqueue_scheduler_core::post(scheduler_op* h) const
 {
     // Fast path: same thread posts to private queue
     // Only count locally; work_cleanup batches to global counter
@@ -849,7 +912,7 @@ kqueue_scheduler::post(scheduler_op* h) const
 }
 
 inline bool
-kqueue_scheduler::running_in_this_thread() const noexcept
+kqueue_scheduler_core::running_in_this_thread() const noexcept
 {
     for (auto* c = kqueue::context_stack.get(); c != nullptr; c = c->next)
         if (c->key == this)
@@ -858,7 +921,7 @@ kqueue_scheduler::running_in_this_thread() const noexcept
 }
 
 inline void
-kqueue_scheduler::stop()
+kqueue_scheduler_core::stop()
 {
     std::unique_lock lock(mutex_);
     if (!stopped_.load(std::memory_order_relaxed))
@@ -870,112 +933,20 @@ kqueue_scheduler::stop()
 }
 
 inline bool
-kqueue_scheduler::stopped() const noexcept
+kqueue_scheduler_core::stopped() const noexcept
 {
     return stopped_.load(std::memory_order_acquire);
 }
 
 inline void
-kqueue_scheduler::restart()
+kqueue_scheduler_core::restart()
 {
     std::unique_lock lock(mutex_);
     stopped_.store(false, std::memory_order_release);
 }
 
-inline std::size_t
-kqueue_scheduler::run()
-{
-    if (outstanding_work_.load(std::memory_order_acquire) == 0)
-    {
-        stop();
-        return 0;
-    }
-
-    kqueue::thread_context_guard ctx(this);
-    std::unique_lock lock(mutex_);
-
-    std::size_t n = 0;
-    for (;;)
-    {
-        if (!do_one(lock, -1, &ctx.frame_))
-            break;
-        if (n != (std::numeric_limits<std::size_t>::max)())
-            ++n;
-        if (!lock.owns_lock())
-            lock.lock();
-    }
-    return n;
-}
-
-inline std::size_t
-kqueue_scheduler::run_one()
-{
-    if (outstanding_work_.load(std::memory_order_acquire) == 0)
-    {
-        stop();
-        return 0;
-    }
-
-    kqueue::thread_context_guard ctx(this);
-    std::unique_lock lock(mutex_);
-    return do_one(lock, -1, &ctx.frame_);
-}
-
-inline std::size_t
-kqueue_scheduler::wait_one(long usec)
-{
-    if (outstanding_work_.load(std::memory_order_acquire) == 0)
-    {
-        stop();
-        return 0;
-    }
-
-    kqueue::thread_context_guard ctx(this);
-    std::unique_lock lock(mutex_);
-    return do_one(lock, usec, &ctx.frame_);
-}
-
-inline std::size_t
-kqueue_scheduler::poll()
-{
-    if (outstanding_work_.load(std::memory_order_acquire) == 0)
-    {
-        stop();
-        return 0;
-    }
-
-    kqueue::thread_context_guard ctx(this);
-    std::unique_lock lock(mutex_);
-
-    std::size_t n = 0;
-    for (;;)
-    {
-        if (!do_one(lock, 0, &ctx.frame_))
-            break;
-        if (n != (std::numeric_limits<std::size_t>::max)())
-            ++n;
-        if (!lock.owns_lock())
-            lock.lock();
-    }
-    return n;
-}
-
-inline std::size_t
-kqueue_scheduler::poll_one()
-{
-    if (outstanding_work_.load(std::memory_order_acquire) == 0)
-    {
-        stop();
-        return 0;
-    }
-
-    kqueue::thread_context_guard ctx(this);
-    std::unique_lock lock(mutex_);
-    return do_one(lock, 0, &ctx.frame_);
-}
-
 inline void
-kqueue_scheduler::register_descriptor(int fd, descriptor_state* desc) const
+kqueue_scheduler_core::register_descriptor(int fd, descriptor_state* desc) const
 {
     struct kevent changes[2];
     EV_SET(
@@ -998,7 +969,7 @@ kqueue_scheduler::register_descriptor(int fd, descriptor_state* desc) const
 }
 
 inline void
-kqueue_scheduler::deregister_descriptor(int fd) const
+kqueue_scheduler_core::deregister_descriptor(int fd) const
 {
     struct kevent changes[2];
     EV_SET(
@@ -1012,20 +983,20 @@ kqueue_scheduler::deregister_descriptor(int fd) const
 }
 
 inline void
-kqueue_scheduler::work_started() noexcept
+kqueue_scheduler_core::work_started() noexcept
 {
     outstanding_work_.fetch_add(1, std::memory_order_relaxed);
 }
 
 inline void
-kqueue_scheduler::work_finished() noexcept
+kqueue_scheduler_core::work_finished() noexcept
 {
     if (outstanding_work_.fetch_sub(1, std::memory_order_acq_rel) == 1)
         stop();
 }
 
 inline void
-kqueue_scheduler::compensating_work_started() const noexcept
+kqueue_scheduler_core::compensating_work_started() const noexcept
 {
     auto* ctx = kqueue::find_context(this);
     if (ctx)
@@ -1033,7 +1004,8 @@ kqueue_scheduler::compensating_work_started() const noexcept
 }
 
 inline void
-kqueue_scheduler::drain_thread_queue(op_queue& queue, std::int64_t count) const
+kqueue_scheduler_core::drain_thread_queue(
+    op_queue& queue, std::int64_t count) const
 {
     // Flush private work count to global counter — private posts
     // only incremented the thread-local counter, not outstanding_work_
@@ -1047,7 +1019,7 @@ kqueue_scheduler::drain_thread_queue(op_queue& queue, std::int64_t count) const
 }
 
 inline void
-kqueue_scheduler::post_deferred_completions(op_queue& ops) const
+kqueue_scheduler_core::post_deferred_completions(op_queue& ops) const
 {
     if (ops.empty())
         return;
@@ -1066,7 +1038,7 @@ kqueue_scheduler::post_deferred_completions(op_queue& ops) const
 }
 
 inline void
-kqueue_scheduler::interrupt_reactor() const
+kqueue_scheduler_core::interrupt_reactor() const
 {
     // Only trigger if not already armed to avoid redundant triggers.
     // acq_rel: release makes the true store visible to the reactor;
@@ -1085,14 +1057,14 @@ kqueue_scheduler::interrupt_reactor() const
 }
 
 inline void
-kqueue_scheduler::signal_all(std::unique_lock<std::mutex>&) const
+kqueue_scheduler_core::signal_all(std::unique_lock<std::mutex>&) const
 {
     state_ |= signaled_bit;
     cond_.notify_all();
 }
 
 inline bool
-kqueue_scheduler::maybe_unlock_and_signal_one(
+kqueue_scheduler_core::maybe_unlock_and_signal_one(
     std::unique_lock<std::mutex>& lock) const
 {
     state_ |= signaled_bit;
@@ -1106,7 +1078,7 @@ kqueue_scheduler::maybe_unlock_and_signal_one(
 }
 
 inline bool
-kqueue_scheduler::unlock_and_signal_one(
+kqueue_scheduler_core::unlock_and_signal_one(
     std::unique_lock<std::mutex>& lock) const
 {
     state_ |= signaled_bit;
@@ -1118,13 +1090,14 @@ kqueue_scheduler::unlock_and_signal_one(
 }
 
 inline void
-kqueue_scheduler::clear_signal() const
+kqueue_scheduler_core::clear_signal() const
 {
     state_ &= ~signaled_bit;
 }
 
 inline void
-kqueue_scheduler::wait_for_signal(std::unique_lock<std::mutex>& lock) const
+kqueue_scheduler_core::wait_for_signal(
+    std::unique_lock<std::mutex>& lock) const
 {
     while ((state_ & signaled_bit) == 0)
     {
@@ -1135,7 +1108,7 @@ kqueue_scheduler::wait_for_signal(std::unique_lock<std::mutex>& lock) const
 }
 
 inline void
-kqueue_scheduler::wait_for_signal_for(
+kqueue_scheduler_core::wait_for_signal_for(
     std::unique_lock<std::mutex>& lock, long timeout_us) const
 {
     if ((state_ & signaled_bit) == 0)
@@ -1147,7 +1120,7 @@ kqueue_scheduler::wait_for_signal_for(
 }
 
 inline void
-kqueue_scheduler::wake_one_thread_and_unlock(
+kqueue_scheduler_core::wake_one_thread_and_unlock(
     std::unique_lock<std::mutex>& lock) const
 {
     if (maybe_unlock_and_signal_one(lock))
@@ -1166,7 +1139,7 @@ kqueue_scheduler::wake_one_thread_and_unlock(
 }
 
 inline long
-kqueue_scheduler::calculate_timeout(long requested_timeout_us) const
+kqueue_scheduler_core::calculate_timeout(long requested_timeout_us) const
 {
     if (requested_timeout_us == 0)
         return 0;
@@ -1197,7 +1170,7 @@ kqueue_scheduler::calculate_timeout(long requested_timeout_us) const
         static_cast<long long>(requested_timeout_us), capped_timer_us));
 }
 
-inline kqueue_scheduler::work_cleanup::~work_cleanup()
+inline kqueue_scheduler_core::work_cleanup::~work_cleanup()
 {
     if (ctx)
     {
@@ -1221,7 +1194,7 @@ inline kqueue_scheduler::work_cleanup::~work_cleanup()
     }
 }
 
-inline kqueue_scheduler::task_cleanup::~task_cleanup()
+inline kqueue_scheduler_core::task_cleanup::~task_cleanup()
 {
     if (ctx && ctx->private_outstanding_work > 0)
     {
@@ -1231,8 +1204,209 @@ inline kqueue_scheduler::task_cleanup::~task_cleanup()
     }
 }
 
+//--------------------------------------------------------------------------
+// kqueue_scheduler<Config> implementation
+//--------------------------------------------------------------------------
+
+template<kqueue_config Config>
+inline kqueue_scheduler<Config>::kqueue_scheduler(
+    capy::execution_context& ctx, int concurrency_hint)
+    : kqueue_scheduler_core(
+          ctx,
+          concurrency_hint,
+          Config.inline_budget_initial,
+          Config.inline_budget_max,
+          Config.unassisted_budget)
+{
+}
+
+template<kqueue_config Config>
 inline void
-kqueue_scheduler::run_task(
+kqueue_scheduler<Config>::post(std::coroutine_handle<> h) const
+{
+    struct post_handler final : scheduler_op
+    {
+        std::coroutine_handle<> h_;
+
+        explicit post_handler(std::coroutine_handle<> h) : h_(h) {}
+
+        ~post_handler() = default;
+
+        void operator()() override
+        {
+            auto coro = h_;
+            if constexpr (Config.recycle_post_nodes)
+            {
+                auto* ctx = kqueue::context_stack.get();
+                auto* core = static_cast<
+                    kqueue_scheduler_core const*>(ctx->key);
+                if (core->recycle_post_nodes_rt_)
+                {
+                    if (!ctx->post_cache)
+                        ctx->post_cache = this;
+                    else
+                        core->release_post_node(this);
+                }
+                else
+                {
+                    delete this;
+                }
+                std::atomic_thread_fence(std::memory_order_acquire);
+                coro.resume();
+            }
+            else
+            {
+                delete this;
+                std::atomic_thread_fence(std::memory_order_acquire);
+                coro.resume();
+            }
+        }
+
+        void destroy() override
+        {
+            auto coro = h_;
+            delete this;
+            coro.destroy();
+        }
+    };
+
+    auto* ctx = kqueue::find_context(this);
+
+    post_handler* ph = nullptr;
+    if constexpr (Config.recycle_post_nodes)
+    {
+        if (recycle_post_nodes_rt_)
+        {
+            if (ctx && ctx->post_cache)
+            {
+                ph = static_cast<post_handler*>(ctx->post_cache);
+                ctx->post_cache = nullptr;
+                ph->h_ = h;
+            }
+            else if (auto* cached = try_acquire_post_node())
+            {
+                ph = static_cast<post_handler*>(cached);
+                ph->h_ = h;
+            }
+        }
+    }
+    if (!ph)
+        ph = new post_handler(h);
+
+    if (ctx)
+    {
+        ++ctx->private_outstanding_work;
+        ctx->private_queue.push(ph);
+        return;
+    }
+
+    outstanding_work_.fetch_add(1, std::memory_order_relaxed);
+
+    std::unique_lock lock(mutex_);
+    completed_ops_.push(ph);
+    wake_one_thread_and_unlock(lock);
+}
+
+template<kqueue_config Config>
+inline std::size_t
+kqueue_scheduler<Config>::run()
+{
+    if (outstanding_work_.load(std::memory_order_acquire) == 0)
+    {
+        stop();
+        return 0;
+    }
+
+    kqueue::thread_context_guard ctx(this, Config.inline_budget_initial);
+    std::unique_lock lock(mutex_);
+
+    std::size_t n = 0;
+    for (;;)
+    {
+        if (!do_one(lock, -1, &ctx.frame_))
+            break;
+        if (n != (std::numeric_limits<std::size_t>::max)())
+            ++n;
+        if (!lock.owns_lock())
+            lock.lock();
+    }
+    return n;
+}
+
+template<kqueue_config Config>
+inline std::size_t
+kqueue_scheduler<Config>::run_one()
+{
+    if (outstanding_work_.load(std::memory_order_acquire) == 0)
+    {
+        stop();
+        return 0;
+    }
+
+    kqueue::thread_context_guard ctx(this, Config.inline_budget_initial);
+    std::unique_lock lock(mutex_);
+    return do_one(lock, -1, &ctx.frame_);
+}
+
+template<kqueue_config Config>
+inline std::size_t
+kqueue_scheduler<Config>::wait_one(long usec)
+{
+    if (outstanding_work_.load(std::memory_order_acquire) == 0)
+    {
+        stop();
+        return 0;
+    }
+
+    kqueue::thread_context_guard ctx(this, Config.inline_budget_initial);
+    std::unique_lock lock(mutex_);
+    return do_one(lock, usec, &ctx.frame_);
+}
+
+template<kqueue_config Config>
+inline std::size_t
+kqueue_scheduler<Config>::poll()
+{
+    if (outstanding_work_.load(std::memory_order_acquire) == 0)
+    {
+        stop();
+        return 0;
+    }
+
+    kqueue::thread_context_guard ctx(this, Config.inline_budget_initial);
+    std::unique_lock lock(mutex_);
+
+    std::size_t n = 0;
+    for (;;)
+    {
+        if (!do_one(lock, 0, &ctx.frame_))
+            break;
+        if (n != (std::numeric_limits<std::size_t>::max)())
+            ++n;
+        if (!lock.owns_lock())
+            lock.lock();
+    }
+    return n;
+}
+
+template<kqueue_config Config>
+inline std::size_t
+kqueue_scheduler<Config>::poll_one()
+{
+    if (outstanding_work_.load(std::memory_order_acquire) == 0)
+    {
+        stop();
+        return 0;
+    }
+
+    kqueue::thread_context_guard ctx(this, Config.inline_budget_initial);
+    std::unique_lock lock(mutex_);
+    return do_one(lock, 0, &ctx.frame_);
+}
+
+template<kqueue_config Config>
+inline void
+kqueue_scheduler<Config>::run_task(
     std::unique_lock<std::mutex>& lock, kqueue::scheduler_context* ctx)
 {
     long effective_timeout_us = task_interrupted_ ? 0 : calculate_timeout(-1);
@@ -1255,8 +1429,9 @@ kqueue_scheduler::run_task(
     }
 
     // Event loop runs without mutex held
-    struct kevent events[128];
-    int nev         = ::kevent(kq_fd_, nullptr, 0, events, 128, ts_ptr);
+    struct kevent events[Config.max_events_per_poll];
+    int nev = ::kevent(
+        kq_fd_, nullptr, 0, events, Config.max_events_per_poll, ts_ptr);
     int saved_errno = errno;
 
     if (nev < 0 && saved_errno != EINTR)
@@ -1358,8 +1533,9 @@ kqueue_scheduler::run_task(
     }
 }
 
+template<kqueue_config Config>
 inline std::size_t
-kqueue_scheduler::do_one(
+kqueue_scheduler<Config>::do_one(
     std::unique_lock<std::mutex>& lock,
     long timeout_us,
     kqueue::scheduler_context* ctx)

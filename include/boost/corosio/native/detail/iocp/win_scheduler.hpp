@@ -1,6 +1,7 @@
 //
 // Copyright (c) 2025 Vinnie Falco (vinnie.falco@gmail.com)
 // Copyright (c) 2026 Steve Gerbino
+// Copyright (c) 2026 Michael Vandeberg
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -32,6 +33,7 @@
 #include <boost/corosio/native/detail/make_err.hpp>
 #include <boost/corosio/detail/except.hpp>
 #include <boost/corosio/detail/thread_local_ptr.hpp>
+#include <boost/corosio/backend.hpp>
 
 #include <atomic>
 #include <chrono>
@@ -47,20 +49,30 @@ namespace boost::corosio::detail {
 struct overlapped_op;
 class win_timers;
 
-class BOOST_COROSIO_DECL win_scheduler final
+/* Non-template base for win_scheduler.
+
+   Holds all data members and service-facing methods. The template
+   derived class (win_scheduler<Config>) adds only Config-dependent
+   behaviour (post recycling). The gqcs_timeout_ms_ member is set
+   from Config by the derived constructor, allowing do_one() and
+   shutdown() to use it without being templated.
+*/
+class BOOST_COROSIO_DECL win_scheduler_core
     : public native_scheduler
     , public capy::execution_context::service
 {
 public:
-    using key_type = scheduler;
+    using key_type = win_scheduler_core;
 
-    win_scheduler(capy::execution_context& ctx, int concurrency_hint = -1);
-    ~win_scheduler();
-    win_scheduler(win_scheduler const&)            = delete;
-    win_scheduler& operator=(win_scheduler const&) = delete;
+    win_scheduler_core(
+        capy::execution_context& ctx,
+        int concurrency_hint,
+        unsigned long gqcs_timeout_ms);
+    ~win_scheduler_core();
+    win_scheduler_core(win_scheduler_core const&)            = delete;
+    win_scheduler_core& operator=(win_scheduler_core const&) = delete;
 
     void shutdown() override;
-    void post(std::coroutine_handle<> h) const override;
     void post(scheduler_op* h) const override;
     bool running_in_this_thread() const noexcept override;
     void stop() override;
@@ -92,6 +104,10 @@ public:
     void set_timer_service(timer_service* svc);
     void update_timeout();
 
+    // Post handler node recycling (global free list, protected by dispatch_mutex_)
+    scheduler_op* try_acquire_post_node() const;
+    void release_post_node(scheduler_op* node) const;
+
 private:
     static void on_timer_changed(void* ctx);
     void post_deferred_completions(op_queue& ops);
@@ -106,6 +122,23 @@ private:
     mutable win_mutex dispatch_mutex_;
     mutable op_queue completed_ops_;
     std::unique_ptr<win_timers> timers_;
+    unsigned long gqcs_timeout_ms_;
+    mutable scheduler_op* post_free_list_ = nullptr;
+};
+
+/** Template derived scheduler parameterised on iocp_config.
+
+    Only post(coroutine_handle<>) lives here — it is the sole
+    method that will differ when post-node recycling is enabled.
+*/
+template<iocp_config Config>
+class win_scheduler final : public win_scheduler_core
+{
+public:
+    win_scheduler(capy::execution_context& ctx, int concurrency_hint = -1);
+
+    using win_scheduler_core::post;
+    void post(std::coroutine_handle<> h) const override;
 };
 
 /*
@@ -126,13 +159,9 @@ private:
 
 namespace iocp {
 
-// Max timeout for GQCS to allow periodic re-checking of conditions.
-// Matches Asio's default_gqcs_timeout for pre-Vista compatibility.
-inline constexpr unsigned long max_gqcs_timeout = 500;
-
 struct BOOST_COROSIO_SYMBOL_VISIBLE scheduler_context
 {
-    win_scheduler const* key;
+    void const* key;
     scheduler_context* next;
 };
 
@@ -142,7 +171,7 @@ struct thread_context_guard
 {
     scheduler_context frame_;
 
-    explicit thread_context_guard(win_scheduler const* ctx) noexcept
+    explicit thread_context_guard(void const* ctx) noexcept
         : frame_{ctx, context_stack.get()}
     {
         context_stack.set(&frame_);
@@ -156,13 +185,20 @@ struct thread_context_guard
 
 } // namespace iocp
 
-inline win_scheduler::win_scheduler(
-    capy::execution_context& ctx, int concurrency_hint)
+// ---------------------------------------------------------------
+// win_scheduler_core inline definitions
+// ---------------------------------------------------------------
+
+inline win_scheduler_core::win_scheduler_core(
+    capy::execution_context& ctx,
+    int concurrency_hint,
+    unsigned long gqcs_timeout_ms)
     : iocp_(nullptr)
     , outstanding_work_(0)
     , stopped_(0)
     , stop_event_posted_(0)
     , dispatch_required_(0)
+    , gqcs_timeout_ms_(gqcs_timeout_ms)
 {
     // concurrency_hint < 0 means use system default (DWORD(~0) = max)
     iocp_ = ::CreateIoCompletionPort(
@@ -183,14 +219,32 @@ inline win_scheduler::win_scheduler(
     ctx.make_service<win_resolver_service>(*this);
 }
 
-inline win_scheduler::~win_scheduler()
+inline win_scheduler_core::~win_scheduler_core()
 {
     if (iocp_ != nullptr)
         ::CloseHandle(iocp_);
 }
 
+inline scheduler_op*
+win_scheduler_core::try_acquire_post_node() const
+{
+    std::lock_guard<win_mutex> lock(dispatch_mutex_);
+    auto* node = post_free_list_;
+    if (node)
+        post_free_list_ = node->recycle_next_;
+    return node;
+}
+
 inline void
-win_scheduler::shutdown()
+win_scheduler_core::release_post_node(scheduler_op* node) const
+{
+    std::lock_guard<win_mutex> lock(dispatch_mutex_);
+    node->recycle_next_ = post_free_list_;
+    post_free_list_ = node;
+}
+
+inline void
+win_scheduler_core::shutdown()
 {
     if (timers_)
         timers_->stop();
@@ -226,7 +280,7 @@ win_scheduler::shutdown()
             ULONG_PTR key;
             LPOVERLAPPED overlapped;
             ::GetQueuedCompletionStatus(
-                iocp_, &bytes, &key, &overlapped, iocp::max_gqcs_timeout);
+                iocp_, &bytes, &key, &overlapped, gqcs_timeout_ms_);
             if (overlapped)
             {
                 ::InterlockedDecrement(&outstanding_work_);
@@ -243,72 +297,21 @@ win_scheduler::shutdown()
             }
         }
     }
-}
 
-inline void
-win_scheduler::post(std::coroutine_handle<> h) const
-{
-    struct post_handler final : scheduler_op
-    {
-        std::coroutine_handle<> h_;
-
-        static void do_complete(
-            void* owner, scheduler_op* base, std::uint32_t, std::uint32_t)
-        {
-            auto* self = static_cast<post_handler*>(base);
-            if (!owner)
-            {
-                // Shutdown path: destroy the coroutine frame synchronously.
-                //
-                // Bounded destruction invariant: the chain triggered by
-                // coro.destroy() is at most two levels deep:
-                //   1. task frame destroyed → ~io_awaitable_promise_base()
-                //      destroys stored continuation (if != noop_coroutine)
-                //   2. continuation (trampoline) destroyed → final_suspend
-                //      returns suspend_never, no further continuation
-                //
-                // If a future refactor adds deeper continuation chains,
-                // this would reintroduce re-entrant stack overflow risk.
-#ifndef NDEBUG
-                static thread_local int destroy_depth = 0;
-                ++destroy_depth;
-                BOOST_COROSIO_ASSERT(destroy_depth <= 2);
-#endif
-                auto coro = self->h_;
-                delete self;
-                coro.destroy();
-#ifndef NDEBUG
-                --destroy_depth;
-#endif
-                return;
-            }
-            auto coro = self->h_;
-            delete self;
-            std::atomic_thread_fence(std::memory_order_acquire);
-            coro.resume();
-        }
-
-        explicit post_handler(std::coroutine_handle<> coro)
-            : scheduler_op(&do_complete)
-            , h_(coro)
-        {
-        }
-    };
-
-    auto* ph = new post_handler(h);
-    ::InterlockedIncrement(&outstanding_work_);
-
-    if (!::PostQueuedCompletionStatus(
-            iocp_, 0, key_posted, reinterpret_cast<LPOVERLAPPED>(ph)))
+    // Drain post handler free list
     {
         std::lock_guard<win_mutex> lock(dispatch_mutex_);
-        completed_ops_.push(ph);
-        ::InterlockedExchange(&dispatch_required_, 1);
+        while (post_free_list_)
+        {
+            auto* next = post_free_list_->recycle_next_;
+            delete post_free_list_;
+            post_free_list_ = next;
+        }
     }
 }
 
 inline void
-win_scheduler::post(scheduler_op* h) const
+win_scheduler_core::post(scheduler_op* h) const
 {
     ::InterlockedIncrement(&outstanding_work_);
 
@@ -322,7 +325,7 @@ win_scheduler::post(scheduler_op* h) const
 }
 
 inline bool
-win_scheduler::running_in_this_thread() const noexcept
+win_scheduler_core::running_in_this_thread() const noexcept
 {
     for (auto* c = iocp::context_stack.get(); c != nullptr; c = c->next)
         if (c->key == this)
@@ -331,20 +334,20 @@ win_scheduler::running_in_this_thread() const noexcept
 }
 
 inline void
-win_scheduler::work_started() noexcept
+win_scheduler_core::work_started() noexcept
 {
     ::InterlockedIncrement(&outstanding_work_);
 }
 
 inline void
-win_scheduler::work_finished() noexcept
+win_scheduler_core::work_finished() noexcept
 {
     if (::InterlockedDecrement(&outstanding_work_) == 0)
         stop();
 }
 
 inline void
-win_scheduler::on_pending(overlapped_op* op) const
+win_scheduler_core::on_pending(overlapped_op* op) const
 {
     // CAS: try to set ready_ from 0 to 1.
     // If the old value was 1, GQCS already grabbed this op and stored
@@ -362,7 +365,7 @@ win_scheduler::on_pending(overlapped_op* op) const
 }
 
 inline void
-win_scheduler::on_completion(overlapped_op* op, DWORD error, DWORD bytes) const
+win_scheduler_core::on_completion(overlapped_op* op, DWORD error, DWORD bytes) const
 {
     // Sync completion: pack results into op and post for dispatch.
     op->ready_            = 1;
@@ -379,7 +382,7 @@ win_scheduler::on_completion(overlapped_op* op, DWORD error, DWORD bytes) const
 }
 
 inline void
-win_scheduler::stop()
+win_scheduler_core::stop()
 {
     if (::InterlockedExchange(&stopped_, 1) == 0)
     {
@@ -389,7 +392,7 @@ win_scheduler::stop()
             {
                 // PQCS failure is non-fatal: stopped_ is already set.
                 // The run() loop will notice via the GQCS timeout
-                // (max_gqcs_timeout = 500ms) and exit.
+                // (gqcs_timeout_ms_ default 500ms) and exit.
                 ::InterlockedExchange(&dispatch_required_, 1);
             }
         }
@@ -397,21 +400,21 @@ win_scheduler::stop()
 }
 
 inline bool
-win_scheduler::stopped() const noexcept
+win_scheduler_core::stopped() const noexcept
 {
     // equivalent to atomic read
     return ::InterlockedExchangeAdd(&stopped_, 0) != 0;
 }
 
 inline void
-win_scheduler::restart()
+win_scheduler_core::restart()
 {
     ::InterlockedExchange(&stopped_, 0);
     ::InterlockedExchange(&stop_event_posted_, 0);
 }
 
 inline std::size_t
-win_scheduler::run()
+win_scheduler_core::run()
 {
     if (::InterlockedExchangeAdd(&outstanding_work_, 0) == 0)
     {
@@ -438,7 +441,7 @@ win_scheduler::run()
 }
 
 inline std::size_t
-win_scheduler::run_one()
+win_scheduler_core::run_one()
 {
     if (::InterlockedExchangeAdd(&outstanding_work_, 0) == 0)
     {
@@ -451,7 +454,7 @@ win_scheduler::run_one()
 }
 
 inline std::size_t
-win_scheduler::wait_one(long usec)
+win_scheduler_core::wait_one(long usec)
 {
     if (::InterlockedExchangeAdd(&outstanding_work_, 0) == 0)
     {
@@ -471,7 +474,7 @@ win_scheduler::wait_one(long usec)
 }
 
 inline std::size_t
-win_scheduler::poll()
+win_scheduler_core::poll()
 {
     if (::InterlockedExchangeAdd(&outstanding_work_, 0) == 0)
     {
@@ -489,7 +492,7 @@ win_scheduler::poll()
 }
 
 inline std::size_t
-win_scheduler::poll_one()
+win_scheduler_core::poll_one()
 {
     if (::InterlockedExchangeAdd(&outstanding_work_, 0) == 0)
     {
@@ -502,7 +505,7 @@ win_scheduler::poll_one()
 }
 
 inline void
-win_scheduler::post_deferred_completions(op_queue& ops)
+win_scheduler_core::post_deferred_completions(op_queue& ops)
 {
     while (auto h = ops.pop())
     {
@@ -520,7 +523,7 @@ win_scheduler::post_deferred_completions(op_queue& ops)
 }
 
 inline std::size_t
-win_scheduler::do_one(unsigned long timeout_ms)
+win_scheduler_core::do_one(unsigned long timeout_ms)
 {
     for (;;)
     {
@@ -547,8 +550,8 @@ win_scheduler::do_one(unsigned long timeout_ms)
 
         BOOL result = ::GetQueuedCompletionStatus(
             iocp_, &bytes, &key, &overlapped,
-            timeout_ms < iocp::max_gqcs_timeout ? timeout_ms
-                                                : iocp::max_gqcs_timeout);
+            timeout_ms < gqcs_timeout_ms_ ? timeout_ms
+                                          : gqcs_timeout_ms_);
         DWORD dwError = ::GetLastError();
 
         // Handle based on completion key
@@ -637,20 +640,20 @@ win_scheduler::do_one(unsigned long timeout_ms)
         // PQCS-failure fallback: stop() sets stopped_ and
         // dispatch_required_ but if the key_shutdown post failed,
         // no completion is ever dequeued.  Catch it here on the
-        // periodic 500 ms GQCS timeout so run()/run_one() can exit.
+        // periodic GQCS timeout so run()/run_one() can exit.
         if (stopped())
             return 0;
     }
 }
 
 inline void
-win_scheduler::on_timer_changed(void* ctx)
+win_scheduler_core::on_timer_changed(void* ctx)
 {
-    static_cast<win_scheduler*>(ctx)->update_timeout();
+    static_cast<win_scheduler_core*>(ctx)->update_timeout();
 }
 
 inline void
-win_scheduler::set_timer_service(timer_service* svc)
+win_scheduler_core::set_timer_service(timer_service* svc)
 {
     timer_svc_ = svc;
     // Pass 'this' as context - callback routes to correct instance
@@ -661,10 +664,105 @@ win_scheduler::set_timer_service(timer_service* svc)
 }
 
 inline void
-win_scheduler::update_timeout()
+win_scheduler_core::update_timeout()
 {
     if (timer_svc_ && timers_)
         timers_->update_timeout(timer_svc_->nearest_expiry());
+}
+
+// ---------------------------------------------------------------
+// win_scheduler<Config> inline definitions
+// ---------------------------------------------------------------
+
+template<iocp_config Config>
+inline
+win_scheduler<Config>::win_scheduler(
+    capy::execution_context& ctx, int concurrency_hint)
+    : win_scheduler_core(ctx, concurrency_hint, Config.gqcs_timeout_ms)
+{
+}
+
+template<iocp_config Config>
+inline void
+win_scheduler<Config>::post(std::coroutine_handle<> h) const
+{
+    struct post_handler final : scheduler_op
+    {
+        std::coroutine_handle<> h_;
+
+        static void do_complete(
+            void* owner, scheduler_op* base, std::uint32_t, std::uint32_t)
+        {
+            auto* self = static_cast<post_handler*>(base);
+            if (!owner)
+            {
+                // Shutdown path: destroy the coroutine frame synchronously.
+                //
+                // Bounded destruction invariant: the chain triggered by
+                // coro.destroy() is at most two levels deep:
+                //   1. task frame destroyed → ~io_awaitable_promise_base()
+                //      destroys stored continuation (if != noop_coroutine)
+                //   2. continuation (trampoline) destroyed → final_suspend
+                //      returns suspend_never, no further continuation
+                //
+                // If a future refactor adds deeper continuation chains,
+                // this would reintroduce re-entrant stack overflow risk.
+#ifndef NDEBUG
+                static thread_local int destroy_depth = 0;
+                ++destroy_depth;
+                BOOST_COROSIO_ASSERT(destroy_depth <= 2);
+#endif
+                auto coro = self->h_;
+                delete self;
+                coro.destroy();
+#ifndef NDEBUG
+                --destroy_depth;
+#endif
+                return;
+            }
+            auto coro = self->h_;
+            if constexpr (Config.recycle_post_nodes)
+            {
+                auto* ctx = iocp::context_stack.get();
+                auto* core = static_cast<
+                    win_scheduler_core const*>(ctx->key);
+                if (core->recycle_post_nodes_rt_)
+                    core->release_post_node(self);
+                else
+                    delete self;
+                std::atomic_thread_fence(std::memory_order_acquire);
+                coro.resume();
+            }
+            else
+            {
+                delete self;
+                std::atomic_thread_fence(std::memory_order_acquire);
+                coro.resume();
+            }
+        }
+
+        explicit post_handler(std::coroutine_handle<> coro)
+            : scheduler_op(&do_complete)
+            , h_(coro)
+        {
+        }
+    };
+
+    post_handler* ph = nullptr;
+    if constexpr (Config.recycle_post_nodes)
+    {
+        if (recycle_post_nodes_rt_)
+        {
+            if (auto* cached = try_acquire_post_node())
+            {
+                ph = ::new (cached) post_handler(h);
+            }
+        }
+    }
+    if (!ph)
+        ph = new post_handler(h);
+
+    win_scheduler_core::post(ph);
 }
 
 } // namespace boost::corosio::detail

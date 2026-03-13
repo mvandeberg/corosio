@@ -28,6 +28,10 @@ struct native_scheduler : scheduler
 {
     /// Store the timer service pointer, set during construction.
     timer_service* timer_svc_ = nullptr;
+
+    /// Runtime toggle for post_handler node recycling.
+    /// Defaults to true; can be overridden by io_context_options.
+    bool recycle_post_nodes_rt_ = true;
 };
 
 } // namespace boost::corosio::detail

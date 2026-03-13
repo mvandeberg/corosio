@@ -25,7 +25,7 @@ struct iocp_test_context : native_io_context<iocp>
 {
     void* iocp_handle()
     {
-        return static_cast<detail::win_scheduler*>(sched_)->native_handle();
+        return static_cast<detail::win_scheduler<iocp_config{}>*>(sched_)->native_handle();
     }
 };
 

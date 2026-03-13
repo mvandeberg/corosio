@@ -14,7 +14,6 @@
 #include <boost/corosio/detail/config.hpp>
 #include <boost/corosio/detail/intrusive.hpp>
 
-#include <cstddef>
 #include <cstdint>
 #include <utility>
 
@@ -114,9 +113,11 @@ protected:
 
     func_type func_;
 
-    // Pad to 32 bytes so derived structs (descriptor_state, epoll_op)
-    // keep hot fields on optimal cache line boundaries
-    std::byte reserved_[sizeof(void*)] = {};
+public:
+    // Free list linkage for post_handler node recycling.
+    // Also pads to 32 bytes so derived structs (descriptor_state,
+    // epoll_op) keep hot fields on optimal cache line boundaries.
+    scheduler_op* recycle_next_ = nullptr;
 };
 
 using op_queue = intrusive_queue<scheduler_op>;

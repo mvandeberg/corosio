@@ -42,12 +42,12 @@ namespace boost::corosio::detail {
 class select_acceptor_state
 {
 public:
-    explicit select_acceptor_state(select_scheduler& sched) noexcept
+    explicit select_acceptor_state(select_scheduler_core& sched) noexcept
         : sched_(sched)
     {
     }
 
-    select_scheduler& sched_;
+    select_scheduler_core& sched_;
     std::mutex mutex_;
     intrusive_list<select_acceptor> acceptor_list_;
     std::unordered_map<select_acceptor*, std::shared_ptr<select_acceptor>>
@@ -83,7 +83,7 @@ public:
     std::error_code
     listen_acceptor(tcp_acceptor::implementation& impl, int backlog) override;
 
-    select_scheduler& scheduler() const noexcept
+    select_scheduler_core& scheduler() const noexcept
     {
         return state_->sched_;
     }
@@ -301,7 +301,7 @@ select_acceptor::accept(
         // reactor sees an event before we set registered.
         op.registered.store(
             select_registration_state::registering, std::memory_order_release);
-        svc_.scheduler().register_fd(fd_, &op, select_scheduler::event_read);
+        svc_.scheduler().register_fd(fd_, &op, select_scheduler_core::event_read);
 
         // Transition to registered. If this fails, reactor or cancel already
         // claimed the op (state is now unregistered), so we're done. However,
@@ -312,7 +312,7 @@ select_acceptor::accept(
                 expected, select_registration_state::registered,
                 std::memory_order_acq_rel))
         {
-            svc_.scheduler().deregister_fd(fd_, select_scheduler::event_read);
+            svc_.scheduler().deregister_fd(fd_, select_scheduler_core::event_read);
             return std::noop_coroutine();
         }
 
@@ -325,7 +325,7 @@ select_acceptor::accept(
             if (prev != select_registration_state::unregistered)
             {
                 svc_.scheduler().deregister_fd(
-                    fd_, select_scheduler::event_read);
+                    fd_, select_scheduler_core::event_read);
                 op.impl_ptr = shared_from_this();
                 svc_.post(&op);
                 svc_.work_finished();
@@ -353,7 +353,7 @@ select_acceptor::cancel() noexcept
 
     if (prev != select_registration_state::unregistered)
     {
-        svc_.scheduler().deregister_fd(fd_, select_scheduler::event_read);
+        svc_.scheduler().deregister_fd(fd_, select_scheduler_core::event_read);
         acc_.impl_ptr = self;
         svc_.post(&acc_);
         svc_.work_finished();
@@ -373,7 +373,7 @@ select_acceptor::cancel_single_op(select_op& op) noexcept
 
     if (prev != select_registration_state::unregistered)
     {
-        svc_.scheduler().deregister_fd(fd_, select_scheduler::event_read);
+        svc_.scheduler().deregister_fd(fd_, select_scheduler_core::event_read);
 
         op.impl_ptr = self;
         svc_.post(&op);
@@ -393,7 +393,7 @@ select_acceptor::close_socket() noexcept
 
         if (prev != select_registration_state::unregistered)
         {
-            svc_.scheduler().deregister_fd(fd_, select_scheduler::event_read);
+            svc_.scheduler().deregister_fd(fd_, select_scheduler_core::event_read);
             acc_.impl_ptr = self;
             svc_.post(&acc_);
             svc_.work_finished();
@@ -402,7 +402,7 @@ select_acceptor::close_socket() noexcept
 
     if (fd_ >= 0)
     {
-        svc_.scheduler().deregister_fd(fd_, select_scheduler::event_read);
+        svc_.scheduler().deregister_fd(fd_, select_scheduler_core::event_read);
         ::close(fd_);
         fd_ = -1;
     }
@@ -415,7 +415,7 @@ inline select_acceptor_service::select_acceptor_service(
     : ctx_(ctx)
     , state_(
           std::make_unique<select_acceptor_state>(
-              ctx.use_service<select_scheduler>()))
+              *ctx.find_service<select_scheduler_core>()))
 {
 }
 

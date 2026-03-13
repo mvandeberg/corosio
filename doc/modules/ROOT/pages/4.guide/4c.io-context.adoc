@@ -71,6 +71,29 @@ The concurrency hint affects:
 
 Use `1` for single-threaded programs to avoid synchronization overhead.
 
+=== With Runtime Options
+
+[source,cpp]
+----
+corosio::io_context ioc(corosio::io_context_options{
+    .recycle_post_nodes = false});
+----
+
+Runtime options control memory recycling behavior. See
+xref:4c2.configuration.adoc[Configuration] for all available options.
+
+=== With Explicit Backend
+
+[source,cpp]
+----
+corosio::io_context ioc(corosio::epoll);    // explicit backend
+corosio::io_context ioc(corosio::select);   // portable fallback
+----
+
+The template constructor selects a specific I/O backend at compile
+time. See xref:4c2.configuration.adoc[Configuration] for compile-time
+tuning via custom backend configs.
+
 == Running the Event Loop
 
 === run()
@@ -308,8 +331,17 @@ On macOS and FreeBSD, the `io_context` uses kqueue:
 * Efficient event notification
 * File descriptor monitoring
 
+=== Portable Fallback (select)
+
+On platforms without epoll, kqueue, or IOCP, the `io_context` uses
+POSIX `select()`:
+
+* Portable across all POSIX systems
+* Limited to `FD_SETSIZE` file descriptors
+
 == Next Steps
 
+* xref:4c2.configuration.adoc[Configuration] — Compile-time and runtime tuning
 * xref:4d.sockets.adoc[Sockets] — I/O with TCP sockets
 * xref:4e.tcp-acceptor.adoc[Acceptors] — Accept incoming connections
 * xref:4h.timers.adoc[Timers] — Async delays and timeouts

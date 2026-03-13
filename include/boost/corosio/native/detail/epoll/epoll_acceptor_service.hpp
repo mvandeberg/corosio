@@ -43,12 +43,12 @@ namespace boost::corosio::detail {
 class epoll_acceptor_state
 {
 public:
-    explicit epoll_acceptor_state(epoll_scheduler& sched) noexcept
+    explicit epoll_acceptor_state(epoll_scheduler_core& sched) noexcept
         : sched_(sched)
     {
     }
 
-    epoll_scheduler& sched_;
+    epoll_scheduler_core& sched_;
     std::mutex mutex_;
     intrusive_list<epoll_acceptor> acceptor_list_;
     std::unordered_map<epoll_acceptor*, std::shared_ptr<epoll_acceptor>>
@@ -84,7 +84,7 @@ public:
     std::error_code
     listen_acceptor(tcp_acceptor::implementation& impl, int backlog) override;
 
-    epoll_scheduler& scheduler() const noexcept
+    epoll_scheduler_core& scheduler() const noexcept
     {
         return state_->sched_;
     }
@@ -383,7 +383,7 @@ inline epoll_acceptor_service::epoll_acceptor_service(
     : ctx_(ctx)
     , state_(
           std::make_unique<epoll_acceptor_state>(
-              ctx.use_service<epoll_scheduler>()))
+              *ctx.find_service<epoll_scheduler_core>()))
 {
 }
 

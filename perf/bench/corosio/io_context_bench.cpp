@@ -193,6 +193,232 @@ bench_concurrent_post_run(bench::state& state)
     state.counters["threads"] = num_threads;
 }
 
+// -----------------------------------------------------------------
+// Config-variant benchmarks
+// -----------------------------------------------------------------
+
+#if BOOST_COROSIO_HAS_EPOLL
+
+// Compile-time: recycle_post_nodes disabled
+void
+bench_no_recycle_ct(bench::state& state)
+{
+    constexpr corosio::epoll_config cfg{.recycle_post_nodes = false};
+    corosio::native_io_context<corosio::epoll_t<cfg>{}> ioc;
+    auto ex                  = ioc.get_executor();
+    int64_t counter          = 0;
+    int constexpr batch_size = 1000;
+
+    perf::stopwatch sw;
+    auto deadline = std::chrono::steady_clock::now() +
+        std::chrono::duration<double>(state.duration());
+
+    while (std::chrono::steady_clock::now() < deadline)
+    {
+        for (int i = 0; i < batch_size; ++i)
+            capy::run_async(ex)(increment_task(counter));
+        ioc.poll();
+        ioc.restart();
+    }
+    ioc.run();
+
+    state.set_elapsed(sw.elapsed_seconds());
+    state.add_items(counter);
+}
+
+// Runtime: recycle_post_nodes disabled via io_context_options
+void
+bench_no_recycle_rt(bench::state& state)
+{
+    corosio::io_context ioc(corosio::io_context_options{
+        .recycle_post_nodes = false});
+    auto ex                  = ioc.get_executor();
+    int64_t counter          = 0;
+    int constexpr batch_size = 1000;
+
+    perf::stopwatch sw;
+    auto deadline = std::chrono::steady_clock::now() +
+        std::chrono::duration<double>(state.duration());
+
+    while (std::chrono::steady_clock::now() < deadline)
+    {
+        for (int i = 0; i < batch_size; ++i)
+            capy::run_async(ex)(increment_task(counter));
+        ioc.poll();
+        ioc.restart();
+    }
+    ioc.run();
+
+    state.set_elapsed(sw.elapsed_seconds());
+    state.add_items(counter);
+}
+
+// Compile-time: high inline budget
+void
+bench_high_inline_budget(bench::state& state)
+{
+    constexpr corosio::epoll_config cfg{.inline_budget_max = 64};
+    corosio::native_io_context<corosio::epoll_t<cfg>{}> ioc;
+    auto ex                  = ioc.get_executor();
+    int64_t counter          = 0;
+    int constexpr batch_size = 1000;
+
+    perf::stopwatch sw;
+    auto deadline = std::chrono::steady_clock::now() +
+        std::chrono::duration<double>(state.duration());
+
+    while (std::chrono::steady_clock::now() < deadline)
+    {
+        for (int i = 0; i < batch_size; ++i)
+            capy::run_async(ex)(increment_task(counter));
+        ioc.poll();
+        ioc.restart();
+    }
+    ioc.run();
+
+    state.set_elapsed(sw.elapsed_seconds());
+    state.add_items(counter);
+}
+
+// Compile-time: large event buffer
+void
+bench_large_event_buffer(bench::state& state)
+{
+    constexpr corosio::epoll_config cfg{.max_events_per_poll = 512};
+    corosio::native_io_context<corosio::epoll_t<cfg>{}> ioc;
+    auto ex                  = ioc.get_executor();
+    int64_t counter          = 0;
+    int constexpr batch_size = 1000;
+
+    perf::stopwatch sw;
+    auto deadline = std::chrono::steady_clock::now() +
+        std::chrono::duration<double>(state.duration());
+
+    while (std::chrono::steady_clock::now() < deadline)
+    {
+        for (int i = 0; i < batch_size; ++i)
+            capy::run_async(ex)(increment_task(counter));
+        ioc.poll();
+        ioc.restart();
+    }
+    ioc.run();
+
+    state.set_elapsed(sw.elapsed_seconds());
+    state.add_items(counter);
+}
+
+#elif BOOST_COROSIO_HAS_KQUEUE
+
+// Compile-time: recycle_post_nodes disabled
+void
+bench_no_recycle_ct(bench::state& state)
+{
+    constexpr corosio::kqueue_config cfg{.recycle_post_nodes = false};
+    corosio::native_io_context<corosio::kqueue_t<cfg>{}> ioc;
+    auto ex                  = ioc.get_executor();
+    int64_t counter          = 0;
+    int constexpr batch_size = 1000;
+
+    perf::stopwatch sw;
+    auto deadline = std::chrono::steady_clock::now() +
+        std::chrono::duration<double>(state.duration());
+
+    while (std::chrono::steady_clock::now() < deadline)
+    {
+        for (int i = 0; i < batch_size; ++i)
+            capy::run_async(ex)(increment_task(counter));
+        ioc.poll();
+        ioc.restart();
+    }
+    ioc.run();
+
+    state.set_elapsed(sw.elapsed_seconds());
+    state.add_items(counter);
+}
+
+// Runtime: recycle_post_nodes disabled via io_context_options
+void
+bench_no_recycle_rt(bench::state& state)
+{
+    corosio::io_context ioc(corosio::io_context_options{
+        .recycle_post_nodes = false});
+    auto ex                  = ioc.get_executor();
+    int64_t counter          = 0;
+    int constexpr batch_size = 1000;
+
+    perf::stopwatch sw;
+    auto deadline = std::chrono::steady_clock::now() +
+        std::chrono::duration<double>(state.duration());
+
+    while (std::chrono::steady_clock::now() < deadline)
+    {
+        for (int i = 0; i < batch_size; ++i)
+            capy::run_async(ex)(increment_task(counter));
+        ioc.poll();
+        ioc.restart();
+    }
+    ioc.run();
+
+    state.set_elapsed(sw.elapsed_seconds());
+    state.add_items(counter);
+}
+
+// Compile-time: high inline budget
+void
+bench_high_inline_budget(bench::state& state)
+{
+    constexpr corosio::kqueue_config cfg{.inline_budget_max = 64};
+    corosio::native_io_context<corosio::kqueue_t<cfg>{}> ioc;
+    auto ex                  = ioc.get_executor();
+    int64_t counter          = 0;
+    int constexpr batch_size = 1000;
+
+    perf::stopwatch sw;
+    auto deadline = std::chrono::steady_clock::now() +
+        std::chrono::duration<double>(state.duration());
+
+    while (std::chrono::steady_clock::now() < deadline)
+    {
+        for (int i = 0; i < batch_size; ++i)
+            capy::run_async(ex)(increment_task(counter));
+        ioc.poll();
+        ioc.restart();
+    }
+    ioc.run();
+
+    state.set_elapsed(sw.elapsed_seconds());
+    state.add_items(counter);
+}
+
+// Compile-time: large event buffer
+void
+bench_large_event_buffer(bench::state& state)
+{
+    constexpr corosio::kqueue_config cfg{.max_events_per_poll = 512};
+    corosio::native_io_context<corosio::kqueue_t<cfg>{}> ioc;
+    auto ex                  = ioc.get_executor();
+    int64_t counter          = 0;
+    int constexpr batch_size = 1000;
+
+    perf::stopwatch sw;
+    auto deadline = std::chrono::steady_clock::now() +
+        std::chrono::duration<double>(state.duration());
+
+    while (std::chrono::steady_clock::now() < deadline)
+    {
+        for (int i = 0; i < batch_size; ++i)
+            capy::run_async(ex)(increment_task(counter));
+        ioc.poll();
+        ioc.restart();
+    }
+    ioc.run();
+
+    state.set_elapsed(sw.elapsed_seconds());
+    state.add_items(counter);
+}
+
+#endif // BOOST_COROSIO_HAS_EPOLL / BOOST_COROSIO_HAS_KQUEUE
+
 } // anonymous namespace
 
 template<auto Backend>
@@ -200,7 +426,7 @@ bench::benchmark_suite
 make_io_context_suite()
 {
     using F = bench::bench_flags;
-    return bench::benchmark_suite("io_context", F::is_microbenchmark)
+    auto suite = bench::benchmark_suite("io_context", F::is_microbenchmark)
         .set_warmup([] {
             corosio::native_io_context<Backend> ioc;
             auto ex         = ioc.get_executor();
@@ -215,6 +441,16 @@ make_io_context_suite()
         .add("interleaved", bench_interleaved_post_run<Backend>)
         .add("concurrent", bench_concurrent_post_run<Backend>)
             .args({4});
+
+#if BOOST_COROSIO_HAS_EPOLL || BOOST_COROSIO_HAS_KQUEUE
+    suite
+        .add("no_recycle_ct", bench_no_recycle_ct)
+        .add("no_recycle_rt", bench_no_recycle_rt)
+        .add("high_inline_budget", bench_high_inline_budget)
+        .add("large_event_buffer", bench_large_event_buffer);
+#endif
+
+    return suite;
 }
 
 } // namespace corosio_bench

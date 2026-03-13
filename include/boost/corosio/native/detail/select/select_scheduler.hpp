@@ -15,6 +15,7 @@
 #if BOOST_COROSIO_HAS_SELECT
 
 #include <boost/corosio/detail/config.hpp>
+#include <boost/corosio/backend.hpp>
 #include <boost/capy/ex/execution_context.hpp>
 
 #include <boost/corosio/native/native_scheduler.hpp>
@@ -48,36 +49,29 @@ namespace boost::corosio::detail {
 
 struct select_op;
 
-/** POSIX scheduler using select() for I/O multiplexing.
+/* select_scheduler_core — non-template base class
 
-    This scheduler implements the scheduler interface using the POSIX select()
-    call for I/O event notification. It uses a single reactor model
-    where one thread runs select() while other threads wait on a condition
-    variable for handler work. This design provides:
+    Contains all data members, thread context management, and methods
+    that don't depend on select_config template parameters. Services
+    (select_socket_service, select_acceptor_service) reference this type
+    rather than the templated select_scheduler<Config>, avoiding a
+    cascade of template parameters through the service layer.
 
-    - Handler parallelism: N posted handlers can execute on N threads
-    - No thundering herd: condition_variable wakes exactly one thread
-    - Portability: Works on all POSIX systems
-
-    The design mirrors epoll_scheduler for behavioral consistency:
-    - Same single-reactor thread coordination model
-    - Same work counting semantics
-    - Same timer integration pattern
-
-    Known Limitations:
-    - FD_SETSIZE (~1024) limits maximum concurrent connections
-    - O(n) scanning: rebuilds fd_sets each iteration
-    - Level-triggered only (no edge-triggered mode)
-
-    @par Thread Safety
-    All public member functions are thread-safe.
+    Config-dependent behavior (post node recycling) lives on the
+    derived select_scheduler<Config>.
 */
-class BOOST_COROSIO_DECL select_scheduler final
+
+class BOOST_COROSIO_DECL select_scheduler_core
     : public native_scheduler
     , public capy::execution_context::service
 {
 public:
-    using key_type = scheduler;
+    /** Service lookup key.
+
+        Allows services to find this scheduler via
+        ctx.find_service<select_scheduler_core>().
+    */
+    using key_type = select_scheduler_core;
 
     /** Construct the scheduler.
 
@@ -86,15 +80,14 @@ public:
         @param ctx Reference to the owning execution_context.
         @param concurrency_hint Hint for expected thread count (unused).
     */
-    select_scheduler(capy::execution_context& ctx, int concurrency_hint = -1);
+    select_scheduler_core(capy::execution_context& ctx, int concurrency_hint = -1);
 
-    ~select_scheduler() override;
+    ~select_scheduler_core() override;
 
-    select_scheduler(select_scheduler const&)            = delete;
-    select_scheduler& operator=(select_scheduler const&) = delete;
+    select_scheduler_core(select_scheduler_core const&)            = delete;
+    select_scheduler_core& operator=(select_scheduler_core const&) = delete;
 
     void shutdown() override;
-    void post(std::coroutine_handle<> h) const override;
     void post(scheduler_op* h) const override;
     bool running_in_this_thread() const noexcept override;
     void stop() override;
@@ -137,12 +130,21 @@ public:
     void work_started() noexcept override;
     void work_finished() noexcept override;
 
+    // Post handler node recycling (global free list, protected by mutex_)
+    scheduler_op* try_acquire_post_node() const;
+    void release_post_node(scheduler_op* node) const;
+
     // Event flags for register_fd/deregister_fd
     static constexpr int event_read  = 1;
     static constexpr int event_write = 2;
 
-private:
+protected:
     std::size_t do_one(long timeout_us);
+
+    // Global free list for post_handler recycling (protected by mutex_)
+    mutable scheduler_op* post_free_list_ = nullptr;
+
+private:
     void run_reactor(std::unique_lock<std::mutex>& lock);
     void wake_one_thread_and_unlock(std::unique_lock<std::mutex>& lock) const;
     void interrupt_reactor() const;
@@ -180,6 +182,28 @@ private:
         void destroy() override {}
     };
     task_op task_op_;
+};
+
+/** Templated select scheduler.
+
+    Inherits all functionality from select_scheduler_core. Adds
+    Config-dependent post(coroutine_handle<>) for future post node
+    recycling support.
+
+    @tparam Config Compile-time configuration.
+*/
+template<select_config Config = select_config{}>
+class select_scheduler final : public select_scheduler_core
+{
+public:
+    select_scheduler(capy::execution_context& ctx, int concurrency_hint = -1);
+    ~select_scheduler() override = default;
+
+    select_scheduler(select_scheduler const&)            = delete;
+    select_scheduler& operator=(select_scheduler const&) = delete;
+
+    using select_scheduler_core::post;
+    void post(std::coroutine_handle<> h) const override;
 };
 
 /*
@@ -221,7 +245,7 @@ namespace select {
 
 struct BOOST_COROSIO_SYMBOL_VISIBLE scheduler_context
 {
-    select_scheduler const* key;
+    void const* key;
     scheduler_context* next;
 };
 
@@ -231,7 +255,7 @@ struct thread_context_guard
 {
     scheduler_context frame_;
 
-    explicit thread_context_guard(select_scheduler const* ctx) noexcept
+    explicit thread_context_guard(void const* ctx) noexcept
         : frame_{ctx, context_stack.get()}
     {
         context_stack.set(&frame_);
@@ -245,7 +269,7 @@ struct thread_context_guard
 
 struct work_guard
 {
-    select_scheduler* self;
+    select_scheduler_core* self;
     ~work_guard()
     {
         self->work_finished();
@@ -254,7 +278,8 @@ struct work_guard
 
 } // namespace select
 
-inline select_scheduler::select_scheduler(capy::execution_context& ctx, int)
+inline select_scheduler_core::select_scheduler_core(
+    capy::execution_context& ctx, int)
     : pipe_fds_{-1, -1}
     , outstanding_work_(0)
     , stopped_(false)
@@ -297,7 +322,7 @@ inline select_scheduler::select_scheduler(capy::execution_context& ctx, int)
     timer_svc_ = &get_timer_service(ctx, *this);
     timer_svc_->set_on_earliest_changed(
         timer_service::callback(this, [](void* p) {
-            static_cast<select_scheduler*>(p)->interrupt_reactor();
+            static_cast<select_scheduler_core*>(p)->interrupt_reactor();
         }));
 
     // Initialize resolver service
@@ -310,7 +335,7 @@ inline select_scheduler::select_scheduler(capy::execution_context& ctx, int)
     completed_ops_.push(&task_op_);
 }
 
-inline select_scheduler::~select_scheduler()
+inline select_scheduler_core::~select_scheduler_core()
 {
     if (pipe_fds_[0] >= 0)
         ::close(pipe_fds_[0]);
@@ -318,8 +343,26 @@ inline select_scheduler::~select_scheduler()
         ::close(pipe_fds_[1]);
 }
 
+inline scheduler_op*
+select_scheduler_core::try_acquire_post_node() const
+{
+    std::lock_guard lock(mutex_);
+    auto* node = post_free_list_;
+    if (node)
+        post_free_list_ = node->recycle_next_;
+    return node;
+}
+
 inline void
-select_scheduler::shutdown()
+select_scheduler_core::release_post_node(scheduler_op* node) const
+{
+    std::lock_guard lock(mutex_);
+    node->recycle_next_ = post_free_list_;
+    post_free_list_ = node;
+}
+
+inline void
+select_scheduler_core::shutdown()
 {
     {
         std::unique_lock lock(mutex_);
@@ -332,6 +375,14 @@ select_scheduler::shutdown()
             h->destroy();
             lock.lock();
         }
+
+        // Drain post handler free list
+        while (post_free_list_)
+        {
+            auto* next = post_free_list_->recycle_next_;
+            delete post_free_list_;
+            post_free_list_ = next;
+        }
     }
 
     if (pipe_fds_[1] >= 0)
@@ -340,8 +391,17 @@ select_scheduler::shutdown()
     wakeup_event_.notify_all();
 }
 
+template<select_config Config>
+inline
+select_scheduler<Config>::select_scheduler(
+    capy::execution_context& ctx, int concurrency_hint)
+    : select_scheduler_core(ctx, concurrency_hint)
+{
+}
+
+template<select_config Config>
 inline void
-select_scheduler::post(std::coroutine_handle<> h) const
+select_scheduler<Config>::post(std::coroutine_handle<> h) const
 {
     struct post_handler final : scheduler_op
     {
@@ -353,29 +413,53 @@ select_scheduler::post(std::coroutine_handle<> h) const
 
         void operator()() override
         {
-            auto h = h_;
-            delete this;
-            h.resume();
+            auto coro = h_;
+            if constexpr (Config.recycle_post_nodes)
+            {
+                auto* ctx = select::context_stack.get();
+                auto* core = static_cast<
+                    select_scheduler_core const*>(ctx->key);
+                if (core->recycle_post_nodes_rt_)
+                    core->release_post_node(this);
+                else
+                    delete this;
+                coro.resume();
+            }
+            else
+            {
+                delete this;
+                coro.resume();
+            }
         }
 
         void destroy() override
         {
-            auto h = h_;
+            auto coro = h_;
             delete this;
-            h.destroy();
+            coro.destroy();
         }
     };
 
-    auto ph = std::make_unique<post_handler>(h);
-    outstanding_work_.fetch_add(1, std::memory_order_relaxed);
+    post_handler* ph = nullptr;
+    if constexpr (Config.recycle_post_nodes)
+    {
+        if (recycle_post_nodes_rt_)
+        {
+            if (auto* cached = try_acquire_post_node())
+            {
+                ph = static_cast<post_handler*>(cached);
+                ph->h_ = h;
+            }
+        }
+    }
+    if (!ph)
+        ph = new post_handler(h);
 
-    std::unique_lock lock(mutex_);
-    completed_ops_.push(ph.release());
-    wake_one_thread_and_unlock(lock);
+    select_scheduler_core::post(ph);
 }
 
 inline void
-select_scheduler::post(scheduler_op* h) const
+select_scheduler_core::post(scheduler_op* h) const
 {
     outstanding_work_.fetch_add(1, std::memory_order_relaxed);
 
@@ -385,7 +469,7 @@ select_scheduler::post(scheduler_op* h) const
 }
 
 inline bool
-select_scheduler::running_in_this_thread() const noexcept
+select_scheduler_core::running_in_this_thread() const noexcept
 {
     for (auto* c = select::context_stack.get(); c != nullptr; c = c->next)
         if (c->key == this)
@@ -394,7 +478,7 @@ select_scheduler::running_in_this_thread() const noexcept
 }
 
 inline void
-select_scheduler::stop()
+select_scheduler_core::stop()
 {
     bool expected = false;
     if (stopped_.compare_exchange_strong(
@@ -411,19 +495,19 @@ select_scheduler::stop()
 }
 
 inline bool
-select_scheduler::stopped() const noexcept
+select_scheduler_core::stopped() const noexcept
 {
     return stopped_.load(std::memory_order_acquire);
 }
 
 inline void
-select_scheduler::restart()
+select_scheduler_core::restart()
 {
     stopped_.store(false, std::memory_order_release);
 }
 
 inline std::size_t
-select_scheduler::run()
+select_scheduler_core::run()
 {
     if (stopped_.load(std::memory_order_acquire))
         return 0;
@@ -444,7 +528,7 @@ select_scheduler::run()
 }
 
 inline std::size_t
-select_scheduler::run_one()
+select_scheduler_core::run_one()
 {
     if (stopped_.load(std::memory_order_acquire))
         return 0;
@@ -460,7 +544,7 @@ select_scheduler::run_one()
 }
 
 inline std::size_t
-select_scheduler::wait_one(long usec)
+select_scheduler_core::wait_one(long usec)
 {
     if (stopped_.load(std::memory_order_acquire))
         return 0;
@@ -476,7 +560,7 @@ select_scheduler::wait_one(long usec)
 }
 
 inline std::size_t
-select_scheduler::poll()
+select_scheduler_core::poll()
 {
     if (stopped_.load(std::memory_order_acquire))
         return 0;
@@ -497,7 +581,7 @@ select_scheduler::poll()
 }
 
 inline std::size_t
-select_scheduler::poll_one()
+select_scheduler_core::poll_one()
 {
     if (stopped_.load(std::memory_order_acquire))
         return 0;
@@ -513,7 +597,7 @@ select_scheduler::poll_one()
 }
 
 inline void
-select_scheduler::register_fd(int fd, select_op* op, int events) const
+select_scheduler_core::register_fd(int fd, select_op* op, int events) const
 {
     // Validate fd is within select() limits
     if (fd < 0 || fd >= FD_SETSIZE)
@@ -538,7 +622,7 @@ select_scheduler::register_fd(int fd, select_op* op, int events) const
 }
 
 inline void
-select_scheduler::deregister_fd(int fd, int events) const
+select_scheduler_core::deregister_fd(int fd, int events) const
 {
     std::lock_guard lock(mutex_);
 
@@ -570,27 +654,27 @@ select_scheduler::deregister_fd(int fd, int events) const
 }
 
 inline void
-select_scheduler::work_started() noexcept
+select_scheduler_core::work_started() noexcept
 {
     outstanding_work_.fetch_add(1, std::memory_order_relaxed);
 }
 
 inline void
-select_scheduler::work_finished() noexcept
+select_scheduler_core::work_finished() noexcept
 {
     if (outstanding_work_.fetch_sub(1, std::memory_order_acq_rel) == 1)
         stop();
 }
 
 inline void
-select_scheduler::interrupt_reactor() const
+select_scheduler_core::interrupt_reactor() const
 {
     char byte               = 1;
     [[maybe_unused]] auto r = ::write(pipe_fds_[1], &byte, 1);
 }
 
 inline void
-select_scheduler::wake_one_thread_and_unlock(
+select_scheduler_core::wake_one_thread_and_unlock(
     std::unique_lock<std::mutex>& lock) const
 {
     if (idle_thread_count_ > 0)
@@ -614,7 +698,7 @@ select_scheduler::wake_one_thread_and_unlock(
 }
 
 inline long
-select_scheduler::calculate_timeout(long requested_timeout_us) const
+select_scheduler_core::calculate_timeout(long requested_timeout_us) const
 {
     if (requested_timeout_us == 0)
         return 0;
@@ -649,7 +733,7 @@ select_scheduler::calculate_timeout(long requested_timeout_us) const
 }
 
 inline void
-select_scheduler::run_reactor(std::unique_lock<std::mutex>& lock)
+select_scheduler_core::run_reactor(std::unique_lock<std::mutex>& lock)
 {
     // Calculate timeout considering timers, use 0 if interrupted
     long effective_timeout_us =
@@ -818,7 +902,7 @@ select_scheduler::run_reactor(std::unique_lock<std::mutex>& lock)
 }
 
 inline std::size_t
-select_scheduler::do_one(long timeout_us)
+select_scheduler_core::do_one(long timeout_us)
 {
     std::unique_lock lock(mutex_);
 

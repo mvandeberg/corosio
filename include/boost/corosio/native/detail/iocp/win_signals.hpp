@@ -131,7 +131,7 @@
 
 namespace boost::corosio::detail {
 
-class win_scheduler;
+class win_scheduler_core;
 
 /** Windows signal management service.
 
@@ -235,7 +235,7 @@ private:
     static void add_service(win_signals* service);
     static void remove_service(win_signals* service);
 
-    win_scheduler& sched_;
+    win_scheduler_core& sched_;
     win_mutex mutex_;
     intrusive_list<win_signal> impl_list_;
 
@@ -376,7 +376,7 @@ win_signal::cancel()
 //
 
 inline win_signals::win_signals(capy::execution_context& ctx)
-    : sched_(ctx.use_service<win_scheduler>())
+    : sched_(*ctx.find_service<win_scheduler_core>())
 {
     for (int i = 0; i < max_signal_number; ++i)
         registrations_[i] = nullptr;

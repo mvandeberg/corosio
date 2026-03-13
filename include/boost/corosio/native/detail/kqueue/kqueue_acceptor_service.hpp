@@ -46,13 +46,13 @@ class kqueue_acceptor_state
     friend class kqueue_acceptor_service;
 
 public:
-    explicit kqueue_acceptor_state(kqueue_scheduler& sched) noexcept
+    explicit kqueue_acceptor_state(kqueue_scheduler_core& sched) noexcept
         : sched_(sched)
     {
     }
 
 private:
-    kqueue_scheduler& sched_;
+    kqueue_scheduler_core& sched_;
     std::mutex mutex_;
     intrusive_list<kqueue_acceptor> acceptor_list_;
     std::unordered_map<kqueue_acceptor*, std::shared_ptr<kqueue_acceptor>>
@@ -87,7 +87,7 @@ public:
     std::error_code
     listen_acceptor(tcp_acceptor::implementation& impl, int backlog) override;
 
-    kqueue_scheduler& scheduler() const noexcept
+    kqueue_scheduler_core& scheduler() const noexcept
     {
         return state_->sched_;
     }
@@ -527,7 +527,7 @@ inline kqueue_acceptor_service::kqueue_acceptor_service(
     : ctx_(ctx)
     , state_(
           std::make_unique<kqueue_acceptor_state>(
-              ctx.use_service<kqueue_scheduler>()))
+              *ctx.find_service<kqueue_scheduler_core>()))
 {
 }
 

@@ -1,0 +1,256 @@
+//
+// Copyright (c) 2026 Michael Vandeberg
+//
+// Distributed under the Boost Software License, Version 1.0. (See accompanying
+// file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+//
+// Official repository: https://github.com/cppalliance/corosio
+//
+
+= Configuration
+
+Corosio provides two layers of configuration for the I/O context:
+runtime options for the type-erased `io_context`, and compile-time
+template parameters for `native_io_context`. Both layers default
+to the same values as the library's built-in constants, so existing
+code compiles unchanged with identical behavior.
+
+[NOTE]
+====
+Code snippets assume:
+[source,cpp]
+----
+#include <boost/corosio/io_context.hpp>
+#include <boost/corosio/native/native_io_context.hpp>
+#include <boost/corosio/backend.hpp>
+namespace corosio = boost::corosio;
+----
+====
+
+== Runtime Options
+
+The `io_context_options` struct controls behavior of the type-erased
+`io_context`. Options are checked at runtime via branches, which is
+negligible compared to the virtual dispatch already present on this
+path.
+
+[source,cpp]
+----
+corosio::io_context_options opts;
+opts.recycle_post_nodes  = true;   // default
+opts.recycle_timer_nodes = true;   // default
+opts.max_recycled_nodes  = 0;     // 0 = unlimited
+
+corosio::io_context ioc(opts);
+corosio::io_context ioc2(4, opts);  // with concurrency hint
+----
+
+=== Available Options
+
+[cols="1,1,1,3"]
+|===
+| Option | Type | Default | Description
+
+| `recycle_post_nodes`
+| `bool`
+| `true`
+| Recycle `post()` handler nodes via per-thread and global free
+lists instead of allocating and freeing on every call.
+
+| `recycle_timer_nodes`
+| `bool`
+| `true`
+| Recycle timer implementation and waiter nodes via free lists.
+Disable in memory-constrained environments where predictable
+memory usage matters more than allocation throughput.
+
+| `max_recycled_nodes`
+| `unsigned`
+| `0`
+| Cap on the number of recycled nodes retained in global free
+lists. `0` means unlimited. Per-thread caches (single-slot) are
+not affected by this cap.
+|===
+
+=== When to Disable Recycling
+
+The default recycling behavior trades a small amount of retained
+memory for faster allocation. Disable it when:
+
+* Running in a memory-constrained environment where every byte
+  matters
+* Profiling memory usage and want deterministic allocator behavior
+* Using a custom allocator with its own pooling strategy
+
+== Compile-Time Configuration
+
+For `native_io_context`, backend tags accept a config struct as a
+template parameter. Constants propagate as template arguments, so
+the compiler sees them as compile-time values. Boolean toggles
+use `if constexpr` for zero-cost elimination of dead code paths.
+
+=== Explicit Backend Selection
+
+Pass a backend tag to `io_context` to select a specific backend:
+
+[source,cpp]
+----
+corosio::io_context ioc(corosio::epoll);   // explicit epoll
+corosio::io_context ioc(corosio::select);  // explicit select
+----
+
+Or use `native_io_context` to also get devirtualized method calls:
+
+[source,cpp]
+----
+corosio::native_io_context<corosio::epoll> ioc;
+----
+
+=== Custom Config
+
+Create a config struct with non-default values and pass it as a
+template argument to the backend tag:
+
+[source,cpp]
+----
+constexpr corosio::epoll_config cfg{
+    .max_events_per_poll = 256,
+    .inline_budget_max   = 32,
+    .recycle_post_nodes  = false
+};
+
+corosio::native_io_context<corosio::epoll_t<cfg>{}> ioc;
+----
+
+This works because the config structs are structural types (all
+public members, no user-defined constructors) suitable for use as
+C++20 non-type template parameters.
+
+You can also pass a custom-config backend tag to `io_context`:
+
+[source,cpp]
+----
+corosio::io_context ioc(corosio::epoll_t<cfg>{});
+----
+
+=== epoll / kqueue Options
+
+The epoll and kqueue backends share the same set of tuning
+parameters:
+
+[cols="1,1,1,3"]
+|===
+| Field | Type | Default | Description
+
+| `max_events_per_poll`
+| `unsigned`
+| `128`
+| Stack array size for events harvested per `epoll_wait` /
+`kevent` call. Higher values reduce syscall overhead under load;
+lower values reduce stack usage and improve fairness across
+connections.
+
+| `inline_budget_initial`
+| `unsigned`
+| `2`
+| Starting inline completion budget per handler chain. Controls
+how aggressively completions chain without returning to the
+reactor.
+
+| `inline_budget_max`
+| `unsigned`
+| `16`
+| Hard ceiling on adaptive budget ramp-up. Higher values favor
+streaming throughput; lower values favor cross-connection fairness
+and latency.
+
+| `unassisted_budget`
+| `unsigned`
+| `4`
+| Inline budget when no other thread is helping with the reactor.
+A separate knob because single-threaded workloads benefit from a
+different throughput/fairness tradeoff.
+
+| `recycle_post_nodes`
+| `bool`
+| `true`
+| Recycle `post()` handler nodes via a per-thread single-slot
+cache and global free list. Uses `if constexpr` — zero overhead
+when disabled.
+|===
+
+=== IOCP Options
+
+[cols="1,1,1,3"]
+|===
+| Field | Type | Default | Description
+
+| `gqcs_timeout_ms`
+| `unsigned`
+| `500`
+| Maximum `GetQueuedCompletionStatus` timeout in milliseconds
+between timer rechecks. Lower values make timers more responsive;
+higher values reduce syscall overhead.
+
+| `recycle_post_nodes`
+| `bool`
+| `true`
+| Recycle `post()` handler nodes via a global free list.
+|===
+
+=== select Options
+
+[cols="1,1,1,3"]
+|===
+| Field | Type | Default | Description
+
+| `recycle_post_nodes`
+| `bool`
+| `true`
+| Recycle `post()` handler nodes via a global free list.
+|===
+
+== Compile-Time vs Runtime
+
+The `recycle_post_nodes` option exists on both layers:
+
+* **Compile-time** (`native_io_context`): `if constexpr` eliminates
+  recycling code entirely when disabled. Zero-cost.
+* **Runtime** (`io_context`): a predictable branch per `post()`
+  call. Negligible cost — this path already pays for virtual
+  dispatch.
+
+The remaining compile-time options (event buffer size, inline
+budgets, GQCS timeout) don't have runtime equivalents because they
+control stack array sizes and constants that must be known at
+compile time.
+
+The timer recycling options (`recycle_timer_nodes`,
+`max_recycled_nodes`) are runtime-only because timer operations are
+infrequent relative to `post()` and the timer service is shared
+across all backend instantiations.
+
+== Benchmark Guidance
+
+The benchmark suite includes config-variant cases to measure the
+impact of non-default settings. Run them with:
+
+[source,bash]
+----
+./build/perf/bench/corosio_bench --category io_context
+----
+
+Benchmarks included:
+
+* `no_recycle_ct` — compile-time `recycle_post_nodes = false`
+* `no_recycle_rt` — runtime `recycle_post_nodes = false`
+* `high_inline_budget` — `inline_budget_max = 64`
+* `large_event_buffer` — `max_events_per_poll = 512`
+
+Compare against `single_threaded` (default config) to measure the
+effect of each option.
+
+== Next Steps
+
+* xref:4c.io-context.adoc[I/O Context] — Core event loop API
+* xref:4d.sockets.adoc[Sockets] — I/O with TCP sockets
