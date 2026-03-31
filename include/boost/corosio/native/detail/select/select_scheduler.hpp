@@ -141,7 +141,8 @@ private:
 };
 
 inline select_scheduler::select_scheduler(capy::execution_context& ctx, int)
-    : pipe_fds_{-1, -1}
+    : reactor_scheduler_base(ctx)
+    , pipe_fds_{-1, -1}
     , max_fd_(-1)
 {
     if (::pipe(pipe_fds_) < 0)
@@ -173,8 +174,8 @@ inline select_scheduler::select_scheduler(capy::execution_context& ctx, int)
         }
     }
 
-    timer_svc_ = &get_timer_service(ctx, *this);
-    timer_svc_->set_on_earliest_changed(
+    auto& tsvc = get_timer_service(ctx, *this);
+    tsvc.set_on_earliest_changed(
         timer_service::callback(this, [](void* p) {
             static_cast<select_scheduler*>(p)->interrupt_reactor();
         }));
@@ -275,7 +276,7 @@ select_scheduler::calculate_timeout(long requested_timeout_us) const
     if (requested_timeout_us == 0)
         return 0;
 
-    auto nearest = timer_svc_->nearest_expiry();
+    auto nearest = ctx_.find_service<timer_service>()->nearest_expiry();
     if (nearest == timer_service::time_point::max())
         return requested_timeout_us;
 
@@ -382,7 +383,7 @@ select_scheduler::run_task(
     }
 
     // Process timers outside the lock
-    timer_svc_->process_expired();
+    ctx_.find_service<timer_service>()->process_expired();
 
     op_queue local_ops;
 

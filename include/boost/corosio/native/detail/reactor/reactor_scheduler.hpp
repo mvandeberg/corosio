@@ -13,7 +13,7 @@
 #include <boost/corosio/detail/config.hpp>
 #include <boost/capy/ex/execution_context.hpp>
 
-#include <boost/corosio/native/native_scheduler.hpp>
+#include <boost/corosio/detail/scheduler.hpp>
 #include <boost/corosio/detail/scheduler_op.hpp>
 #include <boost/corosio/detail/thread_local_ptr.hpp>
 
@@ -137,7 +137,7 @@ reactor_drain_private_queue(
     All public member functions are thread-safe.
 */
 class reactor_scheduler_base
-    : public native_scheduler
+    : public scheduler
     , public capy::execution_context::service
 {
 public:
@@ -267,7 +267,13 @@ public:
     }
 
 protected:
-    reactor_scheduler_base() = default;
+    capy::execution_context& ctx_;
+
+    explicit reactor_scheduler_base(
+        capy::execution_context& ctx) noexcept
+        : ctx_(ctx)
+    {
+    }
 
     /** Drain completed_ops during shutdown.
 

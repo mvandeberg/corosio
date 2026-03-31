@@ -18,7 +18,7 @@
 #include <boost/corosio/detail/config.hpp>
 #include <boost/capy/ex/execution_context.hpp>
 
-#include <boost/corosio/native/native_scheduler.hpp>
+#include <boost/corosio/detail/scheduler.hpp>
 #include <system_error>
 
 #include <boost/corosio/detail/scheduler_op.hpp>
@@ -48,7 +48,7 @@ struct overlapped_op;
 class win_timers;
 
 class BOOST_COROSIO_DECL win_scheduler final
-    : public native_scheduler
+    : public scheduler
     , public capy::execution_context::service
 {
 public:
@@ -98,7 +98,6 @@ public:
     void on_completion(overlapped_op* op, DWORD error, DWORD bytes) const;
 
     // Timer service integration
-    void set_timer_service(timer_service* svc);
     void update_timeout();
 
 private:
@@ -106,6 +105,7 @@ private:
     void post_deferred_completions(op_queue& ops);
     std::size_t do_one(unsigned long timeout_ms);
 
+    capy::execution_context& ctx_;
     void* iocp_;
     mutable long outstanding_work_;
     mutable long stopped_;
@@ -168,7 +168,8 @@ struct thread_context_guard
 
 inline win_scheduler::win_scheduler(
     capy::execution_context& ctx, int concurrency_hint)
-    : iocp_(nullptr)
+    : ctx_(ctx)
+    , iocp_(nullptr)
     , outstanding_work_(0)
     , stopped_(0)
     , stop_event_posted_(0)
@@ -187,7 +188,11 @@ inline win_scheduler::win_scheduler(
     timers_ = make_win_timers(iocp_, &dispatch_required_);
 
     // Connect timer service to scheduler
-    set_timer_service(&get_timer_service(ctx, *this));
+    auto& tsvc = get_timer_service(ctx, *this);
+    tsvc.set_on_earliest_changed(
+        timer_service::callback{this, &on_timer_changed});
+    if (timers_)
+        timers_->start();
 
     // Initialize resolver service
     ctx.make_service<win_resolver_service>(*this);
@@ -211,8 +216,8 @@ win_scheduler::shutdown()
     // Asio avoids this by owning timer queues directly inside the
     // scheduler; we bridge the gap by shutting down the timer service
     // early. The subsequent call from execution_context is a no-op.
-    if (timer_svc_)
-        timer_svc_->shutdown();
+    if (auto* tsvc = ctx_.find_service<timer_service>())
+        tsvc->shutdown();
 
     while (::InterlockedExchangeAdd(&outstanding_work_, 0) > 0)
     {
@@ -544,8 +549,8 @@ win_scheduler::do_one(unsigned long timeout_ms)
             }
             post_deferred_completions(local_ops);
 
-            if (timer_svc_)
-                timer_svc_->process_expired();
+            if (auto* tsvc = ctx_.find_service<timer_service>())
+                tsvc->process_expired();
 
             update_timeout();
         }
@@ -660,21 +665,10 @@ win_scheduler::on_timer_changed(void* ctx)
 }
 
 inline void
-win_scheduler::set_timer_service(timer_service* svc)
-{
-    timer_svc_ = svc;
-    // Pass 'this' as context - callback routes to correct instance
-    svc->set_on_earliest_changed(
-        timer_service::callback{this, &on_timer_changed});
-    if (timers_)
-        timers_->start();
-}
-
-inline void
 win_scheduler::update_timeout()
 {
-    if (timer_svc_ && timers_)
-        timers_->update_timeout(timer_svc_->nearest_expiry());
+    if (auto* tsvc = ctx_.find_service<timer_service>(); tsvc && timers_)
+        timers_->update_timeout(tsvc->nearest_expiry());
 }
 
 } // namespace boost::corosio::detail

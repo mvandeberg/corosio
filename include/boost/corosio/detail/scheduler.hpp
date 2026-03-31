@@ -26,11 +26,17 @@ class scheduler_op;
     this to implement the reactor/proactor event loop. The
     @ref io_context delegates all scheduling operations here.
 
-    @see io_context, native_scheduler
+    @see io_context
 */
 struct BOOST_COROSIO_DECL scheduler
 {
     virtual ~scheduler() = default;
+
+    /// Return true when single-threaded (lockless) mode is active.
+    bool single_threaded() const noexcept
+    {
+        return single_threaded_;
+    }
 
     /// Post a coroutine handle for deferred execution.
     virtual void post(std::coroutine_handle<>) const = 0;
@@ -75,6 +81,10 @@ struct BOOST_COROSIO_DECL scheduler
 
     /// Run at most one ready handler without blocking.
     virtual std::size_t poll_one() = 0;
+
+protected:
+    /// True when single-threaded (lockless) mode is active.
+    bool single_threaded_ = false;
 };
 
 } // namespace boost::corosio::detail

@@ -116,10 +116,6 @@ struct io_context_options
     bool single_threaded = false;
 };
 
-namespace detail {
-struct timer_service_access;
-} // namespace detail
-
 /** An I/O context for running asynchronous operations.
 
     The io_context provides an execution environment for async
@@ -151,8 +147,6 @@ struct timer_service_access;
 */
 class BOOST_COROSIO_DECL io_context : public capy::execution_context
 {
-    friend struct detail::timer_service_access;
-
     /// Pre-create services that depend on options (before construct).
     void apply_options_pre_(io_context_options const& opts);
 

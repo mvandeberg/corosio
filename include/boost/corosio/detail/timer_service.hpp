@@ -14,7 +14,7 @@
 #include <boost/corosio/timer.hpp>
 #include <boost/corosio/io_context.hpp>
 #include <boost/corosio/detail/scheduler_op.hpp>
-#include <boost/corosio/native/native_scheduler.hpp>
+
 #include <boost/corosio/detail/intrusive.hpp>
 #include <boost/corosio/detail/thread_local_ptr.hpp>
 #include <boost/capy/error.hpp>
@@ -891,22 +891,6 @@ timer_service::implementation::wait(
 }
 
 // Free functions
-
-struct timer_service_access
-{
-    static native_scheduler& get_scheduler(io_context& ctx) noexcept
-    {
-        return static_cast<native_scheduler&>(*ctx.sched_);
-    }
-};
-
-// Bypass find_service() mutex by reading the scheduler's cached pointer
-inline io_object::io_service&
-timer_service_direct(capy::execution_context& ctx) noexcept
-{
-    return *timer_service_access::get_scheduler(static_cast<io_context&>(ctx))
-                .timer_svc_;
-}
 
 inline std::size_t
 timer_service_update_expiry(timer::implementation& base)

@@ -146,7 +146,8 @@ private:
 };
 
 inline epoll_scheduler::epoll_scheduler(capy::execution_context& ctx, int)
-    : epoll_fd_(-1)
+    : reactor_scheduler_base(ctx)
+    , epoll_fd_(-1)
     , event_fd_(-1)
     , timer_fd_(-1)
     , event_buffer_(max_events_per_poll_)
@@ -196,8 +197,8 @@ inline epoll_scheduler::epoll_scheduler(capy::execution_context& ctx, int)
         detail::throw_system_error(make_err(errn), "epoll_ctl (timerfd)");
     }
 
-    timer_svc_ = &get_timer_service(ctx, *this);
-    timer_svc_->set_on_earliest_changed(
+    auto& tsvc = get_timer_service(ctx, *this);
+    tsvc.set_on_earliest_changed(
         timer_service::callback(this, [](void* p) {
             auto* self = static_cast<epoll_scheduler*>(p);
             self->timerfd_stale_.store(true, std::memory_order_release);
@@ -287,7 +288,7 @@ epoll_scheduler::interrupt_reactor() const
 inline void
 epoll_scheduler::update_timerfd() const
 {
-    auto nearest = timer_svc_->nearest_expiry();
+    auto nearest = ctx_.find_service<timer_service>()->nearest_expiry();
 
     itimerspec ts{};
     int flags = 0;
@@ -387,7 +388,7 @@ epoll_scheduler::run_task(
 
     if (check_timers)
     {
-        timer_svc_->process_expired();
+        ctx_.find_service<timer_service>()->process_expired();
         update_timerfd();
     }
 
