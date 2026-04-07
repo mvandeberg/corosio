@@ -148,18 +148,19 @@ struct reactor_op : reactor_op_base
     and cancel() are provided by the concrete backend type.
 
     @tparam Base The backend's base op type.
+    @tparam Endpoint The endpoint type (endpoint or local_endpoint).
 */
-template<class Base>
+template<class Base, class Endpoint = endpoint>
 struct reactor_connect_op : Base
 {
     /// Endpoint to connect to.
-    endpoint target_endpoint;
+    Endpoint target_endpoint;
 
     /// Reset operation state for reuse.
     void reset() noexcept
     {
         Base::reset();
-        target_endpoint = endpoint{};
+        target_endpoint = Endpoint{};
     }
 
     void perform_io() noexcept override
@@ -326,10 +327,14 @@ struct reactor_send_op : Base
     /// Number of active I/O vectors.
     int iovec_count = 0;
 
+    /// User-supplied message flags.
+    int msg_flags = 0;
+
     void reset() noexcept
     {
         Base::reset();
         iovec_count = 0;
+        msg_flags   = 0;
     }
 
     void perform_io() noexcept override
@@ -339,9 +344,9 @@ struct reactor_send_op : Base
         msg.msg_iovlen = static_cast<std::size_t>(iovec_count);
 
 #ifdef MSG_NOSIGNAL
-        constexpr int send_flags = MSG_NOSIGNAL;
+        int send_flags = msg_flags | MSG_NOSIGNAL;
 #else
-        constexpr int send_flags = 0;
+        int send_flags = msg_flags;
 #endif
 
         ssize_t n;
@@ -378,6 +383,9 @@ struct reactor_recv_op : Base
     /// Number of active I/O vectors.
     int iovec_count = 0;
 
+    /// User-supplied message flags.
+    int msg_flags = 0;
+
     /// Return true (this is a read-direction operation).
     bool is_read_operation() const noexcept override
     {
@@ -388,6 +396,7 @@ struct reactor_recv_op : Base
     {
         Base::reset();
         iovec_count = 0;
+        msg_flags   = 0;
     }
 
     void perform_io() noexcept override
@@ -399,7 +408,7 @@ struct reactor_recv_op : Base
         ssize_t n;
         do
         {
-            n = ::recvmsg(this->fd, &msg, 0);
+            n = ::recvmsg(this->fd, &msg, msg_flags);
         }
         while (n < 0 && errno == EINTR);
 
@@ -434,12 +443,16 @@ struct reactor_send_to_op : Base
     /// Destination address length.
     socklen_t dest_len = 0;
 
+    /// User-supplied message flags.
+    int msg_flags = 0;
+
     void reset() noexcept
     {
         Base::reset();
         iovec_count  = 0;
         dest_storage = {};
         dest_len     = 0;
+        msg_flags    = 0;
     }
 
     void perform_io() noexcept override
@@ -451,9 +464,9 @@ struct reactor_send_to_op : Base
         msg.msg_iovlen  = static_cast<std::size_t>(iovec_count);
 
 #ifdef MSG_NOSIGNAL
-        constexpr int send_flags = MSG_NOSIGNAL;
+        int send_flags = msg_flags | MSG_NOSIGNAL;
 #else
-        constexpr int send_flags = 0;
+        int send_flags = msg_flags;
 #endif
 
         ssize_t n;
@@ -475,8 +488,9 @@ struct reactor_send_to_op : Base
     Uses recvmsg() with msg_name to capture the source endpoint.
 
     @tparam Base The backend's base op type.
+    @tparam Endpoint The endpoint type (endpoint or local_endpoint).
 */
-template<class Base>
+template<class Base, class Endpoint = endpoint>
 struct reactor_recv_from_op : Base
 {
     /// Maximum scatter-gather buffer count.
@@ -491,8 +505,14 @@ struct reactor_recv_from_op : Base
     /// Source address storage filled by recvmsg.
     sockaddr_storage source_storage{};
 
+    /// Actual source address length returned by recvmsg.
+    socklen_t source_addrlen = 0;
+
     /// Output pointer for the source endpoint (set by do_recv_from).
-    endpoint* source_out = nullptr;
+    Endpoint* source_out = nullptr;
+
+    /// User-supplied message flags.
+    int msg_flags = 0;
 
     /// Return true (this is a read-direction operation).
     bool is_read_operation() const noexcept override
@@ -505,7 +525,9 @@ struct reactor_recv_from_op : Base
         Base::reset();
         iovec_count    = 0;
         source_storage = {};
+        source_addrlen = 0;
         source_out     = nullptr;
+        msg_flags      = 0;
     }
 
     void perform_io() noexcept override
@@ -519,12 +541,15 @@ struct reactor_recv_from_op : Base
         ssize_t n;
         do
         {
-            n = ::recvmsg(this->fd, &msg, 0);
+            n = ::recvmsg(this->fd, &msg, msg_flags);
         }
         while (n < 0 && errno == EINTR);
 
         if (n >= 0)
+        {
+            source_addrlen = msg.msg_namelen;
             this->complete(0, static_cast<std::size_t>(n));
+        }
         else
             this->complete(errno, 0);
     }

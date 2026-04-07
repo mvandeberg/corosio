@@ -20,6 +20,9 @@
 #include <boost/corosio/native/detail/epoll/epoll_tcp_service.hpp>
 #include <boost/corosio/native/detail/epoll/epoll_tcp_acceptor_service.hpp>
 #include <boost/corosio/native/detail/epoll/epoll_udp_service.hpp>
+#include <boost/corosio/native/detail/epoll/epoll_local_stream_service.hpp>
+#include <boost/corosio/native/detail/epoll/epoll_local_stream_acceptor_service.hpp>
+#include <boost/corosio/native/detail/epoll/epoll_local_datagram_service.hpp>
 #endif
 
 #if BOOST_COROSIO_HAS_SELECT
@@ -27,6 +30,9 @@
 #include <boost/corosio/native/detail/select/select_tcp_service.hpp>
 #include <boost/corosio/native/detail/select/select_tcp_acceptor_service.hpp>
 #include <boost/corosio/native/detail/select/select_udp_service.hpp>
+#include <boost/corosio/native/detail/select/select_local_stream_service.hpp>
+#include <boost/corosio/native/detail/select/select_local_stream_acceptor_service.hpp>
+#include <boost/corosio/native/detail/select/select_local_datagram_service.hpp>
 #endif
 
 #if BOOST_COROSIO_HAS_KQUEUE
@@ -34,6 +40,9 @@
 #include <boost/corosio/native/detail/kqueue/kqueue_tcp_service.hpp>
 #include <boost/corosio/native/detail/kqueue/kqueue_tcp_acceptor_service.hpp>
 #include <boost/corosio/native/detail/kqueue/kqueue_udp_service.hpp>
+#include <boost/corosio/native/detail/kqueue/kqueue_local_stream_service.hpp>
+#include <boost/corosio/native/detail/kqueue/kqueue_local_stream_acceptor_service.hpp>
+#include <boost/corosio/native/detail/kqueue/kqueue_local_datagram_service.hpp>
 #endif
 
 #if BOOST_COROSIO_HAS_IOCP
@@ -54,9 +63,12 @@ epoll_t::construct(capy::execution_context& ctx, unsigned concurrency_hint)
     auto& sched = ctx.make_service<detail::epoll_scheduler>(
         static_cast<int>(concurrency_hint));
 
-    auto& tcp_svc = ctx.make_service<detail::epoll_tcp_service>();
-    ctx.make_service<detail::epoll_tcp_acceptor_service>(tcp_svc);
+    ctx.make_service<detail::epoll_tcp_service>();
+    ctx.make_service<detail::epoll_tcp_acceptor_service>();
     ctx.make_service<detail::epoll_udp_service>();
+    ctx.make_service<detail::epoll_local_stream_service>();
+    ctx.make_service<detail::epoll_local_stream_acceptor_service>();
+    ctx.make_service<detail::epoll_local_datagram_service>();
 
     return sched;
 }
@@ -69,9 +81,12 @@ select_t::construct(capy::execution_context& ctx, unsigned concurrency_hint)
     auto& sched = ctx.make_service<detail::select_scheduler>(
         static_cast<int>(concurrency_hint));
 
-    auto& tcp_svc = ctx.make_service<detail::select_tcp_service>();
-    ctx.make_service<detail::select_tcp_acceptor_service>(tcp_svc);
+    ctx.make_service<detail::select_tcp_service>();
+    ctx.make_service<detail::select_tcp_acceptor_service>();
     ctx.make_service<detail::select_udp_service>();
+    ctx.make_service<detail::select_local_stream_service>();
+    ctx.make_service<detail::select_local_stream_acceptor_service>();
+    ctx.make_service<detail::select_local_datagram_service>();
 
     return sched;
 }
@@ -84,9 +99,12 @@ kqueue_t::construct(capy::execution_context& ctx, unsigned concurrency_hint)
     auto& sched = ctx.make_service<detail::kqueue_scheduler>(
         static_cast<int>(concurrency_hint));
 
-    auto& tcp_svc = ctx.make_service<detail::kqueue_tcp_service>();
-    ctx.make_service<detail::kqueue_tcp_acceptor_service>(tcp_svc);
+    ctx.make_service<detail::kqueue_tcp_service>();
+    ctx.make_service<detail::kqueue_tcp_acceptor_service>();
     ctx.make_service<detail::kqueue_udp_service>();
+    ctx.make_service<detail::kqueue_local_stream_service>();
+    ctx.make_service<detail::kqueue_local_stream_acceptor_service>();
+    ctx.make_service<detail::kqueue_local_datagram_service>();
 
     return sched;
 }

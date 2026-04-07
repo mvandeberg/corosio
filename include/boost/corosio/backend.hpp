@@ -33,6 +33,12 @@ class epoll_udp_socket;
 class epoll_udp_service;
 class epoll_tcp_acceptor;
 class epoll_tcp_acceptor_service;
+class epoll_local_stream_socket;
+class epoll_local_stream_service;
+class epoll_local_stream_acceptor;
+class epoll_local_stream_acceptor_service;
+class epoll_local_datagram_socket;
+class epoll_local_datagram_service;
 class epoll_scheduler;
 
 class posix_signal;
@@ -52,6 +58,13 @@ struct epoll_t
     using udp_service_type          = detail::epoll_udp_service;
     using tcp_acceptor_type         = detail::epoll_tcp_acceptor;
     using tcp_acceptor_service_type = detail::epoll_tcp_acceptor_service;
+
+    using local_stream_socket_type           = detail::epoll_local_stream_socket;
+    using local_stream_service_type          = detail::epoll_local_stream_service;
+    using local_stream_acceptor_type         = detail::epoll_local_stream_acceptor;
+    using local_stream_acceptor_service_type = detail::epoll_local_stream_acceptor_service;
+    using local_datagram_socket_type         = detail::epoll_local_datagram_socket;
+    using local_datagram_service_type        = detail::epoll_local_datagram_service;
 
     using signal_type           = detail::posix_signal;
     using signal_service_type   = detail::posix_signal_service;
@@ -78,6 +91,12 @@ class select_udp_socket;
 class select_udp_service;
 class select_tcp_acceptor;
 class select_tcp_acceptor_service;
+class select_local_stream_socket;
+class select_local_stream_service;
+class select_local_stream_acceptor;
+class select_local_stream_acceptor_service;
+class select_local_datagram_socket;
+class select_local_datagram_service;
 class select_scheduler;
 
 class posix_signal;
@@ -97,6 +116,13 @@ struct select_t
     using udp_service_type          = detail::select_udp_service;
     using tcp_acceptor_type         = detail::select_tcp_acceptor;
     using tcp_acceptor_service_type = detail::select_tcp_acceptor_service;
+
+    using local_stream_socket_type           = detail::select_local_stream_socket;
+    using local_stream_service_type          = detail::select_local_stream_service;
+    using local_stream_acceptor_type         = detail::select_local_stream_acceptor;
+    using local_stream_acceptor_service_type = detail::select_local_stream_acceptor_service;
+    using local_datagram_socket_type         = detail::select_local_datagram_socket;
+    using local_datagram_service_type        = detail::select_local_datagram_service;
 
     using signal_type           = detail::posix_signal;
     using signal_service_type   = detail::posix_signal_service;
@@ -123,6 +149,12 @@ class kqueue_udp_socket;
 class kqueue_udp_service;
 class kqueue_tcp_acceptor;
 class kqueue_tcp_acceptor_service;
+class kqueue_local_stream_socket;
+class kqueue_local_stream_service;
+class kqueue_local_stream_acceptor;
+class kqueue_local_stream_acceptor_service;
+class kqueue_local_datagram_socket;
+class kqueue_local_datagram_service;
 class kqueue_scheduler;
 
 class posix_signal;
@@ -142,6 +174,13 @@ struct kqueue_t
     using udp_service_type          = detail::kqueue_udp_service;
     using tcp_acceptor_type         = detail::kqueue_tcp_acceptor;
     using tcp_acceptor_service_type = detail::kqueue_tcp_acceptor_service;
+
+    using local_stream_socket_type           = detail::kqueue_local_stream_socket;
+    using local_stream_service_type          = detail::kqueue_local_stream_service;
+    using local_stream_acceptor_type         = detail::kqueue_local_stream_acceptor;
+    using local_stream_acceptor_service_type = detail::kqueue_local_stream_acceptor_service;
+    using local_datagram_socket_type         = detail::kqueue_local_datagram_socket;
+    using local_datagram_service_type        = detail::kqueue_local_datagram_service;
 
     using signal_type           = detail::posix_signal;
     using signal_service_type   = detail::posix_signal_service;

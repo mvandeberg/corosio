@@ -79,13 +79,15 @@ complete_connect_op(Op& op)
 
     if (success && op.socket_impl_)
     {
-        endpoint local_ep;
+        using ep_type = decltype(op.target_endpoint);
+        ep_type local_ep;
         sockaddr_storage local_storage{};
         socklen_t local_len = sizeof(local_storage);
         if (::getsockname(
                 op.fd, reinterpret_cast<sockaddr*>(&local_storage),
                 &local_len) == 0)
-            local_ep = from_sockaddr(local_storage);
+            local_ep =
+                from_sockaddr_as(local_storage, local_len, ep_type{});
         op.socket_impl_->set_endpoints(local_ep, op.target_endpoint);
     }
 
@@ -126,7 +128,7 @@ setup_accepted_socket(
     io_object::implementation** impl_out,
     std::error_code* ec_out)
 {
-    auto* socket_svc = acceptor_impl->service().tcp_service();
+    auto* socket_svc = acceptor_impl->service().stream_service();
     if (!socket_svc)
     {
         *ec_out = make_err(ENOENT);
@@ -145,8 +147,13 @@ setup_accepted_socket(
     }
     socket_svc->scheduler().register_descriptor(accepted_fd, &impl.desc_state_);
 
+    using ep_type = decltype(acceptor_impl->local_endpoint());
     impl.set_endpoints(
-        acceptor_impl->local_endpoint(), from_sockaddr(peer_storage));
+        acceptor_impl->local_endpoint(),
+        from_sockaddr_as(
+            peer_storage,
+            static_cast<socklen_t>(sizeof(peer_storage)),
+            ep_type{}));
 
     if (impl_out)
         *impl_out = &impl;
@@ -216,9 +223,9 @@ complete_accept_op(Op& op)
     @param source_out Optional pointer to store source endpoint
         (non-null for recv_from, null for send_to).
 */
-template<typename Op>
+template<typename Op, typename Endpoint>
 void
-complete_datagram_op(Op& op, endpoint* source_out)
+complete_datagram_op(Op& op, Endpoint* source_out)
 {
     op.stop_cb.reset();
     op.socket_impl_->desc_state_.scheduler_->reset_inline_budget();
@@ -234,7 +241,10 @@ complete_datagram_op(Op& op, endpoint* source_out)
 
     if (source_out && !op.cancelled.load(std::memory_order_acquire) &&
         op.errn == 0)
-        *source_out = from_sockaddr(op.source_storage);
+        *source_out = from_sockaddr_as(
+            op.source_storage,
+            op.source_addrlen,
+            Endpoint{});
 
     op.cont_op.cont.h = op.h;
     capy::executor_ref saved_ex(op.ex);
