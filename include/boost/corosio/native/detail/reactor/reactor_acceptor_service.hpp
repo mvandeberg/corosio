@@ -47,6 +47,12 @@ class reactor_acceptor_service : public ServiceBase
     friend Derived;
     using state_type = reactor_service_state<Scheduler, Impl>;
 
+public:
+    /// Propagated from Scheduler for register_op's write notification.
+    static constexpr bool needs_write_notification =
+        Scheduler::needs_write_notification;
+
+private:
     explicit reactor_acceptor_service(capy::execution_context& ctx)
         : ctx_(ctx)
         , state_(

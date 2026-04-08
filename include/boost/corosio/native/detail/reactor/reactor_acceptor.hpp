@@ -124,11 +124,35 @@ public:
         local_endpoint_ = std::move(ep);
     }
 
+    /// Assign the fd and initialize descriptor state (acceptor: read_op only, no registration).
+    void init_acceptor_fd(int fd) noexcept
+    {
+        fd_ = fd;
+        desc_state_.fd = fd;
+        {
+            std::lock_guard lock(desc_state_.mutex);
+            desc_state_.read_op = nullptr;
+        }
+    }
+
     /// Return a reference to the owning service.
     Service& service() noexcept
     {
         return svc_;
     }
+
+    // --- Virtual method overrides ---
+
+    void cancel() noexcept { do_cancel(); }
+
+    void close_socket() noexcept { do_close_socket(); }
+
+    native_handle_type release_socket() noexcept
+    {
+        return do_release_socket();
+    }
+
+    // --- End virtual overrides ---
 
     /** Cancel a single pending operation.
 
@@ -139,10 +163,7 @@ public:
     */
     void cancel_single_op(Op& op) noexcept;
 
-    /** Cancel the pending accept operation.
-
-        Invoked by the derived class's cancel() override.
-    */
+    /** Cancel the pending accept operation. */
     void do_cancel() noexcept;
 
     /** Close the acceptor and cancel pending operations.

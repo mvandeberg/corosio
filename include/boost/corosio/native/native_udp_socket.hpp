@@ -14,18 +14,6 @@
 #include <boost/corosio/backend.hpp>
 
 #ifndef BOOST_COROSIO_MRDOCS
-#if BOOST_COROSIO_HAS_EPOLL
-#include <boost/corosio/native/detail/epoll/epoll_udp_service.hpp>
-#endif
-
-#if BOOST_COROSIO_HAS_SELECT
-#include <boost/corosio/native/detail/select/select_udp_service.hpp>
-#endif
-
-#if BOOST_COROSIO_HAS_KQUEUE
-#include <boost/corosio/native/detail/kqueue/kqueue_udp_service.hpp>
-#endif
-
 #if BOOST_COROSIO_HAS_IOCP
 #include <boost/corosio/native/detail/iocp/win_udp_service.hpp>
 #endif
