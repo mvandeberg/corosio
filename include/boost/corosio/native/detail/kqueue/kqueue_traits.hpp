@@ -45,6 +45,58 @@ struct kqueue_traits
 
     static constexpr bool needs_write_notification = false;
 
+    /* macOS kqueue workaround: RST doesn't reliably trigger EV_EOF.
+       If the user sets SO_LINGER, we clear it before close so the
+       destructor doesn't block and close() sends FIN instead of RST.
+
+       The hook tracks whether the user explicitly set SO_LINGER via
+       set_option(). On pre_shutdown/pre_destroy, if the flag is set,
+       we reset linger to off before the fd is closed.
+    */
+    struct stream_socket_hook
+    {
+        bool user_set_linger_ = false;
+
+        std::error_code on_set_option(
+            int fd, int level, int optname,
+            void const* data, std::size_t size) noexcept
+        {
+            if (::setsockopt(
+                    fd, level, optname, data,
+                    static_cast<socklen_t>(size)) != 0)
+                return make_err(errno);
+
+            if (level == SOL_SOCKET && optname == SO_LINGER &&
+                size >= sizeof(struct ::linger))
+                user_set_linger_ =
+                    static_cast<struct ::linger const*>(data)->l_onoff != 0;
+
+            return {};
+        }
+
+        void pre_shutdown(int fd) noexcept
+        {
+            reset_linger(fd);
+        }
+
+        void pre_destroy(int fd) noexcept
+        {
+            reset_linger(fd);
+        }
+
+    private:
+        void reset_linger(int fd) noexcept
+        {
+            if (user_set_linger_ && fd >= 0)
+            {
+                struct ::linger lg;
+                lg.l_onoff  = 0;
+                lg.l_linger = 0;
+                ::setsockopt(fd, SOL_SOCKET, SO_LINGER, &lg, sizeof(lg));
+            }
+        }
+    };
+
     struct write_policy
     {
         static ssize_t write(int fd, iovec* iovecs, int count) noexcept

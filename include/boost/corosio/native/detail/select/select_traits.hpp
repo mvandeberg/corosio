@@ -46,6 +46,23 @@ struct select_traits
 
     static constexpr bool needs_write_notification = true;
 
+    /// No extra per-socket state or lifecycle hooks needed for select.
+    struct stream_socket_hook
+    {
+        std::error_code on_set_option(
+            int fd, int level, int optname,
+            void const* data, std::size_t size) noexcept
+        {
+            if (::setsockopt(
+                    fd, level, optname, data,
+                    static_cast<socklen_t>(size)) != 0)
+                return make_err(errno);
+            return {};
+        }
+        static void pre_shutdown(int) noexcept {}
+        static void pre_destroy(int) noexcept {}
+    };
+
     struct write_policy
     {
         static ssize_t write(int fd, iovec* iovecs, int count) noexcept
