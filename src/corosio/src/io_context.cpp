@@ -72,12 +72,12 @@ kqueue_t::construct(capy::execution_context& ctx, unsigned concurrency_hint)
     auto& sched = ctx.make_service<detail::kqueue_scheduler>(
         static_cast<int>(concurrency_hint));
 
-    ctx.make_service<detail::kqueue_tcp_service>();
-    ctx.make_service<detail::kqueue_tcp_acceptor_service>();
-    ctx.make_service<detail::kqueue_udp_service>();
-    ctx.make_service<detail::kqueue_local_stream_service>();
-    ctx.make_service<detail::kqueue_local_stream_acceptor_service>();
-    ctx.make_service<detail::kqueue_local_datagram_service>();
+    ctx.make_service<kqueue_t::tcp_service_type>();
+    ctx.make_service<kqueue_t::tcp_acceptor_service_type>();
+    ctx.make_service<kqueue_t::udp_service_type>();
+    ctx.make_service<kqueue_t::local_stream_service_type>();
+    ctx.make_service<kqueue_t::local_stream_acceptor_service_type>();
+    ctx.make_service<kqueue_t::local_datagram_service_type>();
 
     return sched;
 }
