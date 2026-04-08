@@ -7,14 +7,15 @@
 // Official repository: https://github.com/cppalliance/corosio
 //
 
-#include <boost/corosio/local_stream_acceptor.hpp>
-#include <boost/corosio/detail/except.hpp>
 #include <boost/corosio/detail/platform.hpp>
-#include <boost/corosio/detail/local_stream_acceptor_service.hpp>
 
 #if BOOST_COROSIO_POSIX
+
+#include <boost/corosio/local_stream_acceptor.hpp>
+#include <boost/corosio/detail/except.hpp>
+#include <boost/corosio/detail/local_stream_acceptor_service.hpp>
+
 #include <unistd.h>
-#endif
 
 namespace boost::corosio {
 
@@ -49,7 +50,6 @@ local_stream_acceptor::bind(corosio::local_endpoint ep, bind_option opt)
     if (!is_open())
         detail::throw_logic_error("bind: acceptor not open");
 
-#if BOOST_COROSIO_POSIX
     if (opt == bind_option::unlink_existing &&
         !ep.empty() && !ep.is_abstract())
     {
@@ -62,9 +62,6 @@ local_stream_acceptor::bind(corosio::local_endpoint ep, bind_option opt)
         buf[p.size()] = '\0';
         ::unlink(buf);
     }
-#else
-    (void)opt;
-#endif
 
     auto& svc =
         static_cast<detail::local_stream_acceptor_service&>(h_.service());
@@ -118,3 +115,5 @@ local_stream_acceptor::local_endpoint() const noexcept
 }
 
 } // namespace boost::corosio
+
+#endif // BOOST_COROSIO_POSIX
