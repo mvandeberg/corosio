@@ -102,19 +102,6 @@ do_open_acceptor(
 }
 
 // ============================================================
-// Service CRTP boilerplate
-// ============================================================
-
-#define COROSIO_REACTOR_SOCKET_SERVICE(name, ServiceBase, SocketFinal)    \
-    using base_service = reactor_socket_service<                            \
-        name, ServiceBase,                                                  \
-        typename Traits::scheduler_type, SocketFinal>;                      \
-    friend base_service;                                                    \
-public:                                                                     \
-    explicit name(capy::execution_context& ctx)                             \
-        : base_service(ctx) {}
-
-// ============================================================
 // TCP service
 // ============================================================
 
@@ -126,8 +113,14 @@ class reactor_tcp_service_final final
           typename Traits::scheduler_type,
           SocketFinal>
 {
-    COROSIO_REACTOR_SOCKET_SERVICE(
-        reactor_tcp_service_final, tcp_service, SocketFinal)
+    using base_service = reactor_socket_service<
+        reactor_tcp_service_final, tcp_service,
+        typename Traits::scheduler_type, SocketFinal>;
+    friend base_service;
+
+public:
+    explicit reactor_tcp_service_final(capy::execution_context& ctx)
+        : base_service(ctx) {}
 
     std::error_code open_socket(
         tcp_socket::implementation& impl,
@@ -167,8 +160,14 @@ class reactor_local_stream_service_final final
           typename Traits::scheduler_type,
           SocketFinal>
 {
-    COROSIO_REACTOR_SOCKET_SERVICE(
-        reactor_local_stream_service_final, local_stream_service, SocketFinal)
+    using base_service = reactor_socket_service<
+        reactor_local_stream_service_final, local_stream_service,
+        typename Traits::scheduler_type, SocketFinal>;
+    friend base_service;
+
+public:
+    explicit reactor_local_stream_service_final(capy::execution_context& ctx)
+        : base_service(ctx) {}
 
     std::error_code open_socket(
         local_stream_socket::implementation& impl,
@@ -199,8 +198,14 @@ class reactor_udp_service_final final
           typename Traits::scheduler_type,
           SocketFinal>
 {
-    COROSIO_REACTOR_SOCKET_SERVICE(
-        reactor_udp_service_final, udp_service, SocketFinal)
+    using base_service = reactor_socket_service<
+        reactor_udp_service_final, udp_service,
+        typename Traits::scheduler_type, SocketFinal>;
+    friend base_service;
+
+public:
+    explicit reactor_udp_service_final(capy::execution_context& ctx)
+        : base_service(ctx) {}
 
     std::error_code open_datagram_socket(
         udp_socket::implementation& impl,
@@ -230,8 +235,14 @@ class reactor_local_dgram_service_final final
           typename Traits::scheduler_type,
           SocketFinal>
 {
-    COROSIO_REACTOR_SOCKET_SERVICE(
-        reactor_local_dgram_service_final, local_datagram_service, SocketFinal)
+    using base_service = reactor_socket_service<
+        reactor_local_dgram_service_final, local_datagram_service,
+        typename Traits::scheduler_type, SocketFinal>;
+    friend base_service;
+
+public:
+    explicit reactor_local_dgram_service_final(capy::execution_context& ctx)
+        : base_service(ctx) {}
 
     std::error_code open_socket(
         local_datagram_socket::implementation& impl,
@@ -318,8 +329,6 @@ public:
         return static_cast<AccFinal*>(&impl)->do_listen(backlog);
     }
 };
-
-#undef COROSIO_REACTOR_SOCKET_SERVICE
 
 } // namespace boost::corosio::detail
 
