@@ -143,14 +143,9 @@ public:
 
     // --- Virtual method overrides ---
 
-    void cancel() noexcept { do_cancel(); }
+    void cancel() noexcept override { do_cancel(); }
 
     void close_socket() noexcept { do_close_socket(); }
-
-    native_handle_type release_socket() noexcept
-    {
-        return do_release_socket();
-    }
 
     // --- End virtual overrides ---
 

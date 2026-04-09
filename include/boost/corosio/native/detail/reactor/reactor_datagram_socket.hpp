@@ -181,24 +181,6 @@ public:
 
     // --- End virtual overrides ---
 
-    /// Shut down part or all of the connection (local datagram only).
-    std::error_code shutdown(corosio::shutdown_type what) noexcept
-    {
-        return do_shutdown(static_cast<int>(what));
-    }
-
-    /// Bind to a local endpoint (local datagram only).
-    std::error_code bind(Endpoint ep) noexcept
-    {
-        return this->do_bind(ep);
-    }
-
-    /// Release socket ownership (local datagram only).
-    native_handle_type release_socket() noexcept
-    {
-        return do_release_socket();
-    }
-
     /// Close the socket (non-virtual, called by the service).
     void close_socket() noexcept
     {

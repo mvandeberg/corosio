@@ -142,12 +142,6 @@ public:
         this->do_close_socket();
     }
 
-    /// Release socket ownership (satisfies local_stream_socket pure virtual).
-    native_handle_type release_socket() noexcept
-    {
-        return this->do_release_socket();
-    }
-
     /** Shut down part or all of the full-duplex connection.
 
         @param what 0 = receive, 1 = send, 2 = both.

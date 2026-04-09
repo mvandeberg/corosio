@@ -295,14 +295,11 @@ public:
     explicit reactor_acceptor_service_final(capy::execution_context& ctx)
         : base_service(ctx)
     {
-        using stream_svc_key = std::conditional_t<
-            std::is_same_v<Endpoint, endpoint>,
-            tcp_service, local_stream_service>;
-
-        auto* svc = this->ctx_.template find_service<stream_svc_key>();
-        this->stream_svc_ = svc
-            ? dynamic_cast<StreamServiceFinal*>(svc)
-            : nullptr;
+        // Look up the concrete stream service directly by its type.
+        // Avoids dynamic_cast which can fail across template boundaries
+        // on some platforms (FreeBSD clang RTTI/visibility).
+        this->stream_svc_ =
+            this->ctx_.template find_service<StreamServiceFinal>();
     }
 
     std::error_code open_acceptor_socket(

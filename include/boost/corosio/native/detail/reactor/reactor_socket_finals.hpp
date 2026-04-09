@@ -171,6 +171,14 @@ public:
     {
         return hook_.on_set_option(this->fd_, level, optname, data, size);
     }
+
+    // Overrides local_stream_socket::implementation::release_socket().
+    // Cannot use 'override' — tcp_socket::implementation has no such method.
+    // NOLINTNEXTLINE(modernize-use-override)
+    native_handle_type release_socket() noexcept
+    {
+        return this->do_release_socket();
+    }
 };
 
 // ============================================================
@@ -209,6 +217,26 @@ public:
     }
 
     ~reactor_dgram_socket_final() override = default;
+
+    // Overrides local_datagram_socket pure virtuals.
+    // Cannot use 'override' — udp_socket::implementation has no such methods.
+    // NOLINTNEXTLINE(modernize-use-override)
+    std::error_code shutdown(corosio::shutdown_type what) noexcept
+    {
+        return this->do_shutdown(static_cast<int>(what));
+    }
+
+    // NOLINTNEXTLINE(modernize-use-override)
+    std::error_code bind(Endpoint ep) noexcept
+    {
+        return this->do_bind(ep);
+    }
+
+    // NOLINTNEXTLINE(modernize-use-override)
+    native_handle_type release_socket() noexcept
+    {
+        return this->do_release_socket();
+    }
 };
 
 // ============================================================
@@ -255,6 +283,12 @@ public:
     ~reactor_acceptor_final() override = default;
 
     using impl_base_type = AccImplBase;
+
+    // NOLINTNEXTLINE(modernize-use-override)
+    native_handle_type release_socket() noexcept
+    {
+        return this->do_release_socket();
+    }
 
     std::coroutine_handle<> accept(
         std::coroutine_handle<>,
