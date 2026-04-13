@@ -66,6 +66,7 @@ class reactor_stream_socket
     friend base_type;
     friend Derived;
 
+protected:
     explicit reactor_stream_socket(Service& svc) noexcept : base_type(svc) {}
 
 protected:

@@ -15,8 +15,20 @@
 #include <stdexcept>
 #include <thread>
 
-// Reactor backend types come from backend.hpp via reactor_backend.hpp.
-// Only IOCP needs additional includes.
+// Per-backend type files supply the complete definitions behind
+// the forward declarations in backend.hpp.
+
+#if BOOST_COROSIO_HAS_EPOLL
+#include <boost/corosio/native/detail/epoll/epoll_types.hpp>
+#endif
+
+#if BOOST_COROSIO_HAS_SELECT
+#include <boost/corosio/native/detail/select/select_types.hpp>
+#endif
+
+#if BOOST_COROSIO_HAS_KQUEUE
+#include <boost/corosio/native/detail/kqueue/kqueue_types.hpp>
+#endif
 
 #if BOOST_COROSIO_HAS_IOCP
 #include <boost/corosio/native/detail/iocp/win_scheduler.hpp>

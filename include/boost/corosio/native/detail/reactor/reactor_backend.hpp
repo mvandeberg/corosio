@@ -10,12 +10,12 @@
 #ifndef BOOST_COROSIO_NATIVE_DETAIL_REACTOR_REACTOR_BACKEND_HPP
 #define BOOST_COROSIO_NATIVE_DETAIL_REACTOR_REACTOR_BACKEND_HPP
 
-/* Parameterized reactor backend.
+/* Reactor backend: acceptor accept() implementation.
 
-   Assembles all socket, service, acceptor, and op types for a given
-   backend Traits type. Includes the accept() implementation (which
-   needs all types to be complete) and the reactor_types<Traits>
-   bundle used by backend.hpp.
+   Contains the accept() method body for reactor_acceptor_impl,
+   which needs all socket/service types to be complete. Included
+   by per-backend type files (epoll_types.hpp, etc.) after all
+   named types are defined.
 */
 
 #include <boost/corosio/native/detail/reactor/reactor_service_finals.hpp>
@@ -31,17 +31,16 @@ namespace boost::corosio::detail {
 // Acceptor accept() implementation
 // ============================================================
 
-template<class Traits, class AccImplBase, class Endpoint>
+template<class Derived, class Traits, class Service,
+         class SocketFinal, class AccImplBase, class Endpoint>
 std::coroutine_handle<>
-reactor_acceptor_final<Traits, AccImplBase, Endpoint>::accept(
+reactor_acceptor_impl<Derived, Traits, Service, SocketFinal, AccImplBase, Endpoint>::accept(
     std::coroutine_handle<> h,
     capy::executor_ref ex,
     std::stop_token token,
     std::error_code* ec,
     io_object::implementation** impl_out)
 {
-    using socket_final = stream_socket_t<Traits, Endpoint>;
-
     auto& op = this->acc_;
     op.reset();
     op.h        = h;
@@ -49,7 +48,7 @@ reactor_acceptor_final<Traits, AccImplBase, Endpoint>::accept(
     op.ec_out   = ec;
     op.impl_out = impl_out;
     op.fd       = this->fd_;
-    op.start(token, this);
+    op.start(token, static_cast<Derived*>(this));
 
     sockaddr_storage peer_storage{};
     socklen_t peer_addrlen = 0;
@@ -70,7 +69,7 @@ reactor_acceptor_final<Traits, AccImplBase, Endpoint>::accept(
             if (socket_svc)
             {
                 auto& impl =
-                    static_cast<socket_final&>(*socket_svc->construct());
+                    static_cast<SocketFinal&>(*socket_svc->construct());
                 impl.set_socket(accepted);
 
                 impl.desc_state_.fd = accepted;
@@ -145,40 +144,6 @@ reactor_acceptor_final<Traits, AccImplBase, Endpoint>::accept(
     this->svc_.post(&op);
     return std::noop_coroutine();
 }
-
-// ============================================================
-// Type bundle for backend.hpp
-// ============================================================
-
-template<class Traits>
-struct reactor_types
-{
-    using tcp_socket_type = stream_socket_t<Traits, endpoint>;
-    using tcp_service_type = reactor_tcp_service_final<
-        Traits, tcp_socket_type>;
-
-    using udp_socket_type = dgram_socket_t<Traits, endpoint>;
-    using udp_service_type = reactor_udp_service_final<
-        Traits, udp_socket_type>;
-
-    using tcp_acceptor_type = stream_acceptor_t<Traits, endpoint>;
-    using tcp_acceptor_service_type = reactor_acceptor_service_final<
-        Traits, tcp_acceptor_service, tcp_acceptor_type,
-        tcp_service_type, endpoint>;
-
-    using local_stream_socket_type = stream_socket_t<Traits, local_endpoint>;
-    using local_stream_service_type = reactor_local_stream_service_final<
-        Traits, local_stream_socket_type>;
-
-    using local_datagram_socket_type = dgram_socket_t<Traits, local_endpoint>;
-    using local_datagram_service_type = reactor_local_dgram_service_final<
-        Traits, local_datagram_socket_type>;
-
-    using local_stream_acceptor_type = stream_acceptor_t<Traits, local_endpoint>;
-    using local_stream_acceptor_service_type = reactor_acceptor_service_final<
-        Traits, local_stream_acceptor_service, local_stream_acceptor_type,
-        local_stream_service_type, local_endpoint>;
-};
 
 } // namespace boost::corosio::detail
 

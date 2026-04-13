@@ -43,7 +43,7 @@ public:
     static constexpr bool needs_write_notification =
         Scheduler::needs_write_notification;
 
-private:
+protected:
 
     explicit reactor_socket_service(capy::execution_context& ctx)
         : state_(

@@ -109,16 +109,21 @@ class BOOST_COROSIO_DECL local_stream_acceptor : public io_object
 
         capy::io_result<local_stream_socket> await_resume() const noexcept
         {
+            // Honor a successful accept even if stop was requested
+            // after completion — discarding peer_impl_ would leak a
+            // registered socket implementation.
+            if (!ec_ && peer_impl_)
+            {
+                local_stream_socket peer(acc_.ctx_);
+                reset_peer_impl(peer, peer_impl_);
+                return {ec_, std::move(peer)};
+            }
+
             if (token_.stop_requested())
                 return {make_error_code(std::errc::operation_canceled),
                         local_stream_socket()};
 
-            if (ec_ || !peer_impl_)
-                return {ec_, local_stream_socket()};
-
-            local_stream_socket peer(acc_.ctx_);
-            reset_peer_impl(peer, peer_impl_);
-            return {ec_, std::move(peer)};
+            return {ec_, local_stream_socket()};
         }
 
         auto await_suspend(std::coroutine_handle<> h, capy::io_env const* env)
@@ -157,11 +162,18 @@ class BOOST_COROSIO_DECL local_stream_acceptor : public io_object
 
         capy::io_result<> await_resume() const noexcept
         {
+            // Honor a successful accept even if stop was requested
+            // after completion — discarding peer_impl_ would leak a
+            // registered socket implementation.
+            if (!ec_ && peer_impl_)
+            {
+                peer_.h_.reset(peer_impl_);
+                return {ec_};
+            }
+
             if (token_.stop_requested())
                 return {make_error_code(std::errc::operation_canceled)};
 
-            if (!ec_ && peer_impl_)
-                peer_.h_.reset(peer_impl_);
             return {ec_};
         }
 

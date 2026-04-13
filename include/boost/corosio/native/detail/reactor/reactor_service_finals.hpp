@@ -10,19 +10,22 @@
 #ifndef BOOST_COROSIO_NATIVE_DETAIL_REACTOR_REACTOR_SERVICE_FINALS_HPP
 #define BOOST_COROSIO_NATIVE_DETAIL_REACTOR_REACTOR_SERVICE_FINALS_HPP
 
-/* Parameterized final service types for reactor backends.
+/* Parameterized service implementation bases for reactor backends.
 
-   One service template per protocol (TCP, local stream, UDP, local
-   datagram, TCP acceptor, local stream acceptor) because each abstract
-   service base declares different virtual methods.
+   One template per protocol (TCP, local stream, UDP, local datagram,
+   acceptor). Named per-backend classes (e.g. epoll_tcp_service) inherit
+   from these as final. The Derived parameter (CRTP) flows through to
+   reactor_socket_service so construct() creates the correct named type.
 */
 
 #include <boost/corosio/native/detail/reactor/reactor_socket_finals.hpp>
 #include <boost/corosio/native/detail/reactor/reactor_socket_service.hpp>
 #include <boost/corosio/native/detail/reactor/reactor_acceptor_service.hpp>
 #include <boost/corosio/detail/tcp_service.hpp>
+#include <boost/corosio/detail/tcp_acceptor_service.hpp>
 #include <boost/corosio/detail/udp_service.hpp>
 #include <boost/corosio/detail/local_stream_service.hpp>
+#include <boost/corosio/detail/local_stream_acceptor_service.hpp>
 #include <boost/corosio/detail/local_datagram_service.hpp>
 
 #include <boost/corosio/native/detail/endpoint_convert.hpp>
@@ -169,21 +172,21 @@ do_open_acceptor(
 // TCP service
 // ============================================================
 
-template<class Traits, class SocketFinal>
-class reactor_tcp_service_final final
+template<class Derived, class Traits, class SocketFinal>
+class reactor_tcp_service_impl
     : public reactor_socket_service<
-          reactor_tcp_service_final<Traits, SocketFinal>,
+          Derived,
           tcp_service,
           typename Traits::scheduler_type,
           SocketFinal>
 {
     using base_service = reactor_socket_service<
-        reactor_tcp_service_final, tcp_service,
+        Derived, tcp_service,
         typename Traits::scheduler_type, SocketFinal>;
     friend base_service;
 
 public:
-    explicit reactor_tcp_service_final(capy::execution_context& ctx)
+    explicit reactor_tcp_service_impl(capy::execution_context& ctx)
         : base_service(ctx) {}
 
     std::error_code open_socket(
@@ -216,21 +219,21 @@ public:
 // Local stream service
 // ============================================================
 
-template<class Traits, class SocketFinal>
-class reactor_local_stream_service_final final
+template<class Derived, class Traits, class SocketFinal>
+class reactor_local_stream_service_impl
     : public reactor_socket_service<
-          reactor_local_stream_service_final<Traits, SocketFinal>,
+          Derived,
           local_stream_service,
           typename Traits::scheduler_type,
           SocketFinal>
 {
     using base_service = reactor_socket_service<
-        reactor_local_stream_service_final, local_stream_service,
+        Derived, local_stream_service,
         typename Traits::scheduler_type, SocketFinal>;
     friend base_service;
 
 public:
-    explicit reactor_local_stream_service_final(capy::execution_context& ctx)
+    explicit reactor_local_stream_service_impl(capy::execution_context& ctx)
         : base_service(ctx) {}
 
     std::error_code open_socket(
@@ -254,21 +257,21 @@ public:
 // UDP service
 // ============================================================
 
-template<class Traits, class SocketFinal>
-class reactor_udp_service_final final
+template<class Derived, class Traits, class SocketFinal>
+class reactor_udp_service_impl
     : public reactor_socket_service<
-          reactor_udp_service_final<Traits, SocketFinal>,
+          Derived,
           udp_service,
           typename Traits::scheduler_type,
           SocketFinal>
 {
     using base_service = reactor_socket_service<
-        reactor_udp_service_final, udp_service,
+        Derived, udp_service,
         typename Traits::scheduler_type, SocketFinal>;
     friend base_service;
 
 public:
-    explicit reactor_udp_service_final(capy::execution_context& ctx)
+    explicit reactor_udp_service_impl(capy::execution_context& ctx)
         : base_service(ctx) {}
 
     std::error_code open_datagram_socket(
@@ -291,21 +294,21 @@ public:
 // Local datagram service
 // ============================================================
 
-template<class Traits, class SocketFinal>
-class reactor_local_dgram_service_final final
+template<class Derived, class Traits, class SocketFinal>
+class reactor_local_dgram_service_impl
     : public reactor_socket_service<
-          reactor_local_dgram_service_final<Traits, SocketFinal>,
+          Derived,
           local_datagram_service,
           typename Traits::scheduler_type,
           SocketFinal>
 {
     using base_service = reactor_socket_service<
-        reactor_local_dgram_service_final, local_datagram_service,
+        Derived, local_datagram_service,
         typename Traits::scheduler_type, SocketFinal>;
     friend base_service;
 
 public:
-    explicit reactor_local_dgram_service_final(capy::execution_context& ctx)
+    explicit reactor_local_dgram_service_impl(capy::execution_context& ctx)
         : base_service(ctx) {}
 
     std::error_code open_socket(
@@ -336,19 +339,18 @@ public:
 // Acceptor service
 // ============================================================
 
-template<class Traits, class ServiceBase, class AccFinal,
+template<class Derived, class Traits, class ServiceBase, class AccFinal,
          class StreamServiceFinal, class Endpoint>
-class reactor_acceptor_service_final final
+class reactor_acceptor_service_impl
     : public reactor_acceptor_service<
-          reactor_acceptor_service_final<Traits, ServiceBase, AccFinal,
-                                         StreamServiceFinal, Endpoint>,
+          Derived,
           ServiceBase,
           typename Traits::scheduler_type,
           AccFinal,
           StreamServiceFinal>
 {
     using base_service = reactor_acceptor_service<
-        reactor_acceptor_service_final,
+        Derived,
         ServiceBase,
         typename Traits::scheduler_type,
         AccFinal,
@@ -356,7 +358,7 @@ class reactor_acceptor_service_final final
     friend base_service;
 
 public:
-    explicit reactor_acceptor_service_final(capy::execution_context& ctx)
+    explicit reactor_acceptor_service_impl(capy::execution_context& ctx)
         : base_service(ctx)
     {
         // Look up the concrete stream service directly by its type.

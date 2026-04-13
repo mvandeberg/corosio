@@ -15,17 +15,14 @@
 
 #ifndef BOOST_COROSIO_MRDOCS
 #if BOOST_COROSIO_HAS_EPOLL
-#include <boost/corosio/native/detail/epoll/epoll_scheduler.hpp>
+#include <boost/corosio/native/detail/epoll/epoll_types.hpp>
 #endif
-
 #if BOOST_COROSIO_HAS_SELECT
-#include <boost/corosio/native/detail/select/select_scheduler.hpp>
+#include <boost/corosio/native/detail/select/select_types.hpp>
 #endif
-
 #if BOOST_COROSIO_HAS_KQUEUE
-#include <boost/corosio/native/detail/kqueue/kqueue_scheduler.hpp>
+#include <boost/corosio/native/detail/kqueue/kqueue_types.hpp>
 #endif
-
 #if BOOST_COROSIO_HAS_IOCP
 #include <boost/corosio/native/detail/iocp/win_scheduler.hpp>
 #endif

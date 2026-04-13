@@ -59,6 +59,7 @@ class reactor_acceptor
 {
     friend Derived;
 
+protected:
     explicit reactor_acceptor(Service& svc) noexcept : svc_(svc) {}
 
 protected:

@@ -83,6 +83,7 @@ class reactor_datagram_socket
     friend base_type;
     friend Derived;
 
+protected:
     explicit reactor_datagram_socket(Service& svc) noexcept : base_type(svc) {}
 
 protected:
