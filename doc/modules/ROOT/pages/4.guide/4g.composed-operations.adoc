@@ -17,8 +17,8 @@ and `write_some()` functions to provide higher-level guarantees.
 Code snippets assume:
 [source,cpp]
 ----
-#include <boost/corosio/read.hpp>
-#include <boost/corosio/write.hpp>
+#include <boost/capy/read.hpp>
+#include <boost/capy/write.hpp>
 #include <boost/capy/buffers.hpp>
 
 namespace corosio = boost::corosio;
@@ -277,8 +277,97 @@ capy::task<std::string> read_http_response(corosio::io_stream& stream)
 }
 ----
 
+== corosio::connect()
+
+The `connect()` function tries each endpoint in a range in order, returning on
+the first successful connection. It pairs naturally with
+xref:4j.resolver.adoc[the resolver], which produces a range of candidate
+endpoints for a host/service pair:
+
+[source,cpp]
+----
+corosio::resolver r(ioc);
+auto [rec, results] = co_await r.resolve("www.boost.org", "80");
+if (rec)
+    co_return;
+
+corosio::tcp_socket s(ioc);
+auto [cec, ep] = co_await corosio::connect(s, results);
+if (cec)
+    co_return;
+// `ep` is the endpoint that accepted the connection.
+----
+
+Between attempts the socket is closed so the next `connect` auto-opens with
+the correct address family. This lets a single call try IPv4 and IPv6
+candidates transparently.
+
+=== Signature
+
+[source,cpp]
+----
+template<class Socket, std::ranges::input_range Range>
+    requires std::convertible_to<
+        std::ranges::range_reference_t<Range>,
+        typename Socket::endpoint_type>
+capy::task<capy::io_result<typename Socket::endpoint_type>>
+connect(Socket& s, Range endpoints);
+----
+
+The range is taken by value so that temporaries such as a `resolver_results`
+returned inline from `resolve()` remain alive for the coroutine's lifetime.
+
+=== Behavior
+
+1. For each candidate in order: close the socket if open, then call
+   `socket.connect(ep)`.
+2. On first success: return default error_code and the connected endpoint.
+3. On all-fail: return the error from the last attempt and a
+   default-constructed endpoint.
+4. On empty range: return `std::errc::no_such_device_or_address` and a
+   default-constructed endpoint — matching the error the resolver uses when
+   no results are available.
+5. On cancellation (`capy::cond::canceled`) mid-iteration: return immediately
+   and do not try further endpoints.
+
+=== Filtering Candidates
+
+A second overload accepts a predicate that is invoked as
+`cond(last_ec, ep)` — with `last_ec` equal to the error of the most recent
+attempt (default-constructed before the first). Returning `false` skips the
+candidate:
+
+[source,cpp]
+----
+auto [ec, ep] = co_await corosio::connect(
+    s,
+    results,
+    [](std::error_code const&, corosio::endpoint const& e) {
+        return e.is_v4();  // Prefer IPv4-only in this call.
+    });
+----
+
+If the predicate rejects every candidate, the operation completes with
+`std::errc::no_such_device_or_address`.
+
+=== Iterator Overload
+
+For callers that already hold an iterator pair, an iterator-based overload
+is also available. On success it returns the iterator to the connected
+endpoint; on failure it returns `end`:
+
+[source,cpp]
+----
+auto [ec, it] = co_await corosio::connect(s, v.begin(), v.end());
+if (!ec)
+    std::cout << "connected to index " << (it - v.begin()) << "\n";
+----
+
+Both overloads accept an optional connect condition as a trailing argument.
+
 == Next Steps
 
 * xref:4d.sockets.adoc[Sockets] — The underlying stream interface
 * xref:4n.buffers.adoc[Buffer Sequences] — Working with buffers
+* xref:4j.resolver.adoc[Resolver] — Producing endpoint ranges for `connect()`
 * xref:../3.tutorials/3b.http-client.adoc[HTTP Client Tutorial] — Practical example
