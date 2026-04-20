@@ -65,17 +65,33 @@ public:
         std::lock_guard lock(state_->mutex_);
 
         while (auto* impl = state_->impl_list_.pop_front())
+        {
             impl->close_socket();
+            state_->shutdown_list_.push_back(impl);
+        }
     }
 
     io_object::implementation* construct() override
     {
-        auto impl = std::make_shared<Impl>(static_cast<Derived&>(*this));
-        auto* raw = impl.get();
+        Impl* raw;
+        {
+            std::lock_guard lock(state_->mutex_);
+            raw = state_->freelist_.pop();
+            if (raw)
+                state_->impl_list_.push_back(raw);
+        }
+        if (!raw)
+        {
+            raw = new Impl(static_cast<Derived&>(*this));
+            std::lock_guard lock(state_->mutex_);
+            state_->impl_list_.push_back(raw);
+        }
 
-        std::lock_guard lock(state_->mutex_);
-        state_->impl_ptrs_.emplace(raw, std::move(impl));
-        state_->impl_list_.push_back(raw);
+        raw->ref_count_.store(1, std::memory_order_relaxed);
+        raw->release_fn_ = +[](ref_counted_base* p) noexcept {
+            auto* impl = static_cast<Impl*>(p);
+            static_cast<Derived&>(impl->service()).recycle(impl);
+        };
 
         return raw;
     }
@@ -86,7 +102,8 @@ public:
         typed->close_socket();
         std::lock_guard lock(state_->mutex_);
         state_->impl_list_.remove(typed);
-        state_->impl_ptrs_.erase(typed);
+        if (typed->sub_ref())
+            state_->freelist_.push(typed);
     }
 
     void close(io_object::handle& h) override
@@ -117,6 +134,13 @@ public:
     StreamService* stream_service() const noexcept
     {
         return stream_svc_;
+    }
+
+    /// Return an impl to the freelist (called when its refcount hits 0).
+    void recycle(Impl* impl)
+    {
+        std::lock_guard lock(state_->mutex_);
+        state_->freelist_.push(impl);
     }
 
 protected:

@@ -58,25 +58,33 @@ public:
         {
             static_cast<Derived*>(this)->pre_shutdown(impl);
             impl->close_socket();
+            // Park on shutdown_list; ~state_ deletes after scheduler
+            // has drained all pending ops.
+            state_->shutdown_list_.push_back(impl);
         }
-
-        // Don't clear impl_ptrs_ here. The scheduler shuts down after us
-        // and drains completed_ops_, calling destroy() on each queued op.
-        // Letting ~state_ release the ptrs (during service destruction,
-        // after scheduler shutdown) keeps every impl alive until all ops
-        // have been drained.
     }
 
     io_object::implementation* construct() override
     {
-        auto impl = std::make_shared<Impl>(static_cast<Derived&>(*this));
-        auto* raw = impl.get();
-
+        Impl* raw;
         {
             std::lock_guard lock(state_->mutex_);
-            state_->impl_ptrs_.emplace(raw, std::move(impl));
+            raw = state_->freelist_.pop();
+            if (raw)
+                state_->impl_list_.push_back(raw);
+        }
+        if (!raw)
+        {
+            raw = new Impl(static_cast<Derived&>(*this));
+            std::lock_guard lock(state_->mutex_);
             state_->impl_list_.push_back(raw);
         }
+
+        raw->ref_count_.store(1, std::memory_order_relaxed);
+        raw->release_fn_ = +[](ref_counted_base* p) noexcept {
+            auto* impl = static_cast<Impl*>(p);
+            static_cast<Derived&>(impl->service()).recycle(impl);
+        };
 
         return raw;
     }
@@ -88,7 +96,8 @@ public:
         typed->close_socket();
         std::lock_guard lock(state_->mutex_);
         state_->impl_list_.remove(typed);
-        state_->impl_ptrs_.erase(typed);
+        if (typed->sub_ref())
+            state_->freelist_.push(typed);
     }
 
     void close(io_object::handle& h) override
@@ -114,6 +123,13 @@ public:
     void work_finished() noexcept
     {
         state_->sched_.work_finished();
+    }
+
+    /// Return an impl to the freelist (called when its refcount hits 0).
+    void recycle(Impl* impl)
+    {
+        std::lock_guard lock(state_->mutex_);
+        state_->freelist_.push(impl);
     }
 
 protected:

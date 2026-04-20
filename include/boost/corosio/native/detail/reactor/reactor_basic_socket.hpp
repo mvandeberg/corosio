@@ -13,11 +13,11 @@
 #include <boost/corosio/detail/intrusive.hpp>
 #include <boost/corosio/detail/native_handle.hpp>
 #include <boost/corosio/endpoint.hpp>
+#include <boost/corosio/native/detail/reactor/impl_ref.hpp>
 #include <boost/corosio/native/detail/reactor/reactor_op_base.hpp>
 #include <boost/corosio/native/detail/make_err.hpp>
 #include <boost/corosio/native/detail/endpoint_convert.hpp>
 
-#include <memory>
 #include <mutex>
 #include <utility>
 
@@ -52,7 +52,7 @@ template<
     class Endpoint = endpoint>
 class reactor_basic_socket
     : public ImplBase
-    , public std::enable_shared_from_this<Derived>
+    , public ref_counted_base
     , public intrusive_list<Derived>::node
 {
     friend Derived;
@@ -71,6 +71,9 @@ protected:
     Endpoint local_endpoint_;
 
 public:
+    /// Return the owning service (used by the release function).
+    Service& service() noexcept { return svc_; }
+
     /// Per-descriptor state for persistent reactor registration.
     DescState desc_state_;
 
@@ -282,10 +285,6 @@ void
 reactor_basic_socket<Derived, ImplBase, Service, DescState, Endpoint>::cancel_single_op(
     Op& op) noexcept
 {
-    auto self = this->weak_from_this().lock();
-    if (!self)
-        return;
-
     op.request_cancel();
 
     auto* d                       = static_cast<Derived*>(this);
@@ -307,7 +306,7 @@ reactor_basic_socket<Derived, ImplBase, Service, DescState, Endpoint>::cancel_si
         }
         if (claimed)
         {
-            op.impl_ptr = self;
+            op.impl_ptr = impl_ref(this);
             svc_.post(&op);
             svc_.work_finished();
         }
@@ -319,10 +318,6 @@ void
 reactor_basic_socket<Derived, ImplBase, Service, DescState, Endpoint>::
     do_cancel() noexcept
 {
-    auto self = this->weak_from_this().lock();
-    if (!self)
-        return;
-
     auto* d = static_cast<Derived*>(this);
 
     d->for_each_op([](auto& op) { op.request_cancel(); });
@@ -351,7 +346,7 @@ reactor_basic_socket<Derived, ImplBase, Service, DescState, Endpoint>::
 
     for (int i = 0; i < count; ++i)
     {
-        claimed[i].base->impl_ptr = self;
+        claimed[i].base->impl_ptr = impl_ref(this);
         svc_.post(claimed[i].base);
         svc_.work_finished();
     }
@@ -362,47 +357,43 @@ void
 reactor_basic_socket<Derived, ImplBase, Service, DescState, Endpoint>::
     do_close_socket() noexcept
 {
-    auto self = this->weak_from_this().lock();
-    if (self)
+    auto* d = static_cast<Derived*>(this);
+
+    d->for_each_op([](auto& op) { op.request_cancel(); });
+
+    struct claimed_entry
     {
-        auto* d = static_cast<Derived*>(this);
+        reactor_op_base* base = nullptr;
+    };
+    claimed_entry claimed[3];
+    int count = 0;
 
-        d->for_each_op([](auto& op) { op.request_cancel(); });
+    {
+        std::lock_guard lock(desc_state_.mutex);
+        d->for_each_desc_entry(
+            [&](auto& /*op*/, reactor_op_base*& desc_slot) {
+                auto* c = std::exchange(desc_slot, nullptr);
+                if (c)
+                {
+                    claimed[count].base = c;
+                    ++count;
+                }
+            });
+        desc_state_.read_ready             = false;
+        desc_state_.write_ready            = false;
+        desc_state_.read_cancel_pending    = false;
+        desc_state_.write_cancel_pending   = false;
+        desc_state_.connect_cancel_pending = false;
 
-        struct claimed_entry
-        {
-            reactor_op_base* base = nullptr;
-        };
-        claimed_entry claimed[3];
-        int count = 0;
+        if (desc_state_.is_enqueued_.load(std::memory_order_acquire))
+            desc_state_.impl_ref_ = impl_ref(this);
+    }
 
-        {
-            std::lock_guard lock(desc_state_.mutex);
-            d->for_each_desc_entry(
-                [&](auto& /*op*/, reactor_op_base*& desc_slot) {
-                    auto* c = std::exchange(desc_slot, nullptr);
-                    if (c)
-                    {
-                        claimed[count].base = c;
-                        ++count;
-                    }
-                });
-            desc_state_.read_ready             = false;
-            desc_state_.write_ready            = false;
-            desc_state_.read_cancel_pending    = false;
-            desc_state_.write_cancel_pending   = false;
-            desc_state_.connect_cancel_pending = false;
-
-            if (desc_state_.is_enqueued_.load(std::memory_order_acquire))
-                desc_state_.impl_ref_ = self;
-        }
-
-        for (int i = 0; i < count; ++i)
-        {
-            claimed[i].base->impl_ptr = self;
-            svc_.post(claimed[i].base);
-            svc_.work_finished();
-        }
+    for (int i = 0; i < count; ++i)
+    {
+        claimed[i].base->impl_ptr = impl_ref(this);
+        svc_.post(claimed[i].base);
+        svc_.work_finished();
     }
 
     if (fd_ >= 0)
@@ -425,47 +416,43 @@ reactor_basic_socket<Derived, ImplBase, Service, DescState, Endpoint>::
     do_release_socket() noexcept
 {
     // Cancel pending ops (same as do_close_socket)
-    auto self = this->weak_from_this().lock();
-    if (self)
+    auto* d = static_cast<Derived*>(this);
+
+    d->for_each_op([](auto& op) { op.request_cancel(); });
+
+    struct claimed_entry
     {
-        auto* d = static_cast<Derived*>(this);
+        reactor_op_base* base = nullptr;
+    };
+    claimed_entry claimed[3];
+    int count = 0;
 
-        d->for_each_op([](auto& op) { op.request_cancel(); });
+    {
+        std::lock_guard lock(desc_state_.mutex);
+        d->for_each_desc_entry(
+            [&](auto& /*op*/, reactor_op_base*& desc_slot) {
+                auto* c = std::exchange(desc_slot, nullptr);
+                if (c)
+                {
+                    claimed[count].base = c;
+                    ++count;
+                }
+            });
+        desc_state_.read_ready             = false;
+        desc_state_.write_ready            = false;
+        desc_state_.read_cancel_pending    = false;
+        desc_state_.write_cancel_pending   = false;
+        desc_state_.connect_cancel_pending = false;
 
-        struct claimed_entry
-        {
-            reactor_op_base* base = nullptr;
-        };
-        claimed_entry claimed[3];
-        int count = 0;
+        if (desc_state_.is_enqueued_.load(std::memory_order_acquire))
+            desc_state_.impl_ref_ = impl_ref(this);
+    }
 
-        {
-            std::lock_guard lock(desc_state_.mutex);
-            d->for_each_desc_entry(
-                [&](auto& /*op*/, reactor_op_base*& desc_slot) {
-                    auto* c = std::exchange(desc_slot, nullptr);
-                    if (c)
-                    {
-                        claimed[count].base = c;
-                        ++count;
-                    }
-                });
-            desc_state_.read_ready             = false;
-            desc_state_.write_ready            = false;
-            desc_state_.read_cancel_pending    = false;
-            desc_state_.write_cancel_pending   = false;
-            desc_state_.connect_cancel_pending = false;
-
-            if (desc_state_.is_enqueued_.load(std::memory_order_acquire))
-                desc_state_.impl_ref_ = self;
-        }
-
-        for (int i = 0; i < count; ++i)
-        {
-            claimed[i].base->impl_ptr = self;
-            svc_.post(claimed[i].base);
-            svc_.work_finished();
-        }
+    for (int i = 0; i < count; ++i)
+    {
+        claimed[i].base->impl_ptr = impl_ref(this);
+        svc_.post(claimed[i].base);
+        svc_.work_finished();
     }
 
     native_handle_type released = fd_;

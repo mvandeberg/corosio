@@ -11,10 +11,10 @@
 #define BOOST_COROSIO_NATIVE_DETAIL_REACTOR_REACTOR_OP_BASE_HPP
 
 #include <boost/corosio/detail/scheduler_op.hpp>
+#include <boost/corosio/native/detail/reactor/impl_ref.hpp>
 
 #include <atomic>
 #include <cstddef>
-#include <memory>
 
 namespace boost::corosio::detail {
 
@@ -39,7 +39,7 @@ struct reactor_op_base : scheduler_op
     std::atomic<bool> cancelled{false};
 
     /// Prevents use-after-free when socket is closed with pending ops.
-    std::shared_ptr<void> impl_ptr;
+    impl_ref impl_ptr;
 
     /// Record the result of an I/O attempt.
     void complete(int err, std::size_t bytes) noexcept

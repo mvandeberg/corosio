@@ -17,7 +17,6 @@
 
 #include <atomic>
 #include <cstdint>
-#include <memory>
 
 #include <errno.h>
 #include <sys/socket.h>
@@ -92,7 +91,7 @@ struct reactor_descriptor_state : scheduler_op
     reactor_scheduler const* scheduler_ = nullptr;
 
     /// Prevents impl destruction while queued in the scheduler.
-    std::shared_ptr<void> impl_ref_;
+    impl_ref impl_ref_;
 
     /// Add ready events atomically.
     /// Release pairs with the consumer's acquire exchange on
@@ -129,7 +128,7 @@ struct reactor_descriptor_state : scheduler_op
 inline void
 reactor_descriptor_state::invoke_deferred_io()
 {
-    std::shared_ptr<void> prevent_impl_destruction;
+    impl_ref prevent_impl_destruction;
     op_queue local_ops;
 
     {
