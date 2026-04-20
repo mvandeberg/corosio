@@ -247,6 +247,9 @@ void
 reactor_acceptor<Derived, Service, Op, AcceptOp, DescState, ImplBase, Endpoint>::
     do_close_socket() noexcept
 {
+    if (fd_ < 0)
+        return;
+
     acc_.request_cancel();
 
     reactor_op_base* claimed = nullptr;

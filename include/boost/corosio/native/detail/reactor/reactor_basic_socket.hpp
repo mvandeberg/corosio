@@ -161,16 +161,15 @@ public:
     }
 
     /// Assign the fd, initialize descriptor state, and register with the reactor.
+    /// No lock needed: the desc_state is freshly constructed or recycled —
+    /// no other thread can reference it before register_descriptor completes.
     void init_and_register(int fd) noexcept
     {
         fd_ = fd;
-        desc_state_.fd = fd;
-        {
-            std::lock_guard lock(desc_state_.mutex);
-            desc_state_.read_op    = nullptr;
-            desc_state_.write_op   = nullptr;
-            desc_state_.connect_op = nullptr;
-        }
+        desc_state_.fd         = fd;
+        desc_state_.read_op    = nullptr;
+        desc_state_.write_op   = nullptr;
+        desc_state_.connect_op = nullptr;
         svc_.scheduler().register_descriptor(fd, &desc_state_);
     }
 
@@ -357,6 +356,9 @@ void
 reactor_basic_socket<Derived, ImplBase, Service, DescState, Endpoint>::
     do_close_socket() noexcept
 {
+    if (fd_ < 0)
+        return;
+
     auto* d = static_cast<Derived*>(this);
 
     d->for_each_op([](auto& op) { op.request_cancel(); });

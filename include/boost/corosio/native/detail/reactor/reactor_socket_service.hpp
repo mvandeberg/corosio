@@ -76,15 +76,17 @@ public:
         if (!raw)
         {
             raw = new Impl(static_cast<Derived&>(*this));
+            // release_fn_ only needs to be set once; freelist-recycled
+            // impls already carry the correct function pointer.
+            raw->release_fn_ = +[](ref_counted_base* p) noexcept {
+                auto* impl = static_cast<Impl*>(p);
+                static_cast<Derived&>(impl->service()).recycle(impl);
+            };
             std::lock_guard lock(state_->mutex_);
             state_->impl_list_.push_back(raw);
         }
 
         raw->ref_count_.store(1, std::memory_order_relaxed);
-        raw->release_fn_ = +[](ref_counted_base* p) noexcept {
-            auto* impl = static_cast<Impl*>(p);
-            static_cast<Derived&>(impl->service()).recycle(impl);
-        };
 
         return raw;
     }
@@ -97,7 +99,18 @@ public:
         std::lock_guard lock(state_->mutex_);
         state_->impl_list_.remove(typed);
         if (typed->sub_ref())
+        {
             state_->freelist_.push(typed);
+        }
+        else
+        {
+            // Pending ops still hold refs. When the last one drops,
+            // delete the impl rather than recycling — it's no longer
+            // tracked by any service list.
+            typed->release_fn_ = +[](ref_counted_base* p) noexcept {
+                delete static_cast<Impl*>(p);
+            };
+        }
     }
 
     void close(io_object::handle& h) override
