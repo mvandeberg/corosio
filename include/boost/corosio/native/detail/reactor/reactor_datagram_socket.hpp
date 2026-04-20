@@ -461,7 +461,7 @@ reactor_datagram_socket<
         op.ec_out    = ec;
         op.bytes_out = bytes_out;
         op.start(token, static_cast<Derived*>(this));
-        op.impl_ptr = this->shared_from_this();
+        op.impl_ptr = impl_ref(this);
         op.complete(err, bytes);
         this->svc_.post(&op);
         return std::noop_coroutine();
@@ -473,7 +473,7 @@ reactor_datagram_socket<
     op.ec_out    = ec;
     op.bytes_out = bytes_out;
     op.start(token, static_cast<Derived*>(this));
-    op.impl_ptr = this->shared_from_this();
+    op.impl_ptr = impl_ref(this);
 
     this->register_op(
         op, this->desc_state_.write_op, this->desc_state_.write_ready,
@@ -530,7 +530,7 @@ reactor_datagram_socket<
         op.ec_out    = ec;
         op.bytes_out = bytes_out;
         op.start(token, static_cast<Derived*>(this));
-        op.impl_ptr = this->shared_from_this();
+        op.impl_ptr = impl_ref(this);
         op.complete(0, 0);
         this->svc_.post(&op);
         return std::noop_coroutine();
@@ -584,7 +584,7 @@ reactor_datagram_socket<
         op.ec_out    = ec;
         op.bytes_out = bytes_out;
         op.start(token, static_cast<Derived*>(this));
-        op.impl_ptr = this->shared_from_this();
+        op.impl_ptr = impl_ref(this);
         op.complete(err, bytes);
         this->svc_.post(&op);
         return std::noop_coroutine();
@@ -596,7 +596,7 @@ reactor_datagram_socket<
     op.ec_out    = ec;
     op.bytes_out = bytes_out;
     op.start(token, static_cast<Derived*>(this));
-    op.impl_ptr = this->shared_from_this();
+    op.impl_ptr = impl_ref(this);
 
     this->register_op(
         op, this->desc_state_.read_op, this->desc_state_.read_ready,
@@ -671,7 +671,7 @@ reactor_datagram_socket<
         op.fd              = this->fd_;
         op.target_endpoint = ep;
         op.start(token, static_cast<Derived*>(this));
-        op.impl_ptr = this->shared_from_this();
+        op.impl_ptr = impl_ref(this);
         op.complete(err, 0);
         this->svc_.post(&op);
         return std::noop_coroutine();
@@ -685,7 +685,7 @@ reactor_datagram_socket<
     op.fd              = this->fd_;
     op.target_endpoint = ep;
     op.start(token, static_cast<Derived*>(this));
-    op.impl_ptr = this->shared_from_this();
+    op.impl_ptr = impl_ref(this);
 
     this->register_op(
         op, this->desc_state_.connect_op, this->desc_state_.write_ready,
@@ -777,7 +777,7 @@ reactor_datagram_socket<
         op.ec_out    = ec;
         op.bytes_out = bytes_out;
         op.start(token, static_cast<Derived*>(this));
-        op.impl_ptr = this->shared_from_this();
+        op.impl_ptr = impl_ref(this);
         op.complete(err, bytes);
         this->svc_.post(&op);
         return std::noop_coroutine();
@@ -789,7 +789,7 @@ reactor_datagram_socket<
     op.ec_out    = ec;
     op.bytes_out = bytes_out;
     op.start(token, static_cast<Derived*>(this));
-    op.impl_ptr = this->shared_from_this();
+    op.impl_ptr = impl_ref(this);
 
     this->register_op(
         op, this->desc_state_.write_op, this->desc_state_.write_ready,
@@ -844,7 +844,7 @@ reactor_datagram_socket<
         op.ec_out    = ec;
         op.bytes_out = bytes_out;
         op.start(token, static_cast<Derived*>(this));
-        op.impl_ptr = this->shared_from_this();
+        op.impl_ptr = impl_ref(this);
         op.complete(0, 0);
         this->svc_.post(&op);
         return std::noop_coroutine();
@@ -888,7 +888,7 @@ reactor_datagram_socket<
         op.ec_out    = ec;
         op.bytes_out = bytes_out;
         op.start(token, static_cast<Derived*>(this));
-        op.impl_ptr = this->shared_from_this();
+        op.impl_ptr = impl_ref(this);
         op.complete(err, bytes);
         this->svc_.post(&op);
         return std::noop_coroutine();
@@ -900,7 +900,7 @@ reactor_datagram_socket<
     op.ec_out    = ec;
     op.bytes_out = bytes_out;
     op.start(token, static_cast<Derived*>(this));
-    op.impl_ptr = this->shared_from_this();
+    op.impl_ptr = impl_ref(this);
 
     this->register_op(
         op, this->desc_state_.read_op, this->desc_state_.read_ready,
