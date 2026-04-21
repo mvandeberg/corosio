@@ -41,6 +41,10 @@ struct epoll_traits
 
     static constexpr bool needs_write_notification = false;
 
+    /// The kernel auto-deregisters fds from epoll when the last file
+    /// description is closed, so we can skip epoll_ctl(DEL).
+    static constexpr bool auto_deregister_on_close = true;
+
     // No extra per-socket state or lifecycle hooks needed for epoll.
     struct stream_socket_hook
     {

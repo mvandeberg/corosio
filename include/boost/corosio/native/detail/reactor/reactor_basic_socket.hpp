@@ -407,8 +407,21 @@ reactor_basic_socket<Derived, ImplBase, Service, DescState, Endpoint>::
 
     if (fd_ >= 0)
     {
-        if (desc_state_.registered_events != 0)
-            svc_.scheduler().deregister_descriptor(fd_);
+        if constexpr (requires { Service::auto_deregister_on_close; })
+        {
+            // epoll/kqueue auto-deregister fds on close; skip the
+            // explicit deregister syscall.
+            if constexpr (!Service::auto_deregister_on_close)
+            {
+                if (desc_state_.registered_events != 0)
+                    svc_.scheduler().deregister_descriptor(fd_);
+            }
+        }
+        else
+        {
+            if (desc_state_.registered_events != 0)
+                svc_.scheduler().deregister_descriptor(fd_);
+        }
         ::close(fd_);
         fd_ = -1;
     }

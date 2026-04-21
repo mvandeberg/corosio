@@ -45,6 +45,10 @@ struct select_traits
 
     static constexpr bool needs_write_notification = true;
 
+    /// select does not auto-deregister fds on close — the fd_sets are
+    /// rebuilt from userspace each call, so we must explicitly deregister.
+    static constexpr bool auto_deregister_on_close = false;
+
     // No extra per-socket state or lifecycle hooks needed for select.
     struct stream_socket_hook
     {

@@ -45,6 +45,9 @@ struct kqueue_traits
 
     static constexpr bool needs_write_notification = false;
 
+    /// The kernel auto-deregisters kevents when the fd is closed.
+    static constexpr bool auto_deregister_on_close = true;
+
     /* macOS kqueue workaround: RST doesn't reliably trigger EV_EOF.
        If the user sets SO_LINGER, we clear it before close so the
        destructor doesn't block and close() sends FIN instead of RST.

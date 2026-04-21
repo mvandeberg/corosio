@@ -183,6 +183,8 @@ class reactor_tcp_service_impl
 public:
     static constexpr bool needs_write_notification =
         Traits::needs_write_notification;
+    static constexpr bool auto_deregister_on_close =
+        Traits::auto_deregister_on_close;
 
     std::error_code open_socket(
         tcp_socket::implementation& impl,
@@ -234,6 +236,8 @@ class reactor_local_stream_service_impl
 public:
     static constexpr bool needs_write_notification =
         Traits::needs_write_notification;
+    static constexpr bool auto_deregister_on_close =
+        Traits::auto_deregister_on_close;
 
     std::error_code open_socket(
         local_stream_socket::implementation& impl,
@@ -276,6 +280,8 @@ class reactor_udp_service_impl
 public:
     static constexpr bool needs_write_notification =
         Traits::needs_write_notification;
+    static constexpr bool auto_deregister_on_close =
+        Traits::auto_deregister_on_close;
 
     std::error_code open_datagram_socket(
         udp_socket::implementation& impl,
@@ -317,6 +323,8 @@ class reactor_local_dgram_service_impl
 public:
     static constexpr bool needs_write_notification =
         Traits::needs_write_notification;
+    static constexpr bool auto_deregister_on_close =
+        Traits::auto_deregister_on_close;
 
     std::error_code open_socket(
         local_datagram_socket::implementation& impl,
