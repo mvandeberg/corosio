@@ -251,6 +251,9 @@ void
 reactor_acceptor<Derived, Service, Op, AcceptOp, DescState, ImplBase, Endpoint>::
     do_close_socket() noexcept
 {
+    if (fd_ < 0)
+        return;
+
     auto self = this->weak_from_this().lock();
     if (self)
     {
