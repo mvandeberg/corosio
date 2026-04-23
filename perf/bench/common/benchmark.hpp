@@ -31,6 +31,19 @@ struct metric
     metric(std::string n, double v) : name(std::move(n)), value(v) {}
 };
 
+/** A named array of sample values (for adaptive mode). */
+struct sample_array
+{
+    std::string name;
+    std::vector<double> values;
+
+    sample_array(std::string n, std::vector<double> v)
+        : name(std::move(n))
+        , values(std::move(v))
+    {
+    }
+};
+
 /** Result from a single benchmark run. */
 struct benchmark_result
 {
@@ -38,6 +51,7 @@ struct benchmark_result
     std::string category;
     std::string name;
     std::vector<metric> metrics;
+    std::vector<sample_array> arrays;
 
     benchmark_result(
         std::string lib,
@@ -52,6 +66,13 @@ struct benchmark_result
     benchmark_result& add(std::string metric_name, double value)
     {
         metrics.emplace_back(std::move(metric_name), value);
+        return *this;
+    }
+
+    benchmark_result& add_sample_array(
+        std::string array_name, std::vector<double> values)
+    {
+        arrays.emplace_back(std::move(array_name), std::move(values));
         return *this;
     }
 
@@ -76,6 +97,7 @@ class result_collector
     std::string backend_;
     std::string timestamp_;
     double duration_s_ = 0.0;
+    bool adaptive_ = false;
     std::vector<benchmark_result> results_;
 
     static std::string escape_json(std::string const& s)
@@ -144,6 +166,7 @@ public:
     {
         duration_s_ = duration_s;
     }
+    void set_adaptive(bool v) { adaptive_ = v; }
 
     void add(benchmark_result result)
     {
@@ -160,8 +183,10 @@ public:
         oss << "  \"metadata\": {\n";
         oss << "    \"backend\": \"" << escape_json(backend_) << "\",\n";
         oss << "    \"timestamp\": \"" << escape_json(timestamp_) << "\",\n";
-        oss << "    \"duration_s\": " << duration_s_ << "\n";
-        oss << "  },\n";
+        oss << "    \"duration_s\": " << duration_s_;
+        if (adaptive_)
+            oss << ",\n    \"adaptive\": true";
+        oss << "\n  },\n";
         oss << "  \"benchmarks\": [\n";
 
         for (std::size_t i = 0; i < results_.size(); ++i)
@@ -178,6 +203,18 @@ public:
             for (auto const& m : r.metrics)
                 oss << ",\n      \"" << escape_json(m.name)
                     << "\": " << m.value;
+
+            for (auto const& a : r.arrays)
+            {
+                oss << ",\n      \"" << escape_json(a.name) << "\": [";
+                for (std::size_t j = 0; j < a.values.size(); ++j)
+                {
+                    if (j > 0)
+                        oss << ", ";
+                    oss << a.values[j];
+                }
+                oss << "]";
+            }
 
             oss << "\n    }";
             if (i + 1 < results_.size())

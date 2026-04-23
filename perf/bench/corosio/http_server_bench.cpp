@@ -29,6 +29,7 @@
 #include <vector>
 
 #include "../common/http_protocol.hpp"
+#include "../common/slice_tiers.hpp"
 #include "../../common/native_includes.hpp"
 
 namespace corosio = boost::corosio;
@@ -307,13 +308,15 @@ make_http_server_suite()
 {
     using F = bench::bench_flags;
 
-    return bench::benchmark_suite("http_server", F::needs_conntrack_drain)
+    auto s = bench::benchmark_suite("http_server", F::needs_conntrack_drain)
         .add("single_conn", bench_single_connection<Backend>)
         .add("single_conn_lockless", bench_single_connection_lockless<Backend>)
         .add("concurrent", bench_concurrent_connections<Backend>)
             .args({1, 4, 16, 32})
         .add("multithread", bench_multithread<Backend>)
             .args({1, 2, 4, 8, 16});
+    bench::apply_http_server_tiers(s);
+    return s;
 }
 
 } // namespace corosio_bench

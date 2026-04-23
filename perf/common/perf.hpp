@@ -171,6 +171,19 @@ public:
         return percentile(0.999);
     }
 
+    /// Return the raw samples vector.
+    std::vector<double> const& raw_samples() const
+    {
+        return samples_;
+    }
+
+    /// Coefficient of variation as a percentage.
+    double cv_pct() const
+    {
+        double m = mean();
+        return m > 0.0 ? (stddev() / m) * 100.0 : 0.0;
+    }
+
 private:
     std::vector<double> samples_;
 };

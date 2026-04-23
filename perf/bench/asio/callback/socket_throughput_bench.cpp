@@ -9,6 +9,7 @@
 
 #include "benchmarks.hpp"
 #include "../socket_utils.hpp"
+#include "../../common/slice_tiers.hpp"
 
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/read.hpp>
@@ -55,7 +56,7 @@ struct read_op
 {
     tcp_socket& sock;
     std::vector<char>& buf;
-    std::size_t& total_read;
+    bench::state& state;
 
     void start()
     {
@@ -64,7 +65,7 @@ struct read_op
             [this](boost::system::error_code ec, std::size_t n) {
                 if (ec || n == 0)
                     return;
-                total_read += n;
+                state.add_bytes(static_cast<int64_t>(n));
                 start();
             });
     }
@@ -83,10 +84,9 @@ bench_throughput(bench::state& state)
     std::vector<char> read_buf(chunk_size);
 
     std::atomic<bool> running{true};
-    std::size_t total_read = 0;
 
     write_op wop{writer, write_buf, chunk_size, running};
-    read_op rop{reader, read_buf, total_read};
+    read_op rop{reader, read_buf, state};
 
     perf::stopwatch sw;
 
@@ -102,7 +102,6 @@ bench_throughput(bench::state& state)
     timer.join();
 
     state.set_elapsed(sw.elapsed_seconds());
-    state.add_bytes(static_cast<int64_t>(total_read));
 
     writer.close();
     reader.close();
@@ -123,16 +122,14 @@ bench_bidirectional_throughput(bench::state& state)
     std::vector<char> rbuf2(chunk_size);
 
     std::atomic<bool> running{true};
-    std::size_t read1 = 0;
-    std::size_t read2 = 0;
 
     // sock1 writes, sock2 reads (direction 1)
     write_op wop1{sock1, buf1, chunk_size, running};
-    read_op rop1{sock2, rbuf1, read1};
+    read_op rop1{sock2, rbuf1, state};
 
     // sock2 writes, sock1 reads (direction 2)
     write_op wop2{sock2, buf2, chunk_size, running};
-    read_op rop2{sock1, rbuf2, read2};
+    read_op rop2{sock1, rbuf2, state};
 
     perf::stopwatch sw;
 
@@ -150,7 +147,6 @@ bench_bidirectional_throughput(bench::state& state)
     timer.join();
 
     state.set_elapsed(sw.elapsed_seconds());
-    state.add_bytes(static_cast<int64_t>(read1 + read2));
 
     sock1.close();
     sock2.close();
@@ -169,10 +165,9 @@ bench_throughput_lockless(bench::state& state)
     std::vector<char> read_buf(chunk_size);
 
     std::atomic<bool> running{true};
-    std::size_t total_read = 0;
 
     write_op wop{writer, write_buf, chunk_size, running};
-    read_op rop{reader, read_buf, total_read};
+    read_op rop{reader, read_buf, state};
 
     perf::stopwatch sw;
 
@@ -188,7 +183,6 @@ bench_throughput_lockless(bench::state& state)
     timer.join();
 
     state.set_elapsed(sw.elapsed_seconds());
-    state.add_bytes(static_cast<int64_t>(total_read));
 
     writer.close();
     reader.close();
@@ -209,16 +203,14 @@ bench_bidirectional_throughput_lockless(bench::state& state)
     std::vector<char> rbuf2(chunk_size);
 
     std::atomic<bool> running{true};
-    std::size_t read1 = 0;
-    std::size_t read2 = 0;
 
     // sock1 writes, sock2 reads (direction 1)
     write_op wop1{sock1, buf1, chunk_size, running};
-    read_op rop1{sock2, rbuf1, read1};
+    read_op rop1{sock2, rbuf1, state};
 
     // sock2 writes, sock1 reads (direction 2)
     write_op wop2{sock2, buf2, chunk_size, running};
-    read_op rop2{sock1, rbuf2, read2};
+    read_op rop2{sock1, rbuf2, state};
 
     perf::stopwatch sw;
 
@@ -236,7 +228,6 @@ bench_bidirectional_throughput_lockless(bench::state& state)
     timer.join();
 
     state.set_elapsed(sw.elapsed_seconds());
-    state.add_bytes(static_cast<int64_t>(read1 + read2));
 
     sock1.close();
     sock2.close();
@@ -270,7 +261,7 @@ struct mt_read_op
 {
     tcp_socket& sock;
     std::vector<char>& buf;
-    std::atomic<std::size_t>& total_read;
+    bench::state& state;
 
     void start()
     {
@@ -279,7 +270,7 @@ struct mt_read_op
             [this](boost::system::error_code ec, std::size_t n) {
                 if (ec || n == 0)
                     return;
-                total_read.fetch_add(n, std::memory_order_relaxed);
+                state.add_bytes(static_cast<int64_t>(n));
                 start();
             });
     }
@@ -326,7 +317,6 @@ bench_multithread_throughput(bench::state& state)
     }
 
     std::atomic<bool> running{true};
-    std::atomic<std::size_t> total_read{0};
 
     std::vector<std::unique_ptr<mt_write_op>> write_ops;
     std::vector<std::unique_ptr<mt_read_op>> read_ops;
@@ -339,7 +329,7 @@ bench_multithread_throughput(bench::state& state)
                 mt_write_op{sock1s[i], bufs[i].wbuf1, chunk_size, running}));
         read_ops.push_back(
             std::make_unique<mt_read_op>(
-                mt_read_op{sock2s[i], bufs[i].rbuf1, total_read}));
+                mt_read_op{sock2s[i], bufs[i].rbuf1, state}));
 
         // Direction 2: sock2 writes, sock1 reads
         write_ops.push_back(
@@ -347,7 +337,7 @@ bench_multithread_throughput(bench::state& state)
                 mt_write_op{sock2s[i], bufs[i].wbuf2, chunk_size, running}));
         read_ops.push_back(
             std::make_unique<mt_read_op>(
-                mt_read_op{sock1s[i], bufs[i].rbuf2, total_read}));
+                mt_read_op{sock1s[i], bufs[i].rbuf2, state}));
     }
 
     perf::stopwatch sw;
@@ -374,8 +364,6 @@ bench_multithread_throughput(bench::state& state)
         t.join();
 
     state.set_elapsed(sw.elapsed_seconds());
-    state.add_bytes(
-        static_cast<int64_t>(total_read.load(std::memory_order_relaxed)));
 
     for (auto& s : sock1s)
         s.close();
@@ -389,7 +377,7 @@ bench::benchmark_suite
 make_socket_throughput_suite()
 {
     using F = bench::bench_flags;
-    return bench::benchmark_suite("socket_throughput", F::needs_conntrack_drain)
+    auto s = bench::benchmark_suite("socket_throughput", F::needs_conntrack_drain)
         .add("unidirectional", bench_throughput)
             .range(1024, 1048576, 4)
         .add("unidirectional_lockless", bench_throughput_lockless)
@@ -400,6 +388,8 @@ make_socket_throughput_suite()
             .range(1024, 1048576, 4)
         .add("multithread", bench_multithread_throughput)
             .args({2, 4, 8});
+    bench::apply_socket_throughput_tiers(s);
+    return s;
 }
 
 } // namespace asio_callback_bench

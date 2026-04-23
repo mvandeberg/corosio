@@ -8,6 +8,7 @@
 //
 
 #include "benchmarks.hpp"
+#include "../../common/slice_tiers.hpp"
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -247,7 +248,8 @@ bench::benchmark_suite
 make_io_context_suite()
 {
     using F = bench::bench_flags;
-    return bench::benchmark_suite("io_context", F::is_microbenchmark)
+    auto s = bench::benchmark_suite("io_context",
+                                    F::is_microbenchmark | F::local_counters)
         .add("single_threaded", bench_single_threaded_post)
         .add("multithreaded", bench_multithreaded_scaling)
             .args({8})
@@ -256,6 +258,8 @@ make_io_context_suite()
             .args({4})
         .add("single_threaded_lockless", bench_single_threaded_lockless)
         .add("interleaved_lockless", bench_interleaved_lockless);
+    bench::apply_io_context_tiers(s);
+    return s;
 }
 
 } // namespace asio_bench

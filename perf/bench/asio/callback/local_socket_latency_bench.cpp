@@ -9,6 +9,7 @@
 
 #include "benchmarks.hpp"
 #include "../local_socket_utils.hpp"
+#include "../../common/slice_tiers.hpp"
 
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/read.hpp>
@@ -283,7 +284,7 @@ bench::benchmark_suite
 make_local_socket_latency_suite()
 {
     using F = bench::bench_flags;
-    return bench::benchmark_suite("local_socket_latency", F::none)
+    auto s = bench::benchmark_suite("local_socket_latency", F::none)
         .add("pingpong", bench_pingpong_latency)
             .args({1, 64, 1024})
         .add("pingpong_lockless", bench_pingpong_latency_lockless)
@@ -292,6 +293,8 @@ make_local_socket_latency_suite()
             .args({1, 4, 16})
         .add("concurrent_lockless", bench_concurrent_latency_lockless)
             .args({1, 4, 16});
+    bench::apply_local_socket_latency_tiers(s);
+    return s;
 }
 
 } // namespace asio_callback_bench

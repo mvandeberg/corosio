@@ -32,6 +32,7 @@
 #endif
 
 #include "../../common/native_includes.hpp"
+#include "../common/slice_tiers.hpp"
 
 namespace corosio = boost::corosio;
 namespace capy    = boost::capy;
@@ -73,7 +74,6 @@ bench_throughput(bench::state& state)
     std::vector<char> read_buf(chunk_size);
 
     std::atomic<bool> running{true};
-    int64_t total_bytes = 0;
 
     auto write_task = [&]() -> capy::task<> {
         while (running.load(std::memory_order_relaxed))
@@ -93,7 +93,7 @@ bench_throughput(bench::state& state)
                 capy::mutable_buffer(read_buf.data(), read_buf.size()));
             if (ec || n == 0)
                 break;
-            total_bytes += static_cast<int64_t>(n);
+            state.add_bytes(static_cast<int64_t>(n));
         }
     };
 
@@ -112,7 +112,6 @@ bench_throughput(bench::state& state)
     timer.join();
 
     state.set_elapsed(sw.elapsed_seconds());
-    state.add_bytes(total_bytes);
     writer.close();
     reader.close();
 }
@@ -137,8 +136,6 @@ bench_bidirectional_throughput(bench::state& state)
     std::vector<char> buf2(chunk_size, 'b');
 
     std::atomic<bool> running{true};
-    int64_t read1_bytes = 0;
-    int64_t read2_bytes = 0;
 
     auto write1_task = [&]() -> capy::task<> {
         while (running.load(std::memory_order_relaxed))
@@ -159,7 +156,7 @@ bench_bidirectional_throughput(bench::state& state)
                 capy::mutable_buffer(rbuf.data(), rbuf.size()));
             if (ec || n == 0)
                 break;
-            read1_bytes += static_cast<int64_t>(n);
+            state.add_bytes(static_cast<int64_t>(n));
         }
     };
 
@@ -182,7 +179,7 @@ bench_bidirectional_throughput(bench::state& state)
                 capy::mutable_buffer(rbuf.data(), rbuf.size()));
             if (ec || n == 0)
                 break;
-            read2_bytes += static_cast<int64_t>(n);
+            state.add_bytes(static_cast<int64_t>(n));
         }
     };
 
@@ -203,7 +200,6 @@ bench_bidirectional_throughput(bench::state& state)
     timer.join();
 
     state.set_elapsed(sw.elapsed_seconds());
-    state.add_bytes(read1_bytes + read2_bytes);
     sock1.close();
     sock2.close();
 }
@@ -266,7 +262,6 @@ bench_throughput_lockless(bench::state& state)
     std::vector<char> read_buf(chunk_size);
 
     std::atomic<bool> running{true};
-    int64_t total_bytes = 0;
 
     auto write_task = [&]() -> capy::task<> {
         while (running.load(std::memory_order_relaxed))
@@ -286,7 +281,7 @@ bench_throughput_lockless(bench::state& state)
                 capy::mutable_buffer(read_buf.data(), read_buf.size()));
             if (ec || n == 0)
                 break;
-            total_bytes += static_cast<int64_t>(n);
+            state.add_bytes(static_cast<int64_t>(n));
         }
     };
 
@@ -305,7 +300,6 @@ bench_throughput_lockless(bench::state& state)
     timer.join();
 
     state.set_elapsed(sw.elapsed_seconds());
-    state.add_bytes(total_bytes);
     writer.close();
     reader.close();
 }
@@ -332,8 +326,6 @@ bench_bidirectional_throughput_lockless(bench::state& state)
     std::vector<char> buf2(chunk_size, 'b');
 
     std::atomic<bool> running{true};
-    int64_t read1_bytes = 0;
-    int64_t read2_bytes = 0;
 
     auto write1_task = [&]() -> capy::task<> {
         while (running.load(std::memory_order_relaxed))
@@ -354,7 +346,7 @@ bench_bidirectional_throughput_lockless(bench::state& state)
                 capy::mutable_buffer(rbuf.data(), rbuf.size()));
             if (ec || n == 0)
                 break;
-            read1_bytes += static_cast<int64_t>(n);
+            state.add_bytes(static_cast<int64_t>(n));
         }
     };
 
@@ -377,7 +369,7 @@ bench_bidirectional_throughput_lockless(bench::state& state)
                 capy::mutable_buffer(rbuf.data(), rbuf.size()));
             if (ec || n == 0)
                 break;
-            read2_bytes += static_cast<int64_t>(n);
+            state.add_bytes(static_cast<int64_t>(n));
         }
     };
 
@@ -398,7 +390,6 @@ bench_bidirectional_throughput_lockless(bench::state& state)
     timer.join();
 
     state.set_elapsed(sw.elapsed_seconds());
-    state.add_bytes(read1_bytes + read2_bytes);
     sock1.close();
     sock2.close();
 }
@@ -495,7 +486,7 @@ make_socket_throughput_suite()
 {
     using F = bench::bench_flags;
 
-    return bench::benchmark_suite("socket_throughput", F::needs_conntrack_drain)
+    auto s = bench::benchmark_suite("socket_throughput", F::needs_conntrack_drain)
         .add("unidirectional", bench_throughput<Backend>)
             .range(1024, 1048576, 4)
         .add("unidirectional_lockless", bench_throughput_lockless<Backend>)
@@ -506,6 +497,8 @@ make_socket_throughput_suite()
             .range(1024, 1048576, 4)
         .add("multithread", bench_multithread_throughput<Backend>)
             .args({2, 4, 8});
+    bench::apply_socket_throughput_tiers(s);
+    return s;
 }
 
 } // namespace corosio_bench

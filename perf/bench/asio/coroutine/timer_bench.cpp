@@ -238,7 +238,7 @@ bench_concurrent_timers(bench::state& state)
 bench::benchmark_suite
 make_timer_suite()
 {
-    return bench::benchmark_suite("timer")
+    return bench::benchmark_suite("timer", bench::bench_flags::local_counters)
         .add("schedule_cancel", bench_schedule_cancel)
         .add("schedule_cancel_lockless", bench_schedule_cancel_lockless)
         .add("fire_rate", bench_fire_rate)

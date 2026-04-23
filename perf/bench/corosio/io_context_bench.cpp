@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "../../common/native_includes.hpp"
+#include "../common/slice_tiers.hpp"
 
 namespace corosio = boost::corosio;
 namespace capy    = boost::capy;
@@ -329,7 +330,8 @@ bench::benchmark_suite
 make_io_context_suite()
 {
     using F = bench::bench_flags;
-    return bench::benchmark_suite("io_context", F::is_microbenchmark)
+    auto s = bench::benchmark_suite("io_context",
+                                    F::is_microbenchmark | F::local_counters)
         .add("single_threaded", bench_single_threaded_post<Backend>)
         .add("multithreaded", bench_multithreaded_scaling<Backend>)
             .args({8})
@@ -340,6 +342,8 @@ make_io_context_suite()
         .add("large_event_buffer", bench_large_event_buffer<Backend>)
         .add("single_threaded_lockless", bench_single_threaded_lockless<Backend>)
         .add("interleaved_lockless", bench_interleaved_lockless<Backend>);
+    bench::apply_io_context_tiers(s);
+    return s;
 }
 
 } // namespace corosio_bench

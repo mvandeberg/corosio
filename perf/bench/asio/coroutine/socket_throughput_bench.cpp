@@ -9,6 +9,7 @@
 
 #include "benchmarks.hpp"
 #include "../socket_utils.hpp"
+#include "../../common/slice_tiers.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -40,7 +41,6 @@ bench_throughput(bench::state& state)
     std::vector<char> read_buf(chunk_size);
 
     std::atomic<bool> running{true};
-    int64_t total_bytes = 0;
 
     auto write_task = [&]() -> asio::awaitable<void, executor_type> {
         try
@@ -67,7 +67,7 @@ bench_throughput(bench::state& state)
                     asio::deferred);
                 if (n == 0)
                     break;
-                total_bytes += static_cast<int64_t>(n);
+                state.add_bytes(static_cast<int64_t>(n));
             }
         }
         catch (std::exception const&)
@@ -90,7 +90,6 @@ bench_throughput(bench::state& state)
     timer.join();
 
     state.set_elapsed(sw.elapsed_seconds());
-    state.add_bytes(total_bytes);
     writer.close();
     reader.close();
 }
@@ -108,8 +107,6 @@ bench_bidirectional_throughput(bench::state& state)
     std::vector<char> buf2(chunk_size, 'b');
 
     std::atomic<bool> running{true};
-    int64_t read1_bytes = 0;
-    int64_t read2_bytes = 0;
 
     auto write1_task = [&]() -> asio::awaitable<void, executor_type> {
         try
@@ -136,7 +133,7 @@ bench_bidirectional_throughput(bench::state& state)
                     asio::buffer(rbuf.data(), rbuf.size()), asio::deferred);
                 if (n == 0)
                     break;
-                read1_bytes += static_cast<int64_t>(n);
+                state.add_bytes(static_cast<int64_t>(n));
             }
         }
         catch (std::exception const&)
@@ -169,7 +166,7 @@ bench_bidirectional_throughput(bench::state& state)
                     asio::buffer(rbuf.data(), rbuf.size()), asio::deferred);
                 if (n == 0)
                     break;
-                read2_bytes += static_cast<int64_t>(n);
+                state.add_bytes(static_cast<int64_t>(n));
             }
         }
         catch (std::exception const&)
@@ -194,7 +191,6 @@ bench_bidirectional_throughput(bench::state& state)
     timer.join();
 
     state.set_elapsed(sw.elapsed_seconds());
-    state.add_bytes(read1_bytes + read2_bytes);
     sock1.close();
     sock2.close();
 }
@@ -212,7 +208,6 @@ bench_throughput_lockless(bench::state& state)
     std::vector<char> read_buf(chunk_size);
 
     std::atomic<bool> running{true};
-    int64_t total_bytes = 0;
 
     auto write_task = [&]() -> asio::awaitable<void, executor_type> {
         try
@@ -239,7 +234,7 @@ bench_throughput_lockless(bench::state& state)
                     asio::deferred);
                 if (n == 0)
                     break;
-                total_bytes += static_cast<int64_t>(n);
+                state.add_bytes(static_cast<int64_t>(n));
             }
         }
         catch (std::exception const&)
@@ -262,7 +257,6 @@ bench_throughput_lockless(bench::state& state)
     timer.join();
 
     state.set_elapsed(sw.elapsed_seconds());
-    state.add_bytes(total_bytes);
     writer.close();
     reader.close();
 }
@@ -280,8 +274,6 @@ bench_bidirectional_throughput_lockless(bench::state& state)
     std::vector<char> buf2(chunk_size, 'b');
 
     std::atomic<bool> running{true};
-    int64_t read1_bytes = 0;
-    int64_t read2_bytes = 0;
 
     auto write1_task = [&]() -> asio::awaitable<void, executor_type> {
         try
@@ -308,7 +300,7 @@ bench_bidirectional_throughput_lockless(bench::state& state)
                     asio::buffer(rbuf.data(), rbuf.size()), asio::deferred);
                 if (n == 0)
                     break;
-                read1_bytes += static_cast<int64_t>(n);
+                state.add_bytes(static_cast<int64_t>(n));
             }
         }
         catch (std::exception const&)
@@ -341,7 +333,7 @@ bench_bidirectional_throughput_lockless(bench::state& state)
                     asio::buffer(rbuf.data(), rbuf.size()), asio::deferred);
                 if (n == 0)
                     break;
-                read2_bytes += static_cast<int64_t>(n);
+                state.add_bytes(static_cast<int64_t>(n));
             }
         }
         catch (std::exception const&)
@@ -366,7 +358,6 @@ bench_bidirectional_throughput_lockless(bench::state& state)
     timer.join();
 
     state.set_elapsed(sw.elapsed_seconds());
-    state.add_bytes(read1_bytes + read2_bytes);
     sock1.close();
     sock2.close();
 }
@@ -504,7 +495,7 @@ bench::benchmark_suite
 make_socket_throughput_suite()
 {
     using F = bench::bench_flags;
-    return bench::benchmark_suite("socket_throughput", F::needs_conntrack_drain)
+    auto s = bench::benchmark_suite("socket_throughput", F::needs_conntrack_drain)
         .add("unidirectional", bench_throughput)
             .range(1024, 1048576, 4)
         .add("unidirectional_lockless", bench_throughput_lockless)
@@ -515,6 +506,8 @@ make_socket_throughput_suite()
             .range(1024, 1048576, 4)
         .add("multithread", bench_multithread_throughput)
             .args({2, 4, 8});
+    bench::apply_socket_throughput_tiers(s);
+    return s;
 }
 
 } // namespace asio_bench

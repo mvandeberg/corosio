@@ -32,6 +32,12 @@ enum class bench_flags : unsigned
     none                  = 0,
     needs_conntrack_drain = 1u << 0,
     is_microbenchmark     = 1u << 1,
+    // Benchmark accumulates into local counters and publishes once at
+    // the end (e.g. via state.add_items(counter) in a final call).
+    // Adaptive warmup must skip these because a mid-run reset of state
+    // would be lost when the benchmark overwrites with the full count.
+    // Default: unset (benchmark streams into state during the run).
+    local_counters        = 1u << 2,
 };
 
 inline bench_flags
@@ -102,7 +108,7 @@ class state
     std::atomic<bool> running_{true};
     std::atomic<int64_t> ops_{0};
     std::atomic<int64_t> bytes_{0};
-    int64_t items_  = 0;
+    std::atomic<int64_t> items_{0};
     double elapsed_ = 0.0;
     perf::statistics latency_stats_;
     std::mutex latency_mutex_;
@@ -190,10 +196,10 @@ public:
         bytes_.fetch_add(n, std::memory_order_relaxed);
     }
 
-    /// Accumulate items for rate reporting.
+    /// Accumulate items for rate reporting (thread-safe).
     void add_items(int64_t n)
     {
-        items_ += n;
+        items_.fetch_add(n, std::memory_order_relaxed);
     }
 
     /// Return the i-th range parameter.
@@ -254,7 +260,22 @@ public:
     /// Return total items accumulated.
     int64_t total_items() const
     {
-        return items_;
+        return items_.load(std::memory_order_relaxed);
+    }
+
+    /** Atomically reset counters mid-run.
+
+        Used by the adaptive runner to discard warmup-phase work:
+        after the warmup period, the harness resets counters so the
+        remainder of the slice measures steady-state performance.
+    */
+    void reset_counters()
+    {
+        ops_.store(0, std::memory_order_relaxed);
+        bytes_.store(0, std::memory_order_relaxed);
+        items_.store(0, std::memory_order_relaxed);
+        std::lock_guard lk(latency_mutex_);
+        latency_stats_.clear();
     }
 };
 
@@ -265,6 +286,10 @@ struct suite_entry
     std::function<void(state&)> fn;
     bench_flags flags = bench_flags::none;
     std::vector<int64_t> args;
+    double slice_duration_s = 0.0; // 0 = use global default
+    // Per-argument overrides for parametrized benchmarks.  Keys are
+    // argument values; values override slice_duration_s for that arg.
+    std::unordered_map<int64_t, double> arg_slice_duration_s;
 };
 
 /** Group of related benchmarks sharing a category name. */
@@ -302,6 +327,49 @@ public:
         return *this;
     }
 
+    /// Set the adaptive slice duration for the most recently added
+    /// benchmark (0 = use global default).
+    benchmark_suite& slice_duration(double seconds)
+    {
+        if (!entries_.empty())
+            entries_.back().slice_duration_s = seconds;
+        return *this;
+    }
+
+    /// Override the slice duration for a specific argument value of
+    /// the most recently added parametrized benchmark.  Takes priority
+    /// over the entry-wide slice_duration().
+    benchmark_suite& slice_duration_for(int64_t arg, double seconds)
+    {
+        if (!entries_.empty())
+            entries_.back().arg_slice_duration_s[arg] = seconds;
+        return *this;
+    }
+
+    /// Set the slice duration on the entry matching `name`.
+    /// No-op if no entry matches (allows the same helper to target
+    /// libraries whose suites don't contain every entry).
+    benchmark_suite&
+    set_entry_slice_duration(std::string_view name, double seconds)
+    {
+        for (auto& e : entries_)
+            if (e.name == name)
+                e.slice_duration_s = seconds;
+        return *this;
+    }
+
+    /// Set the per-argument slice duration override on the entry
+    /// matching `name`. No-op if no entry matches.
+    benchmark_suite&
+    set_entry_slice_duration_for(
+        std::string_view name, int64_t arg, double seconds)
+    {
+        for (auto& e : entries_)
+            if (e.name == name)
+                e.arg_slice_duration_s[arg] = seconds;
+        return *this;
+    }
+
     /// Generate a range of argument values for the most recently
     /// added benchmark: lo, lo*mul, lo*mul*mul, ... up to hi.
     benchmark_suite& range(int64_t lo, int64_t hi, int64_t mul)
@@ -323,12 +391,23 @@ public:
     std::vector<suite_entry> const& entries() const { return entries_; }
 };
 
+} // namespace bench (reopened below after adaptive.hpp include)
+
+// adaptive.hpp depends on bench::state, bench::bench_flags, and
+// bench::benchmark_result which are all defined above. It is included
+// here (not at the top) to break the header cycle.
+#include "adaptive.hpp"
+
+namespace bench {
+
 /** Orchestrate benchmark execution, output, and result collection. */
 class benchmark_runner
 {
     std::string backend_;
     double duration_s_;
     double warmup_duration_s_ = 0.0;
+    bool adaptive_mode_ = false;
+    adaptive_config adaptive_cfg_;
     std::vector<benchmark_suite> suites_;
     result_collector collector_;
 
@@ -361,6 +440,17 @@ public:
     }
 
     double warmup_duration() const { return warmup_duration_s_; }
+
+    /** Enable adaptive convergence mode. */
+    void set_adaptive(adaptive_config cfg)
+    {
+        adaptive_mode_ = true;
+        adaptive_cfg_ = cfg;
+        collector_.set_adaptive(true);
+    }
+
+    bool adaptive_mode() const { return adaptive_mode_; }
+    adaptive_config const& adaptive_cfg() const { return adaptive_cfg_; }
 
     /// Add a suite to the runner.
     void add_suite(benchmark_suite suite)
@@ -414,6 +504,13 @@ public:
         char const* bench_filter,
         bool enable_microbenchmarks)
     {
+        if (adaptive_mode_)
+        {
+            run_adaptive(
+                category_filter, bench_filter, enable_microbenchmarks);
+            return;
+        }
+
         bool run_all_cats = !category_filter ||
             std::strcmp(category_filter, "all") == 0;
 
@@ -481,6 +578,97 @@ public:
     }
 
 private:
+    void run_adaptive(
+        char const* category_filter,
+        char const* bench_filter,
+        bool enable_microbenchmarks)
+    {
+        bool run_all_cats = !category_filter ||
+            std::strcmp(category_filter, "all") == 0;
+
+        auto want_bench = [&](std::string const& name) {
+            if (!bench_filter || std::strcmp(bench_filter, "all") == 0)
+                return true;
+            return name.compare(
+                0, std::strlen(bench_filter), bench_filter) == 0;
+        };
+
+        // Build bench_slot list from suites (same filtering as run())
+        std::vector<bench_slot> slots;
+
+        for (auto const& suite : suites_)
+        {
+            bool explicit_cat = category_filter &&
+                std::strcmp(category_filter, suite.category().c_str()) == 0;
+
+            if (!run_all_cats && !explicit_cat)
+                continue;
+
+            if (has_flag(suite.flags(), bench_flags::is_microbenchmark) &&
+                !explicit_cat && !enable_microbenchmarks)
+                continue;
+
+            bool suite_drain =
+                has_flag(suite.flags(), bench_flags::needs_conntrack_drain);
+            bool suite_local_counters =
+                has_flag(suite.flags(), bench_flags::local_counters);
+
+            for (auto const& entry : suite.entries())
+            {
+                bool entry_drain = suite_drain ||
+                    has_flag(entry.flags, bench_flags::needs_conntrack_drain);
+                bool entry_local_counters = suite_local_counters ||
+                    has_flag(entry.flags, bench_flags::local_counters);
+
+                if (entry.args.empty())
+                {
+                    if (!want_bench(entry.name))
+                        continue;
+
+                    bench_slot slot;
+                    slot.library     = suite.library();
+                    slot.category    = suite.category();
+                    slot.name        = entry.name;
+                    slot.fn          = entry.fn;
+                    slot.needs_drain      = entry_drain;
+                    slot.local_counters   = entry_local_counters;
+                    slot.slice_duration_s = entry.slice_duration_s;
+                    slots.push_back(std::move(slot));
+                }
+                else
+                {
+                    for (auto v : entry.args)
+                    {
+                        std::string full_name =
+                            entry.name + "/" + std::to_string(v);
+                        if (!want_bench(entry.name) &&
+                            !want_bench(full_name))
+                            continue;
+
+                        double arg_slice = entry.slice_duration_s;
+                        auto it = entry.arg_slice_duration_s.find(v);
+                        if (it != entry.arg_slice_duration_s.end())
+                            arg_slice = it->second;
+
+                        bench_slot slot;
+                        slot.library          = suite.library();
+                        slot.category         = suite.category();
+                        slot.name             = full_name;
+                        slot.fn               = entry.fn;
+                        slot.ranges           = {v};
+                        slot.needs_drain      = entry_drain;
+                        slot.local_counters   = entry_local_counters;
+                        slot.slice_duration_s = arg_slice;
+                        slots.push_back(std::move(slot));
+                    }
+                }
+            }
+        }
+
+        adaptive_runner runner(adaptive_cfg_, slots, collector_);
+        runner.run();
+    }
+
     void run_entry(
         std::string const& library,
         std::string const& category,

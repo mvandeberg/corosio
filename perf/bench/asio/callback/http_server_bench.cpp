@@ -9,6 +9,7 @@
 
 #include "benchmarks.hpp"
 #include "../socket_utils.hpp"
+#include "../../common/slice_tiers.hpp"
 
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/read.hpp>
@@ -337,13 +338,15 @@ bench::benchmark_suite
 make_http_server_suite()
 {
     using F = bench::bench_flags;
-    return bench::benchmark_suite("http_server", F::needs_conntrack_drain)
+    auto s = bench::benchmark_suite("http_server", F::needs_conntrack_drain)
         .add("single_conn", bench_single_connection)
         .add("single_conn_lockless", bench_single_connection_lockless)
         .add("concurrent", bench_concurrent_connections)
             .args({1, 4, 16, 32})
         .add("multithread", bench_multithread)
             .args({1, 2, 4, 8, 16});
+    bench::apply_http_server_tiers(s);
+    return s;
 }
 
 } // namespace asio_callback_bench

@@ -48,6 +48,28 @@ print_usage(char const* program_name)
     std::cout << "  --enable-microbenchmarks\n";
     std::cout
         << "                      Include microbenchmarks in 'all' runs\n";
+    std::cout << "  --adaptive          Enable adaptive convergence mode\n";
+    std::cout << "  --precision <pct>   Target CI width as %% of p33 "
+                 "(default: 1.0)\n";
+    std::cout << "  --max-time <secs>   Per-benchmark time cap in seconds "
+                 "(default: 60)\n";
+    std::cout << "  --min-samples <n>   Min samples before convergence check "
+                 "(default: 10)\n";
+    std::cout << "  --slice-duration <secs>\n";
+    std::cout
+        << "                      Duration per sample in seconds "
+           "(default: 0.1)\n";
+    std::cout << "  --warmup-ratio <frac>\n";
+    std::cout
+        << "                      Fraction of each slice treated as warmup "
+           "(default: 0.25).\n"
+           "                      At the warmup/measurement boundary the "
+           "harness resets\n"
+           "                      counters so only steady-state work is "
+           "measured.\n"
+           "                      Only applies to slices >= 1s; short "
+           "slices skip warmup.\n"
+           "                      Pass 0 to disable.\n";
     std::cout << "  --list              List available benchmarks\n";
     std::cout << "  --help              Show this help message\n";
     std::cout << "\n";
@@ -130,6 +152,12 @@ main(int argc, char* argv[])
     double warmup_duration_s    = 0.0;
     bool enable_microbenchmark  = false;
     bool list_mode              = false;
+    bool adaptive_mode          = false;
+    double precision_pct        = 1.0;
+    double max_time_s           = 60.0;
+    int    min_samples          = 10;
+    double slice_duration_s     = 0.1;
+    double warmup_ratio         = 0.25;
 
     for (int i = 1; i < argc; ++i)
     {
@@ -231,6 +259,95 @@ main(int argc, char* argv[])
         {
             enable_microbenchmark = true;
         }
+        else if (std::strcmp(argv[i], "--adaptive") == 0)
+        {
+            adaptive_mode = true;
+        }
+        else if (std::strcmp(argv[i], "--precision") == 0)
+        {
+            if (i + 1 < argc)
+            {
+                precision_pct = std::atof(argv[++i]);
+                if (precision_pct <= 0.0)
+                {
+                    std::cerr << "Error: --precision must be positive\n";
+                    return 1;
+                }
+            }
+            else
+            {
+                std::cerr << "Error: --precision requires an argument\n";
+                return 1;
+            }
+        }
+        else if (std::strcmp(argv[i], "--max-time") == 0)
+        {
+            if (i + 1 < argc)
+            {
+                max_time_s = std::atof(argv[++i]);
+                if (max_time_s <= 0.0)
+                {
+                    std::cerr << "Error: --max-time must be positive\n";
+                    return 1;
+                }
+            }
+            else
+            {
+                std::cerr << "Error: --max-time requires an argument\n";
+                return 1;
+            }
+        }
+        else if (std::strcmp(argv[i], "--min-samples") == 0)
+        {
+            if (i + 1 < argc)
+            {
+                min_samples = std::atoi(argv[++i]);
+                if (min_samples < 3)
+                {
+                    std::cerr << "Error: --min-samples must be >= 3\n";
+                    return 1;
+                }
+            }
+            else
+            {
+                std::cerr << "Error: --min-samples requires an argument\n";
+                return 1;
+            }
+        }
+        else if (std::strcmp(argv[i], "--warmup-ratio") == 0)
+        {
+            if (i + 1 < argc)
+            {
+                warmup_ratio = std::atof(argv[++i]);
+                if (warmup_ratio < 0.0 || warmup_ratio >= 1.0)
+                {
+                    std::cerr << "Error: --warmup-ratio must be in [0, 1)\n";
+                    return 1;
+                }
+            }
+            else
+            {
+                std::cerr << "Error: --warmup-ratio requires an argument\n";
+                return 1;
+            }
+        }
+        else if (std::strcmp(argv[i], "--slice-duration") == 0)
+        {
+            if (i + 1 < argc)
+            {
+                slice_duration_s = std::atof(argv[++i]);
+                if (slice_duration_s <= 0.0)
+                {
+                    std::cerr << "Error: --slice-duration must be positive\n";
+                    return 1;
+                }
+            }
+            else
+            {
+                std::cerr << "Error: --slice-duration requires an argument\n";
+                return 1;
+            }
+        }
         else if (std::strcmp(argv[i], "--list") == 0)
         {
             list_mode = true;
@@ -283,6 +400,17 @@ main(int argc, char* argv[])
             bench::benchmark_runner runner(name, duration_s);
             runner.set_warmup_duration(warmup_duration_s);
 
+            if (adaptive_mode)
+            {
+                bench::adaptive_config cfg;
+                cfg.precision_pct    = precision_pct;
+                cfg.max_time_s       = max_time_s;
+                cfg.min_samples      = min_samples;
+                cfg.slice_duration_s = slice_duration_s;
+                cfg.warmup_ratio     = warmup_ratio;
+                runner.set_adaptive(cfg);
+            }
+
             if (want_corosio)
                 add_corosio_suites(runner, BackendTag{});
 
@@ -304,12 +432,32 @@ main(int argc, char* argv[])
                 std::cout << "Boost.Corosio Benchmarks\n";
                 std::cout << "========================\n";
                 std::cout << "Backend: " << name << "\n";
-                std::cout << "Duration: " << duration_s
-                          << "s per benchmark\n";
-                std::cout << "Warmup: " << warmup_duration_s
-                          << "s per benchmark"
-                          << (warmup_duration_s <= 0.0 ? " (disabled)" : "")
-                          << "\n";
+                if (adaptive_mode)
+                {
+                    auto const& cfg = runner.adaptive_cfg();
+                    std::cout << "Mode: adaptive convergence\n";
+                    std::cout << "Slice duration: " << cfg.slice_duration_s
+                              << "s per sample\n";
+                    std::cout << "Precision target: " << cfg.precision_pct
+                              << "% CI on p33\n";
+                    std::cout << "Min samples: " << cfg.min_samples << "\n";
+                    std::cout << "Max time: " << cfg.max_time_s
+                              << "s per benchmark\n";
+                    if (cfg.warmup_ratio > 0.0)
+                        std::cout << "Warmup ratio: " << cfg.warmup_ratio
+                                  << " (counters reset at "
+                                  << (cfg.warmup_ratio * 100.0)
+                                  << "% of each slice)\n";
+                }
+                else
+                {
+                    std::cout << "Duration: " << duration_s
+                              << "s per benchmark\n";
+                    std::cout << "Warmup: " << warmup_duration_s
+                              << "s per benchmark"
+                              << (warmup_duration_s <= 0.0 ? " (disabled)" : "")
+                              << "\n";
+                }
             }
 
             runner.run(category_filter, bench_filter, enable_microbenchmark);

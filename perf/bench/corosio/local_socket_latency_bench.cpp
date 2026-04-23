@@ -10,6 +10,7 @@
 #include "benchmarks.hpp"
 #include <boost/corosio/detail/platform.hpp>
 #include "../../common/native_includes.hpp"
+#include "../common/slice_tiers.hpp"
 
 #if BOOST_COROSIO_POSIX
 
@@ -232,7 +233,7 @@ make_local_socket_latency_suite()
 {
     using F = bench::bench_flags;
 
-    return bench::benchmark_suite("local_socket_latency", F::none)
+    auto s = bench::benchmark_suite("local_socket_latency", F::none)
         .add("pingpong", bench_unix_pingpong_latency<Backend>)
             .args({1, 64, 1024})
         .add("pingpong_lockless", bench_unix_pingpong_latency_lockless<Backend>)
@@ -241,6 +242,8 @@ make_local_socket_latency_suite()
             .args({1, 4, 16})
         .add("concurrent_lockless", bench_unix_concurrent_latency_lockless<Backend>)
             .args({1, 4, 16});
+    bench::apply_local_socket_latency_tiers(s);
+    return s;
 }
 
 } // namespace corosio_bench
