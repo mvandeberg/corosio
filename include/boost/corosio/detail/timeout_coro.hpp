@@ -14,8 +14,10 @@
 #include <boost/capy/ex/frame_allocator.hpp>
 #include <boost/capy/ex/io_awaitable_promise_base.hpp>
 #include <boost/capy/ex/io_env.hpp>
+#include <boost/capy/ex/recycling_memory_resource.hpp>
 
 #include <coroutine>
+#include <cstddef>
 #include <stop_token>
 #include <type_traits>
 #include <utility>
@@ -60,6 +62,33 @@ struct timeout_coro
         {
             env_storage_ = std::move(env);
             set_environment(&env_storage_);
+        }
+
+        // Allocate the frame from the global recycling memory resource
+        // rather than the TLS frame allocator. A timeout_coro can outlive
+        // its parent (cancel_at_awaitable completes inner-first and leaves
+        // the timeout coroutine pending until the timer service processes
+        // its cancellation). The parent's frame allocator is a
+        // frame_memory_resource living inside the parent's run_async
+        // trampoline — if the parent dies first, that resource is
+        // destroyed and later deallocation of the timeout frame UAFs it.
+        // The global recycling resource has program lifetime.
+        static void* operator new(std::size_t size)
+        {
+            static auto* const mr =
+                capy::get_recycling_memory_resource();
+            auto total = size + sizeof(std::pmr::memory_resource*);
+            void* raw  = mr->allocate(total, alignof(std::max_align_t));
+            std::memcpy(static_cast<char*>(raw) + size, &mr, sizeof(mr));
+            return raw;
+        }
+
+        static void operator delete(void* ptr, std::size_t size) noexcept
+        {
+            std::pmr::memory_resource* mr;
+            std::memcpy(&mr, static_cast<char*>(ptr) + size, sizeof(mr));
+            auto total = size + sizeof(std::pmr::memory_resource*);
+            mr->deallocate(ptr, total, alignof(std::max_align_t));
         }
 
         timeout_coro get_return_object() noexcept

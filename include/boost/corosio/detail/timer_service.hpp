@@ -13,6 +13,7 @@
 
 #include <boost/corosio/timer.hpp>
 #include <boost/corosio/io_context.hpp>
+#include <boost/corosio/detail/continuation_op.hpp>
 #include <boost/corosio/detail/scheduler_op.hpp>
 #include <boost/corosio/detail/intrusive.hpp>
 #include <boost/corosio/detail/thread_local_ptr.hpp>
@@ -805,13 +806,21 @@ waiter_node::completion_op::operator()()
         *w->ec_out_ = w->ec_value_;
 
     auto* cont  = w->cont_;
-    auto d      = w->d_;
     auto* svc   = w->svc_;
     auto& sched = svc->get_scheduler();
 
     svc->destroy_waiter(w);
 
-    d.post(*cont);
+    // Post through the scheduler directly rather than the stored
+    // executor_ref. The stored executor_ref points into a caller's
+    // execution context; for fire-and-forget child coroutines such as
+    // cancel_at_awaitable's timeout_coro, the caller's trampoline can
+    // be destroyed before this completion runs. The scheduler is owned
+    // by the io_context and outlives any executor_type instance.
+    if (auto* op = continuation_op::try_from_continuation(*cont))
+        sched.post(op);
+    else
+        sched.post(cont->h);
     sched.work_finished();
 }
 

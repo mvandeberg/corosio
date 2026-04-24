@@ -294,6 +294,57 @@ struct cancel_test
         BOOST_TEST(result_ec == capy::cond::canceled);
     }
 
+    // Regression: a short-lived task uses cancel_after on a timer,
+    // completes, and its run_async trampoline is destroyed. Before the
+    // fix, the timer's posted cancellation completion held a stored
+    // executor_ref and a timeout_coro frame that both pointed into that
+    // destroyed trampoline.
+    //
+    // The fix (1) posts through the scheduler directly from the timer's
+    // completion_op and (2) allocates the timeout_coro frame from the
+    // global recycling memory resource. ASAN detects either UAF if the
+    // bug regresses.
+    //
+    // This uses timer-on-timer (no sockets) so the test can run many
+    // short tasks without needing a live io_context from inside each.
+    // The inner timer is already expired when the task awaits, so the
+    // inner completes first and request_stop() fires on the outer timer.
+    void testCancelAfterOutlivesParent()
+    {
+        io_context ioc(Backend);
+
+        constexpr int num_iterations = 64;
+        int completed = 0;
+
+        auto short_task = [&]() -> capy::task<> {
+            timer inner(ioc);
+            timer outer(ioc);
+            inner.expires_after(std::chrono::milliseconds(0));
+            auto [ec] = co_await cancel_after(
+                inner.wait(), outer, std::chrono::seconds(30));
+            if (!ec)
+                ++completed;
+            // Task ends here — trampoline deallocates. The outer timer's
+            // posted cancellation completion_op may still be in flight.
+        };
+
+        auto driver = [&]() -> capy::task<> {
+            for (int i = 0; i < num_iterations; ++i)
+            {
+                capy::run_async(ioc.get_executor())(short_task());
+                // Yield so spawned tasks get scheduled and completed
+                // between iterations, exercising the outlive path.
+                timer yield(ioc);
+                yield.expires_after(std::chrono::microseconds(0));
+                (void)co_await yield.wait();
+            }
+        };
+
+        capy::run_async(ioc.get_executor())(driver());
+        ioc.run();
+        BOOST_TEST_EQ(completed, num_iterations);
+    }
+
     void run()
     {
         testTimeoutFires();
@@ -306,6 +357,7 @@ struct cancel_test
         testConvenienceTimeoutFires();
         testConvenienceInnerCompletesFirst();
         testConvenienceCancelAt();
+        testCancelAfterOutlivesParent();
     }
 };
 
