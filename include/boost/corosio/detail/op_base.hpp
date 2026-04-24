@@ -59,8 +59,16 @@ public:
         -> std::coroutine_handle<>
     {
         token_ = env->stop_token;
-        return static_cast<Derived const*>(this)->dispatch(
+        auto next = static_cast<Derived const*>(this)->dispatch(
             h, env->executor);
+        // Clear token_ so await_resume reads ec_ (authoritative for
+        // cancellation) rather than a stale stop_token that may be
+        // requested by cancel_at_awaitable after the op has already
+        // completed successfully. The backend installs its own
+        // stop_callback on a copy of the token before dispatch
+        // returns, so dropping our copy does not affect cancellation.
+        token_ = {};
+        return next;
     }
 };
 
@@ -101,8 +109,11 @@ public:
         -> std::coroutine_handle<>
     {
         token_ = env->stop_token;
-        return static_cast<Derived const*>(this)->dispatch(
+        auto next = static_cast<Derived const*>(this)->dispatch(
             h, env->executor);
+        // See bytes_op_base::await_suspend for rationale.
+        token_ = {};
+        return next;
     }
 };
 
