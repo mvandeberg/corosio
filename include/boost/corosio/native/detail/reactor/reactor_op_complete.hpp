@@ -109,16 +109,8 @@ complete_connect_op(Op& op)
 
     if (success && op.socket_impl_)
     {
-        using ep_type = decltype(op.target_endpoint);
-        ep_type local_ep;
-        sockaddr_storage local_storage{};
-        socklen_t local_len = sizeof(local_storage);
-        if (::getsockname(
-                op.fd, reinterpret_cast<sockaddr*>(&local_storage),
-                &local_len) == 0)
-            local_ep =
-                from_sockaddr_as(local_storage, local_len, ep_type{});
-        op.socket_impl_->set_endpoints(local_ep, op.target_endpoint);
+        op.socket_impl_->set_remote_endpoint(op.target_endpoint);
+        op.socket_impl_->mark_local_endpoint_pending();
     }
 
     if (op.cancelled.load(std::memory_order_acquire))
@@ -177,6 +169,7 @@ setup_accepted_socket(
         impl.desc_state_.connect_op = nullptr;
     }
     socket_svc->scheduler().register_descriptor(accepted_fd, &impl.desc_state_);
+    impl.set_family(acceptor_impl->family());
 
     using ep_type = decltype(acceptor_impl->local_endpoint());
     impl.set_endpoints(

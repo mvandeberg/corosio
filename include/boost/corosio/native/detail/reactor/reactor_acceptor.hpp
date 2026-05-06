@@ -66,6 +66,7 @@ protected:
 protected:
     Service& svc_;
     int fd_ = -1;
+    int family_ = 0; // AF_UNSPEC; cached at open time to avoid getsockname per accepted child
     Endpoint local_endpoint_;
 
 public:
@@ -124,6 +125,19 @@ public:
     void set_local_endpoint(Endpoint ep) noexcept
     {
         local_endpoint_ = std::move(ep);
+    }
+
+    /// Cache the address family. Set at open time so accepted-socket setup
+    /// can copy it without an extra getsockname.
+    void set_family(int family) noexcept
+    {
+        family_ = family;
+    }
+
+    /// Return the cached address family.
+    int family() const noexcept
+    {
+        return family_;
     }
 
     /// Assign the fd and initialize descriptor state for the acceptor.

@@ -174,8 +174,15 @@ public:
     /// Cache local and remote endpoints.
     void set_endpoints(Endpoint local, Endpoint remote) noexcept
     {
-        this->local_endpoint_ = std::move(local);
-        remote_endpoint_      = std::move(remote);
+        this->local_endpoint_         = std::move(local);
+        this->local_endpoint_pending_ = false;
+        remote_endpoint_              = std::move(remote);
+    }
+
+    /// Cache only the remote endpoint; local is fetched lazily on first query.
+    void set_remote_endpoint(Endpoint remote) noexcept
+    {
+        remote_endpoint_ = std::move(remote);
     }
 
     /** Shared connect dispatch.
@@ -295,20 +302,14 @@ reactor_stream_socket<Derived, Service, ConnOp, ReadOp, WriteOp, DescState, Impl
     auto& op = conn_;
 
     sockaddr_storage storage{};
-    socklen_t addrlen = to_sockaddr(ep, socket_family(this->fd_), storage);
+    socklen_t addrlen = to_sockaddr(ep, this->family_, storage);
     int result =
         ::connect(this->fd_, reinterpret_cast<sockaddr*>(&storage), addrlen);
 
     if (result == 0)
     {
-        sockaddr_storage local_storage{};
-        socklen_t local_len = sizeof(local_storage);
-        if (::getsockname(
-                this->fd_, reinterpret_cast<sockaddr*>(&local_storage),
-                &local_len) == 0)
-            this->local_endpoint_ =
-                from_sockaddr_as(local_storage, local_len, Endpoint{});
         remote_endpoint_ = ep;
+        this->local_endpoint_pending_ = true;
     }
 
     if (result == 0 || errno != EINPROGRESS)

@@ -68,7 +68,12 @@ class reactor_basic_socket
 protected:
     Service& svc_;
     int fd_ = -1;
-    Endpoint local_endpoint_;
+    int family_ = 0; // AF_UNSPEC; cached at open/accept/assign to avoid getsockname per op
+    mutable Endpoint local_endpoint_;
+    // True only after a successful connect: tells local_endpoint() to lazily
+    // fetch via getsockname. Bind/accept populate local_endpoint_ eagerly so
+    // they leave this false. After lazy fetch, this flips back to false.
+    mutable bool local_endpoint_pending_ = false;
 
 public:
     /// Per-descriptor state for persistent reactor registration.
@@ -82,9 +87,23 @@ public:
         return fd_;
     }
 
-    /// Return the cached local endpoint.
+    /// Return the local endpoint. After a successful connect the OS-assigned
+    /// source endpoint is fetched lazily on first call; bind/accept populate
+    /// the cache eagerly so no syscall is made.
     Endpoint local_endpoint() const noexcept override
     {
+        if (local_endpoint_pending_ && fd_ >= 0)
+        {
+            sockaddr_storage storage{};
+            socklen_t len = sizeof(storage);
+            if (::getsockname(
+                    fd_, reinterpret_cast<sockaddr*>(&storage), &len) == 0)
+            {
+                local_endpoint_ =
+                    from_sockaddr_as(storage, len, Endpoint{});
+            }
+            local_endpoint_pending_ = false;
+        }
         return local_endpoint_;
     }
 
@@ -129,6 +148,27 @@ public:
     void set_local_endpoint(Endpoint ep) noexcept
     {
         local_endpoint_ = ep;
+        local_endpoint_pending_ = false;
+    }
+
+    /// Mark the local endpoint as needing a lazy getsockname fetch.
+    /// Called after a successful connect, where the OS-assigned source
+    /// endpoint is only worth resolving if the user actually queries it.
+    void mark_local_endpoint_pending() noexcept
+    {
+        local_endpoint_pending_ = true;
+    }
+
+    /// Cache the address family. Set at open/accept/assign time.
+    void set_family(int family) noexcept
+    {
+        family_ = family;
+    }
+
+    /// Return the cached address family.
+    int family() const noexcept
+    {
+        return family_;
     }
 
     /** Bind the socket to a local endpoint.
@@ -142,7 +182,7 @@ public:
     std::error_code do_bind(Endpoint const& ep) noexcept
     {
         sockaddr_storage storage{};
-        socklen_t addrlen = to_sockaddr(ep, socket_family(fd_), storage);
+        socklen_t addrlen = to_sockaddr(ep, family_, storage);
         if (::bind(fd_, reinterpret_cast<sockaddr*>(&storage), addrlen) != 0)
             return make_err(errno);
 
@@ -417,6 +457,7 @@ reactor_basic_socket<Derived, ImplBase, Service, DescState, Endpoint>::
     desc_state_.registered_events = 0;
 
     local_endpoint_ = Endpoint{};
+    local_endpoint_pending_ = false;
 }
 
 template<class Derived, class ImplBase, class Service, class DescState, class Endpoint>
@@ -482,6 +523,7 @@ reactor_basic_socket<Derived, ImplBase, Service, DescState, Endpoint>::
     desc_state_.registered_events = 0;
 
     local_endpoint_ = Endpoint{};
+    local_endpoint_pending_ = false;
 
     return released;
 }

@@ -67,6 +67,7 @@ do_open_socket(
     }
 
     socket_impl->init_and_register(fd);
+    socket_impl->set_family(family);
     return {};
 }
 
@@ -108,6 +109,7 @@ do_assign_fd(
         return ec;
 
     socket_impl->init_and_register(fd);
+    socket_impl->set_family(AF_UNIX);
 
     // Best-effort: refresh endpoint caches.
     using endpoint_type = std::remove_cvref_t<
@@ -156,6 +158,7 @@ do_open_acceptor(
     }
 
     acc_impl->init_acceptor_fd(fd);
+    acc_impl->set_family(family);
     return {};
 }
 
