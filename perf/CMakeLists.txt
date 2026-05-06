@@ -23,6 +23,9 @@ endif()
 # Corosio benchmarks
 add_subdirectory(bench)
 
+# Server/client throughput benchmarks (one binary pair per implementation)
+add_subdirectory(throughput)
+
 # Profiler workloads (LTO disabled for call stack visibility)
 add_subdirectory(profile)
 
