@@ -17,6 +17,7 @@
 #include <boost/corosio/local_stream_acceptor.hpp>
 #include <boost/corosio/local_endpoint.hpp>
 #include <boost/corosio/local_socket_pair.hpp>
+#include <boost/corosio/test/temp_path.hpp>
 #include <boost/capy/buffers.hpp>
 #include <boost/capy/read.hpp>
 #include <boost/capy/write.hpp>
@@ -32,8 +33,6 @@
 #include <sstream>
 #include <string>
 
-#include <unistd.h>
-
 #include "context.hpp"
 #include "test_suite.hpp"
 
@@ -43,29 +42,6 @@ namespace boost::corosio {
 
 static_assert(capy::ReadStream<local_stream_socket>);
 static_assert(capy::WriteStream<local_stream_socket>);
-
-namespace {
-
-std::string
-make_temp_socket_path()
-{
-    char tmpl[] = "/tmp/corosio_test_XXXXXX";
-    if (!::mkdtemp(tmpl))
-        throw std::runtime_error("mkdtemp failed");
-    std::string path(tmpl);
-    path += "/sock";
-    return path;
-}
-
-void
-cleanup_path(std::string const& path)
-{
-    ::unlink(path.c_str());
-    auto dir = path.substr(0, path.rfind('/'));
-    ::rmdir(dir.c_str());
-}
-
-} // namespace
 
 template<auto Backend>
 struct local_stream_socket_test
@@ -105,7 +81,8 @@ struct local_stream_socket_test
     {
         io_context ioc(Backend);
         auto ex   = ioc.get_executor();
-        auto path = make_temp_socket_path();
+        test::temp_socket_dir tmp;
+        auto path = tmp.path();
 
         local_stream_acceptor acc(ioc);
         acc.open();
@@ -140,7 +117,6 @@ struct local_stream_socket_test
         ioc.run();
         ioc.restart();
 
-        cleanup_path(path);
 
         BOOST_TEST_EQ(accept_done, true);
         BOOST_TEST_EQ(!accept_ec, true);
@@ -154,7 +130,8 @@ struct local_stream_socket_test
     {
         io_context ioc(Backend);
         auto ex   = ioc.get_executor();
-        auto path = make_temp_socket_path();
+        test::temp_socket_dir tmp;
+        auto path = tmp.path();
 
         local_stream_acceptor acc(ioc);
         acc.open();
@@ -191,7 +168,6 @@ struct local_stream_socket_test
         ioc.run();
         ioc.restart();
 
-        cleanup_path(path);
 
         BOOST_TEST_EQ(accept_done, true);
         BOOST_TEST_EQ(!accept_ec, true);
@@ -259,7 +235,8 @@ struct local_stream_socket_test
     void testUnlinkExisting()
     {
         io_context ioc(Backend);
-        auto path = make_temp_socket_path();
+        test::temp_socket_dir tmp;
+        auto path = tmp.path();
 
         // First bind creates the socket file
         {
@@ -286,7 +263,6 @@ struct local_stream_socket_test
             BOOST_TEST_EQ(!ec, true);
         }
 
-        cleanup_path(path);
     }
 
     void testUnlinkNonexistent()
@@ -294,7 +270,8 @@ struct local_stream_socket_test
         // unlink_existing on a path that doesn't exist should
         // succeed (unlink silently fails with ENOENT).
         io_context ioc(Backend);
-        auto path = make_temp_socket_path();
+        test::temp_socket_dir tmp;
+        auto path = tmp.path();
 
         local_stream_acceptor acc(ioc);
         acc.open();
@@ -302,7 +279,6 @@ struct local_stream_socket_test
             local_endpoint(path), bind_option::unlink_existing);
         BOOST_TEST_EQ(!ec, true);
 
-        cleanup_path(path);
     }
 
     void testEndpointOrdering()
