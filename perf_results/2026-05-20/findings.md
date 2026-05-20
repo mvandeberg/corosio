@@ -586,3 +586,284 @@ be correctness overhead from commit 2c73112d; optimization is to skip when
 - `ACC_top_user_symbols.txt` - userspace-only top symbols (DSO filter on corosio_bench)
 - `ACC_strace.txt` - syscall counts and time
 - `ACC_{corosio,asio}_stdout.txt` - captured benchmark stdout
+
+## HTTP
+
+**Profile command (10 s record, 0.5 s warmup):**
+
+```
+taskset -c 0-7,16-23 perf record -F 999 -g --call-graph fp \
+    --per-thread -m 1 -o HTTP_<side>.data -- \
+    corosio_bench --library <side> [--backend io_uring] \
+      --category http_server --bench concurrent/16 \
+      --duration 10 --warmup 0.5
+```
+
+CCX pin: `0-7,16-23`. perf record form: **`--per-thread -m 1`** — the default
+`-m 32` aggregate ring exhausted the 8 MB memlock quota on the corosio run
+(asio's io_uring registrations + perf mmap = `Cannot allocate memory`).
+Per-thread fallback succeeded for both sides.
+
+Bench shape: 16 pre-paired client/server socket coroutines on a single
+`io_context`, each doing `write(HTTP request) → read_until("\r\n\r\n")` on
+the client side and the mirror on the server. **No accept loop** — sockets
+are pre-paired via `make_socket_pair`, so the ACC speculative-accept4 trap
+is structurally absent here.
+
+### Throughput
+
+| Side    | Ops (10 s) | Throughput   | Mean latency |
+| ------- | ---------- | ------------ | ------------ |
+| corosio | 1,026,712  | 102.67 Kop/s | 155.8 µs     |
+| asio    | 1,451,600  | 145.16 Kop/s | 110.2 µs     |
+
+**Loss vs asio: 29.3 %** (slightly under the task's 32 % estimate; the
+shape is the same).
+
+### Top 5 overall symbols (flat, kernel-dominated)
+
+**corosio**
+
+| %    | Symbol                       | Object        |
+| ---- | ---------------------------- | ------------- |
+| 7.05 | entry_SYSRETQ_unsafe_stack   | kernel        |
+| 2.27 | tcp_ack                      | kernel        |
+| 1.80 | tcp_sendmsg_locked           | kernel        |
+| 1.79 | srso_alias_safe_ret          | kernel        |
+| 1.72 | __tcp_transmit_skb           | kernel        |
+
+**asio**
+
+| %    | Symbol                       | Object        |
+| ---- | ---------------------------- | ------------- |
+| 3.66 | tcp_ack                      | kernel        |
+| 2.60 | __tcp_transmit_skb           | kernel        |
+| 2.37 | tcp_sendmsg_locked           | kernel        |
+| 2.27 | srso_alias_safe_ret          | kernel        |
+| 1.97 | srso_alias_return_thunk      | kernel        |
+
+Key contrast at the top: corosio's **#1 is `entry_SYSRETQ_unsafe_stack` at
+7.05 %** (the userspace-to-kernel-and-back ret path) — almost 2× the next
+kernel symbol. asio has no such standout: its hottest symbol is `tcp_ack`
+at 3.66 %. `entry_SYSRETQ_unsafe_stack` accumulates per-syscall fixed
+cost — its prominence is a smoking gun for "corosio does more syscalls per
+op." The `process_completions → write_some → write` call-graph
+contribution (1.81 % of the 7.05 % SYSRETQ slice) traces to the
+speculative-sendmsg fast path on the response-write step.
+
+### Top 5 USERSPACE symbols (`--dsos corosio_bench`)
+
+**corosio**
+
+| %    | Symbol                                                                 |
+| ---- | ---------------------------------------------------------------------- |
+| 1.44 | std::__introsort_loop (latency-percentile post-process — bench harness)|
+| 0.49 | io_uring_scheduler::do_one                                             |
+| 0.49 | capy::read_until_match_impl::resume                                    |
+| 0.37 | io_uring_tcp_socket::read_some                                         |
+| 0.36 | uring_read_op::do_handler                                              |
+
+**asio**
+
+| %    | Symbol                                                                 |
+| ---- | ---------------------------------------------------------------------- |
+| 1.71 | asio::detail::read_until_delim_string_op_v2::operator()                |
+| 1.63 | std::__introsort_loop (bench harness)                                  |
+| 0.34 | asio::detail::io_uring_socket_service_base::async_send                 |
+| 0.31 | asio::detail::scheduler::do_run_one                                    |
+| 0.27 | asio::detail::io_uring_service::io_queue::perform_io                   |
+
+Userspace footprint is **roughly comparable in absolute %** between the two
+implementations — neither library is dominated by C++ wrapper overhead at
+this throughput. The throughput gap lives in kernelspace / syscall fixed
+cost, not in a fat userspace path.
+
+### Corosio-only userspace symbols (no asio analogue)
+
+| Symbol                                                                 | File:line                                                                     |
+| ---------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `io_uring_tcp_socket::read_some` (speculative `::readv`)               | `native/detail/io_uring/io_uring_types.hpp:149`                               |
+| `io_uring_tcp_socket::write_some` (speculative `::sendmsg`)            | `native/detail/io_uring/io_uring_types.hpp:233`                               |
+| `uring_read_op::do_handler`                                            | `native/detail/io_uring/io_uring_socket_ops.hpp:133`                          |
+| `native_write_awaitable::await_suspend`                                | `native/native_tcp_socket.hpp` (template trampoline)                          |
+| `io_uring_scheduler::process_completions`                              | `native/detail/io_uring/io_uring_scheduler.hpp` (CQE drain)                   |
+| `timer_service::process_expired` (0.06 %, NOT hot here)                | `detail/timer_service.hpp`                                                    |
+
+The first two are the **FAN per-socket-op userspace signature** reappearing
+here — but at modest absolute % (0.37 / 0.26). The real cost is what they
+*cause* in kernelspace (see syscall mix below).
+
+### perf stat counter deltas (5 s run, same args)
+
+|                        | corosio       | asio          | Δ                 |
+| ---------------------- | ------------- | ------------- | ----------------- |
+| ops                    | 506,656       | 726,272       | corosio −30.2 %   |
+| cycles                 | 30.92 B       | 30.97 B       | ≈ equal           |
+| instructions           | 25.19 B       | 35.66 B       | corosio −29.4 %   |
+| **IPC**                | **0.815**     | **1.152**     | corosio **−29 %** |
+| inst / op              | 49,710        | 49,099        | ≈ equal (+1.2 %)  |
+| cycles / op            | 61,019        | 42,645        | corosio +43 %     |
+| branches               | 5.68 B        | 7.96 B        |                   |
+| branch-misses          | 522 M (9.2 %) | 599 M (7.5 %) | corosio +22 % rate|
+| cache-references       | 3.74 B        | 2.65 B        | corosio +41 %     |
+| cache-misses           | 7.88 M (0.21 %)| 4.09 M (0.15 %)| corosio +93 %    |
+| dTLB-load-misses       | 1,911,886     | 396,928       | corosio **+382 %**|
+| context-switches       | 145           | 214           | corosio −32 %     |
+| cpu-migrations         | 93            | 166           | corosio −44 %     |
+
+**Key reading:** the two sides execute almost identical *cycle* budgets and
+almost identical *instructions per op* — corosio simply gets 0.815 IPC
+where asio gets 1.152, paying 43 % more cycles per op. Lower IPC is driven
+by (a) a higher branch-miss rate (+22 %), (b) higher cache pressure
+(cache-refs +41 %, miss rate +40 %), and (c) a striking **4.8× dTLB
+load-miss count** — the speculative readv path repeatedly touches per-fd
+data the kernel has not warmed, and the SYSRETQ churn flushes TLB locality.
+
+### Syscall mix (3 s strace -c, in-bench overhead inflates timing)
+
+**corosio (39,808 ops in 3 s under strace)**
+
+| syscall         | calls   | errors             | per op                      |
+| --------------- | ------- | ------------------ | --------------------------- |
+| sendmsg         | 87,520  | 0                  | 2.20 (≈ client+server send) |
+| io_uring_enter  | 87,876  | 0                  | 2.21                        |
+| **readv**       | **87,552** | **87,552 (100 % EAGAIN)** | **2.20 wasted/op**   |
+| futex           | 12      | 0                  | (test harness)              |
+| accept4         | 32      | 32 (EAGAIN)        | (one-time setup)            |
+| setsockopt      | 160     | 0                  | (one-time setup)            |
+
+**asio (350,576 ops in 3 s under strace)**
+
+| syscall         | calls   | errors | per op |
+| --------------- | ------- | ------ | ------ |
+| io_uring_enter  | 48,254  | 0      | 0.138  |
+| setsockopt      | 160     | 0      | (one-time setup) |
+| accept          | 32      | 0      | (one-time setup) |
+| (no `readv`, no `sendmsg` — pure io_uring) | | | |
+
+This is the single sharpest finding of the run:
+
+> **corosio fires `::readv()` on every read attempt, and EVERY ONE
+> RETURNS EAGAIN.** 87,552 calls, 87,552 errors — a 100 % failure rate,
+> identical pathology to the speculative-accept4 trap from ACC, but on
+> the read side of every HTTP cycle. Speculative-sendmsg, by contrast,
+> succeeds (0 errors / 87,520 calls) because the kernel send buffer is
+> empty when the response is written — that path is load-bearing and
+> earning its keep. The asymmetry is consistent with the HTTP shape:
+> when the server enters `read_until`, the request bytes have not yet
+> arrived (we just finished writing the prior response), so the
+> speculative `readv` always loses the race against the io_uring CQE
+> that will eventually deliver them.
+
+corosio also calls `io_uring_enter` ~16× as often as asio (per op):
+2.21/op vs 0.138/op. asio batches CQEs aggressively (one enter per
+~7 ops on average); corosio's enter-per-op ratio combined with the
+wasted readv gives ~4.4 syscall round-trips per HTTP request cycle vs
+asio's 0.14 — a **~31× syscall-per-op ratio**.
+
+### Comparison to IOCTX / FAN / ACC
+
+1. **IOCTX scheduler-fixed-cost signature (`timer_service::process_expired`,
+   `submit_and_get_events`)** — **not present.** `process_expired` sits at
+   0.06 % userspace. HTTP is dominated by real I/O work, not scheduler
+   bookkeeping, as expected on a 100 Kop/s workload.
+2. **FAN per-socket-op userspace signature (`read_some`, `write_some`,
+   `buffer_param::copy_impl`, speculative `readv`/`sendmsg`)** — **present
+   and dominant in the syscall mix** but only modest in userspace samples
+   (0.37 / 0.26 / not visible / N/A). The userspace `%` is small because
+   each call is short, but the *kernel-side* cost it generates is huge:
+   the speculative `::readv` is what produces the 7.05 %
+   `entry_SYSRETQ_unsafe_stack` peak.
+3. **ACC speculative-accept4 trap** — **structurally absent.** This bench
+   uses `make_socket_pair`, no per-cycle accept. The 32 accept4 EAGAIN
+   calls visible in strace are one-time setup noise from `socket_pair`
+   construction.
+4. **NEW symbols hot in HTTP that did NOT appear in IOCTX/FAN/ACC:**
+   - **`entry_SYSRETQ_unsafe_stack` at 7.05 %** — kernel return path.
+     Was not the #1 in any prior bench because no prior bench combined
+     "many syscalls" with "many ops/sec" at this ratio. This is FAN's
+     speculative-readv pathology, scaled up by the request-rate of a
+     realistic HTTP workload.
+   - **`tcp_ack` at 2.27 %, `tcp_sendmsg_locked` at 1.80 %,
+     `tcp_recvmsg_locked` at 1.48 %, `nf_conntrack_in/_tcp_packet`
+     ~2.1 % combined** — these are the real packet-handling cost.
+     They appear in *both* sides; they did not appear in IOCTX (no I/O)
+     or FAN (loopback fan-out, smaller per-cycle packets). They are
+     part of the floor cost both libraries pay, not a corosio-only
+     regression.
+
+So HTTP is **principally the FAN bottleneck (per-socket speculative-readv
+pathology), magnified by 16× concurrency on a single context.** It is NOT
+a new fourth bottleneck shape — it is the FAN shape at full saturation
+plus a per-op CQE-draining overhead (high `io_uring_enter` ratio) that FAN
+masked because FAN's per-cycle work was syscall-cheap on the read side.
+
+### Working hypothesis
+
+The 29 % loss on `http_server:concurrent/16` decomposes as follows.
+**Confidence high on (1) and (2); medium on (3).**
+
+1. **Speculative `::readv` fails on every HTTP read** (87,552 / 87,552
+   EAGAIN, `io_uring_types.hpp:149`). Each request arrives via the
+   io_uring CQE path, not the speculative fast path — yet the
+   speculative attempt still costs one syscall round-trip per read.
+   This is the *same architectural shape* as the speculative-accept4
+   trap from ACC: a fast-path syscall that wins on the unsaturated case
+   but loses 100 % of the time once the workload is real-traffic
+   saturated. Removing/gating it (e.g. only attempt when no read CQE
+   is in flight) is the highest-leverage single change.
+2. **`io_uring_enter` ratio is ~16× asio's** (2.21/op vs 0.138/op).
+   asio amortizes one enter across ~7 completions; corosio enters
+   nearly per op. This is `io_uring_scheduler::do_one` /
+   `submit_and_get_events` working a smaller batch — likely because
+   the inline budget exhausts faster on a per-cycle-fully-completing
+   bench, or because corosio submits and waits separately where asio
+   submits-and-waits in one entry.
+3. **dTLB-load-misses are 4.8× asio's.** This is consistent with the
+   speculative-readv path touching cold per-fd state (the `spec_state`,
+   the `iovec` stack array, the `shared_from_this()` refcount) on
+   every read, where asio's flatter completion path stays in already-
+   warm cache lines. Removing the speculative path should also drop
+   the TLB-miss count substantially.
+
+These three feed each other. Lower IPC (0.815 vs 1.152) is the *symptom*
+— branchy syscall front-ends and dispatch code dominate the per-op cycle
+budget. Per-op *instruction* count is essentially identical (49.7 K vs
+49.1 K) so the gap is not "we do more work" — it's "we do the same work
+less efficiently because we keep the pipeline guessing wrong."
+
+**Recommended experiment** (highest leverage, in order):
+
+a. Build with the speculative `::readv` gated behind "no read SQE in
+   flight" (or removed entirely on this bench's pattern) and re-run
+   HTTP. Expected: readv error count → 0, `entry_SYSRETQ_unsafe_stack`
+   drops from 7 % toward ~3 %, throughput moves from 102 → ~125–135
+   Kop/s. Hypothesis only; verify.
+b. Trace `io_uring_enter` call-graph (`perf record -e
+   raw_syscalls:sys_enter -k`) to confirm whether each enter is
+   carrying ~1 SQE or larger batches — if 1 SQE/enter, the batching
+   path needs investigation.
+c. Build with `spec_state::may_speculate_read()` permanently false on
+   the read path and re-run as a control. If throughput matches (a),
+   confirms the gate logic is correct; if (b) goes higher, there is
+   additional batching cost beyond the speculative trap.
+
+### Important context (carried from IOCTX)
+
+> High cost in `timer_service::process_expired()` would be correctness
+> overhead from commit 2c73112d; optimization is to skip when
+> `timer_service::empty()`. On HTTP it sits at 0.06 % — not material to
+> the bottleneck. Carrying forward only for completeness; not actionable
+> for HTTP.
+
+---
+
+**HTTP artifacts in this directory:**
+- `HTTP_corosio.{data,folded,svg}` - corosio profile (per-thread mode)
+- `HTTP_asio.{data,folded,svg}` - asio profile (per-thread mode)
+- `HTTP_diff.svg` - differential flamegraph (red = corosio hotter)
+- `HTTP_stat.txt` - perf stat microarchitectural counters
+- `HTTP_top_symbols.txt` - flat top symbols (overall, kernel-dominated)
+- `HTTP_top_user_symbols.txt` - userspace-only top symbols (DSO filter on corosio_bench)
+- `HTTP_strace.txt` - syscall counts and time
+- `HTTP_{corosio,asio}_stdout.txt` - captured benchmark stdout
