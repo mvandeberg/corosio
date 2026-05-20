@@ -468,33 +468,37 @@ syscalls-per-accept:
   (asio creates 32,473 client-side sockets, i.e. 32,473 cycles), asio runs
   at **6.75 syscalls per cycle**.
 
-**The accept-path-specific finding:** corosio's "multishot acceptor" does an
-**opportunistic synchronous `accept4(2)` on every user `accept()` call**
-before consulting the io_uring multishot completion queue. See
+**The accept-path-specific finding:** corosio's "multishot acceptor" fires
+an **unconditional speculative `accept4(2)` at the head of every
+`dispatch_or_queue()` call** before consulting its buffered-CQE queue. See
 `include/boost/corosio/native/detail/io_uring/io_uring_multishot_acceptor.hpp:236`:
 
 ```cpp
 void dispatch_or_queue(...) {
     int accepted_fd = ::accept4(fd_, ..., SOCK_NONBLOCK | SOCK_CLOEXEC);
     if (accepted_fd >= 0) { /* post completion synthetically */ return; }
-    // only EAGAIN falls through to the io_uring path
+    if (errno != EAGAIN && errno != EWOULDBLOCK) { /* error path */ return; }
+    // EAGAIN: fall through to ready_fds_ (populated by multishot CQE handler)
 }
 ```
 
-On `concurrent/4` with 4 loops driving connects back-to-back, the listen
-queue is rarely empty, so the syscall succeeds essentially every time —
-counted directly in strace as 13,576 `accept4` calls and 0 from asio.
-The io_uring multishot SQE then carries no actual accept traffic; it only
-exists to wake the waiter on the rare EAGAIN. Net effect: **one userspace
-syscall per accept that asio does not pay**, plus the cost of having armed
-the multishot SQE in the first place.
+The strace evidence shows this syscall **fails every single time** on this
+bench: 13,576 `accept4` calls, **13,576 errors** (EAGAIN). The reason is
+that the multishot path is *faster*, not slower: by the time
+`dispatch_or_queue()` runs in user code, the multishot CQE handler
+(`on_accept_cqe`) has already drained the kernel's listen queue and parked
+the new fd in `ready_fds_`. The speculative `accept4()` then finds the
+listen queue empty and returns EAGAIN; the code falls through to the
+`ready_fds_` path and consumes the buffered fd.
+
+Net effect: **one wasted syscall per accept** that asio does not pay. The
+multishot SQE is NOT dead code — it's carrying all the actual accept
+traffic via `ready_fds_`. The speculative `accept4()` is the dead code:
+intended as a fast path to avoid io_uring round-trip latency, it
+consistently loses the race against the multishot and pays a pure-overhead
+syscall on every invocation.
 
 This is the strongest single-source explanation of the 24 % throughput gap.
-Whether the design intent of the opportunistic-syscall fast path is to
-*avoid* the io_uring round-trip latency on connection-saturated workloads
-or to *cover* a correctness corner is a separate question — but the
-strace evidence shows it is in fact carrying nearly all accepts on this
-bench, defeating the io_uring batching that asio gets.
 
 `epoll_wait` is absent from both sides — neither library falls back to epoll
 on this bench. No "extra" syscall appears in corosio that has no asio
@@ -528,29 +532,43 @@ Symbols HOT in corosio's ACC profile that were NOT hot in IOCTX or FAN:
 
 **Working hypothesis:**
 
-The 24 % loss on `accept_churn:concurrent/4` is dominated by **per-connection
-syscall cost from the opportunistic `accept4` fast path in
-`io_uring_multishot_acceptor.hpp:236`**, not per-byte I/O cost. Specifically:
+The 24 % loss on `accept_churn:concurrent/4` is dominated by **wasted
+syscall overhead from the speculative `accept4()` fast path in
+`io_uring_multishot_acceptor.hpp:236` that always loses the race against
+the multishot CQE handler on this bench**. Specifically:
 
-1. corosio synthesizes a syscall `accept4` on every user `accept()` call
-   before falling back to the multishot io_uring path. On a saturated
-   listen queue this fires every time, adding one syscall per accept
-   that asio (true io_uring multishot) does not pay. Combined with the
-   speculative-read/speculative-write per-cycle syscalls also confirmed in
-   FAN, corosio averages 19.0 syscalls per cycle vs asio's 6.75.
-2. The per-accept shared_ptr / service-map bookkeeping
-   (`__shared_ptr<io_uring_tcp_socket>` ctor + `_M_erase` + `destroy`) adds
-   ~0.3 % of userspace samples that asio's intrusive-pool design avoids.
-3. The lower IPC (0.73 vs 0.85) is consistent with branchy syscall
+1. The multishot SQE consumes new connections from the kernel's listen
+   queue and parks them in `ready_fds_` via `on_accept_cqe`. When user
+   code eventually calls `accept()`, the listen queue is already empty.
+2. `dispatch_or_queue()` then unconditionally calls `::accept4()`, which
+   returns EAGAIN (13,576 / 13,576 = 100 % failure rate on this run).
+   The code falls through to `ready_fds_` and successfully consumes the
+   buffered fd.
+3. The net effect is one wasted EAGAIN syscall per accept that asio's
+   io_uring acceptor does not pay. Combined with the speculative-read /
+   speculative-write per-cycle syscalls also confirmed in FAN, corosio
+   averages 19.0 syscalls per cycle vs asio's 6.75.
+4. The per-accept shared_ptr / service-map bookkeeping
+   (`__shared_ptr<io_uring_tcp_socket>` ctor + `_M_erase` + `destroy`)
+   adds ~0.3 % of userspace samples that asio's intrusive-pool design
+   avoids — a secondary but real cost.
+5. The lower IPC (0.73 vs 0.85) is consistent with branchy syscall
    front-ends and dispatch code being hot rather than tight I/O loops.
 
-The biggest single lever, by far, would be deleting (or gating behind a
-benchmark-disabled config) the opportunistic `accept4` in
-`dispatch_or_queue`, letting the multishot SQE carry accept traffic the
-way asio does. Hypothesis only — would need confirmation by either
-(a) building a corosio variant with the `accept4` call removed and
-re-running ACC, or (b) `strace -e accept4 -k` to verify all 13,576 calls
-trace to `dispatch_or_queue`.
+**Recommended experiment** (highest leverage): either remove the
+speculative `accept4()` entirely (the multishot path already carries the
+work), or gate it behind `ready_fds_.empty()` so it only fires when the
+buffered queue actually IS empty (which on this bench is never).
+Hypothesis only — confirm by (a) building a variant with the speculative
+removed/gated and re-running ACC, expecting the 19 syscalls/cycle ratio to
+drop toward asio's 6.75, or (b) `strace -e accept4 -k` to verify all
+13,576 calls trace to `dispatch_or_queue` (not e.g. a test-harness path).
+
+A subtlety worth checking before deleting: on workloads where user-level
+accepts arrive faster than multishot CQEs (unsaturated server), the
+speculative path may still be load-bearing. The `ready_fds_.empty()` gate
+preserves that case while killing the wasted-syscall cost on saturated
+workloads.
 
 **Important context (carried from IOCTX):**
 High cost in `timer_service::process_expired()` (none observed here) would
