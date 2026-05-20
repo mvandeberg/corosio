@@ -99,7 +99,24 @@ needed: (a) an unconditional `io_uring_submit_and_get_events` syscall
 (`io_uring_scheduler.hpp:852`), (b) a `pthread_mutex_lock` plus
 `clock_gettime` inside `timer_service::process_expired`
 (`timer_service.hpp:678-679`), and (c) the surrounding `ring_mutex_` /
-`dispatch_mutex_` acquisitions. Because `poll()` calls `do_one(0)` once per
+`dispatch_mutex_` acquisitions.
+
+> **Context for (b) — do not naively delete the timer drain.** The
+> unconditional `timer_svc_->process_expired()` at the top of `do_one`
+> was added in commit 2c73112d as a correctness fix: without it,
+> continuous loopback I/O keeps `completed_ops_` non-empty across
+> iterations, the leader-wait branch never runs, and stopper-timer
+> shutdowns deadlock (regression tests
+> `socket_stress.concurrent_ops.io_uring` /
+> `socket_stress.sync_completion.io_uring`). The cost measured here is
+> O(1) when no timer is due (heap-top compare + one mutex acquire), so
+> the optimization is to *skip* the call when the timer service is
+> empty — not to remove it. `timer_service` exposes
+> `empty()` (line 161, atomic, lock-free) and `nearest_expiry()` (line
+> 168, atomic) for exactly this purpose. The same pattern applies to
+> (a): `submit_and_get_events` is needed to drain kernel CQEs that
+> arrive during continuous I/O, but on `do_one(0)` with no in-flight
+> SQEs and no pending CQEs, the syscall is pure overhead. Because `poll()` calls `do_one(0)` once per
 dispatched handler, in the synthetic loop these fixed costs are amortized over
 a single op — exactly the worst case. Asio's `single_threaded` (and especially
 `single_threaded_lockless` with `BOOST_ASIO_CONCURRENCY_HINT_UNSAFE`) does no
