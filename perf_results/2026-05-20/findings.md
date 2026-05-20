@@ -337,3 +337,234 @@ will not move the FAN number measurably. The FAN loss lives elsewhere.
 - `FAN_stat.txt` - perf stat microarchitectural counters
 - `FAN_top_symbols.txt` - flat top symbols (raw)
 - `FAN_{corosio,asio}_stdout.txt` - captured benchmark stdout
+
+## ACC (accept_churn:concurrent/4)
+
+Profile of corosio (io_uring) vs asio (io_uring via `BOOST_ASIO_HAS_IO_URING`)
+running `--category accept_churn --bench concurrent/4` for 10 s after 0.5 s
+warmup. CCX-pinned (`taskset -c 0-7,16-23`). Recording used
+`perf record -F 999 -g --call-graph fp --per-thread -m 1` — the standard
+`-m 32` form failed with `io_uring_queue_init_params: Cannot allocate memory`
+because the bench process opens enough io_uring rings (acceptor + per-socket
+on both sides plus internal asio rings) to exhaust the unprivileged memlock
+quota when perf's shared mmap buffers are also charged against it. Per-thread
+mmap buffers sidestep that. Caveat: per-thread sampling loses some kernel-side
+samples, so the kernel breakdowns below are a slight under-count but cross-side
+ratios remain meaningful (both runs used the same mode).
+
+**Throughput observed during profiling:**
+- corosio: 29.57 Kops/s (295667 ops over 10 s, 4 concurrent loops)
+- asio:    38.91 Kops/s (389112 ops over 10 s, 4 concurrent loops)
+- Loss vs asio: **24.0 %**
+
+(`perf stat` 5 s run gave the same shape: 29.62 Kops vs 39.20 Kops, 24.4 %
+loss — consistent.)
+
+**Top 5 hot symbols — corosio (overall, kernel-dominated for I/O bench):**
+1. `entry_SYSRETQ_unsafe_stack` (kernel) — 6.92 %
+2. `srso_alias_safe_ret` (kernel SRSO mitigation) — 2.83 %
+3. `srso_alias_return_thunk` (kernel SRSO mitigation) — 2.04 %
+4. `nf_conntrack_in` (kernel) — 1.16 %
+5. `__tcp_transmit_skb` (kernel) — 1.15 %
+
+**Top 5 USERSPACE hot symbols — corosio (from `ACC_top_user_symbols.txt`):**
+1. `std::__introsort_loop<...>` (latency-stats post-processing, not the hot loop) — 0.50 %
+2. `bench_concurrent_churn<io_uring_t>::...::operator()(int).resume` (the coroutine frame itself) — 0.29 %
+3. `io_uring_tcp_socket::set_option(int,int,void const*,unsigned long)` — 0.20 %
+4. `std::__shared_ptr<io_uring_tcp_socket,...>::__shared_ptr<...>(...)` (socket shared_ptr ctor) — 0.18 %
+5. `io_uring_scheduler::process_completions()` — 0.13 %
+
+**Top 5 hot symbols — asio (overall):**
+1. `entry_SYSRETQ_unsafe_stack` (kernel) — 3.18 %
+2. `srso_alias_safe_ret` (kernel) — 2.43 %
+3. `srso_alias_return_thunk` (kernel) — 1.82 %
+4. `nf_conntrack_in` (kernel) — 1.66 %
+5. `__tcp_transmit_skb` (kernel) — 1.42 %
+
+**Top 5 USERSPACE hot symbols — asio:**
+1. `std::__introsort_loop<...>` (same stats post-processing) — 0.64 %
+2. `bench_concurrent_churn(...)::$_1::operator()(int) [.resume]` — 0.21 %
+3. `boost::asio::detail::scheduler::do_run_one(...)` — 0.16 %
+4. `boost::asio::detail::io_uring_service::io_queue::perform_io(int)` — 0.14 %
+5. `boost::asio::detail::io_uring_service::run(long, op_queue<...>&)` — 0.12 %
+
+**Corosio-only userspace symbols in the top 25** (with one-sentence description,
+file:line where load-bearing):
+- `io_uring_tcp_socket::set_option(int,int,void const*,unsigned long)` — 0.20 %
+  — Path used by `configure_churn_socket` to apply send_buffer / recv_buffer /
+  linger. Both libraries do this (asio's `set_option<integer<1,8>>` totals
+  0.08+0.07+0.05 = 0.20 % across three template instantiations), so the
+  per-side cost is comparable; the *number of calls* differs because corosio
+  hits this from a slightly different cycle structure
+  (`include/boost/corosio/native/detail/io_uring/io_uring_types.hpp`).
+- `std::__shared_ptr<io_uring_tcp_socket,...>::__shared_ptr(...)` (and the
+  matching `io_uring_tcp_service::destroy` 0.09 % +
+  `_Hashtable<...>::_M_erase` 0.07 %) — corosio allocates each accepted socket
+  in a `shared_ptr` and tracks it in an unordered_map for the lifetime of the
+  service; asio uses an intrusive object pool. This is a corosio-specific
+  per-accept cost, totaling ~0.34 % across the three symbols, with no
+  asio analogue in the top 25.
+- `io_uring_multishot_acceptor_base<...>::dispatch_or_queue(...)` — 0.07 %
+  — Per-accept dispatch through the multishot-accept state machine
+  (`include/boost/corosio/native/detail/io_uring/io_uring_multishot_acceptor.hpp`).
+  No corresponding asio symbol because asio uses one-shot accepts that
+  re-arm via the generic io_uring_service path (already counted above).
+- `io_uring_scheduler::cancel_and_flush(int)` — 0.08 % — Called on socket
+  close to drain any in-flight ops for the fd. asio's equivalent
+  (`do_cancel_ops`) shows 0.05 %.
+- `boost::capy::execution_context::find_impl(std::type_index)` — 0.08 %
+  — Service lookup via type_index on every awaitable construction (one map
+  probe per `co_await`). asio's `service_registry::do_use_service` is the
+  analogous symbol at 0.08 % — comparable.
+
+The userspace deltas are tiny in absolute terms (sub-1 % each); the headline
+delta lives in the kernel and in the syscall mix, not in the corosio
+acceptor C++.
+
+**Counter deltas (from `ACC_stat.txt`, 5 s runs):**
+- IPC: corosio **0.734**, asio **0.846** (delta -13.2 %)
+- Branch-miss rate: corosio **10.72 %**, asio **9.92 %** (delta +0.80 pp)
+- Cache-miss rate: corosio **1.72 %** of refs, asio **1.35 %** (delta +0.37 pp)
+- Context switches: corosio 923, asio 898 (negligible)
+- Per-op cost: corosio **150,664 instr / 205,128 cyc / op**;
+  asio **131,374 instr / 155,377 cyc / op**
+  — corosio executes **+14.7 % more instructions per op** and burns
+  **+32.0 % more cycles per op**, i.e. instruction overhead alone does not
+  explain the cycle gap; the lower IPC accounts for the rest.
+
+The user/sys split is striking: corosio spent **0.693 s user / 3.479 s sys**
+in the 5 s window, asio **0.405 s user / 3.443 s sys**. System time is nearly
+identical — both libraries pay essentially the same kernel cost — but corosio
+spends **1.71x** the user time, consistent with the per-op instruction delta
+above.
+
+**Syscall mix (from `ACC_strace.txt`, 3 s runs):**
+
+Order-of-magnitude differences. corosio issues 12 distinct net-relevant
+syscalls per loop, asio issues 4.
+
+| syscall          | corosio calls | asio calls    | notes                                    |
+| ---------------- | ------------- | ------------- | ---------------------------------------- |
+| `io_uring_enter` | 54,312        | 24,354        | corosio submits **2.23x** as many enters |
+| `accept4`        | 13,576        | 0             | corosio falls back to syscall accept     |
+| `read`           | 27,149        | 0             |                                          |
+| `readv`          | 13,570        | 0             | speculative readv from io_uring_types    |
+| `sendmsg`        | 13,570        | 0             | speculative writev / sendmsg fast path   |
+| `write`          | 27,165        | 0             |                                          |
+| `getsockname`    | 27,146        | 0             | per-accept local-endpoint lookup         |
+| `close`          | 27,171        | 64,946        | asio: 2x because two sides closed sync   |
+| `setsockopt`     | 40,736        | 97,411        | both ~3x per cycle (configure_churn)     |
+| `socket`         | 13,584        | 32,473        | asio creates more client sockets per cycle|
+| `futex`          | 13            | 4             |                                          |
+
+Total syscalls: **258,141 (corosio)** vs **219,338 (asio)** — corosio issues
++17.7 % more syscalls overall. But the more interesting ratio is
+syscalls-per-accept:
+
+- corosio: 258,141 / 13,576 accepts = **19.0 syscalls per accepted connection**
+- asio:    219,338 / (24,354 enters serving accepts+I/O) — asio has zero
+  `accept4` calls, so accepts ride entirely on `IORING_OP_ACCEPT` inside
+  `io_uring_enter`. Using the socket count as a proxy
+  (asio creates 32,473 client-side sockets, i.e. 32,473 cycles), asio runs
+  at **6.75 syscalls per cycle**.
+
+**The accept-path-specific finding:** corosio's "multishot acceptor" does an
+**opportunistic synchronous `accept4(2)` on every user `accept()` call**
+before consulting the io_uring multishot completion queue. See
+`include/boost/corosio/native/detail/io_uring/io_uring_multishot_acceptor.hpp:236`:
+
+```cpp
+void dispatch_or_queue(...) {
+    int accepted_fd = ::accept4(fd_, ..., SOCK_NONBLOCK | SOCK_CLOEXEC);
+    if (accepted_fd >= 0) { /* post completion synthetically */ return; }
+    // only EAGAIN falls through to the io_uring path
+}
+```
+
+On `concurrent/4` with 4 loops driving connects back-to-back, the listen
+queue is rarely empty, so the syscall succeeds essentially every time —
+counted directly in strace as 13,576 `accept4` calls and 0 from asio.
+The io_uring multishot SQE then carries no actual accept traffic; it only
+exists to wake the waiter on the rare EAGAIN. Net effect: **one userspace
+syscall per accept that asio does not pay**, plus the cost of having armed
+the multishot SQE in the first place.
+
+This is the strongest single-source explanation of the 24 % throughput gap.
+Whether the design intent of the opportunistic-syscall fast path is to
+*avoid* the io_uring round-trip latency on connection-saturated workloads
+or to *cover* a correctness corner is a separate question — but the
+strace evidence shows it is in fact carrying nearly all accepts on this
+bench, defeating the io_uring batching that asio gets.
+
+`epoll_wait` is absent from both sides — neither library falls back to epoll
+on this bench. No "extra" syscall appears in corosio that has no asio
+counterpart for *legitimate I/O reasons* — it's all the speculative-readv /
+speculative-sendmsg fast paths from FAN re-appearing here on the
+post-accept read/write that the bench performs per cycle.
+
+**Comparison to IOCTX and FAN:**
+
+The IOCTX scheduler-cost signature (`timer_service::process_expired`,
+`submit_and_get_events`) has **stayed quiet** here, as in FAN — both at
+~0.05 % or below. ACC does real I/O per `do_one`.
+
+FAN's per-socket-op symbols (`write_some`, `read_some`,
+`native_write_awaitable::await_suspend`, `buffer_param::copy_impl`) **do
+appear** in ACC, but at much lower percentages (0.06 %, 0.06 %, 0.05 %, not
+visible respectively) because each ACC cycle does only one tiny read and
+one tiny write, dwarfed by the per-cycle accept + connect + setsockopt x3
++ close work.
+
+Symbols HOT in corosio's ACC profile that were NOT hot in IOCTX or FAN:
+1. **`io_uring_tcp_socket::set_option`** (0.20 %) — ACC-specific because the
+   bench calls `configure_churn_socket` on every accepted client (3 setsockopts
+   per accept). Did not appear in FAN.
+2. **`std::__shared_ptr<io_uring_tcp_socket,...>::__shared_ptr` ctor +
+   `io_uring_tcp_service::destroy` + `_Hashtable::_M_erase`** combined ~0.34 %
+   — per-accept socket lifecycle (allocate-into-shared_ptr, register in
+   service map, erase from service map on destroy). This whole shape was
+   absent from IOCTX (no I/O) and FAN (long-lived sockets, register-once)
+   but is per-cycle work in ACC.
+
+**Working hypothesis:**
+
+The 24 % loss on `accept_churn:concurrent/4` is dominated by **per-connection
+syscall cost from the opportunistic `accept4` fast path in
+`io_uring_multishot_acceptor.hpp:236`**, not per-byte I/O cost. Specifically:
+
+1. corosio synthesizes a syscall `accept4` on every user `accept()` call
+   before falling back to the multishot io_uring path. On a saturated
+   listen queue this fires every time, adding one syscall per accept
+   that asio (true io_uring multishot) does not pay. Combined with the
+   speculative-read/speculative-write per-cycle syscalls also confirmed in
+   FAN, corosio averages 19.0 syscalls per cycle vs asio's 6.75.
+2. The per-accept shared_ptr / service-map bookkeeping
+   (`__shared_ptr<io_uring_tcp_socket>` ctor + `_M_erase` + `destroy`) adds
+   ~0.3 % of userspace samples that asio's intrusive-pool design avoids.
+3. The lower IPC (0.73 vs 0.85) is consistent with branchy syscall
+   front-ends and dispatch code being hot rather than tight I/O loops.
+
+The biggest single lever, by far, would be deleting (or gating behind a
+benchmark-disabled config) the opportunistic `accept4` in
+`dispatch_or_queue`, letting the multishot SQE carry accept traffic the
+way asio does. Hypothesis only — would need confirmation by either
+(a) building a corosio variant with the `accept4` call removed and
+re-running ACC, or (b) `strace -e accept4 -k` to verify all 13,576 calls
+trace to `dispatch_or_queue`.
+
+**Important context (carried from IOCTX):**
+High cost in `timer_service::process_expired()` (none observed here) would
+be correctness overhead from commit 2c73112d; optimization is to skip when
+`timer_service::empty()`. Not relevant to the ACC bottleneck.
+
+---
+
+**ACC artifacts in this directory:**
+- `ACC_corosio.{data,folded,svg}` - corosio profile (per-thread mode)
+- `ACC_asio.{data,folded,svg}` - asio profile (per-thread mode)
+- `ACC_diff.svg` - differential flamegraph (red = corosio hotter)
+- `ACC_stat.txt` - perf stat microarchitectural counters
+- `ACC_top_symbols.txt` - flat top symbols (overall, kernel-dominated)
+- `ACC_top_user_symbols.txt` - userspace-only top symbols (DSO filter on corosio_bench)
+- `ACC_strace.txt` - syscall counts and time
+- `ACC_{corosio,asio}_stdout.txt` - captured benchmark stdout
