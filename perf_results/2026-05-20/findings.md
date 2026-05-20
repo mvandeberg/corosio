@@ -148,3 +148,192 @@ lockless variant gaining ~3%).
 - `IOCTX_stat.txt` - perf stat microarchitectural counters
 - `IOCTX_top_symbols.txt` - flat top symbols (raw)
 - `IOCTX_{corosio,asio}_stdout.txt` - captured benchmark stdout
+
+---
+
+## FAN (fan_out:fork_join/16)
+
+Profile of corosio (io_uring backend) vs asio (BOOST_ASIO_HAS_IO_URING) running
+`--category fan_out --bench fork_join/16` for 10 s after a 0.5 s warmup. CCX-pinned
+(`taskset -c 0-7,16-23`). `perf record -F 999 -g --call-graph fp -m 32 --per-thread`.
+
+> Note on `--per-thread`: the IOCTX captures used per-CPU recording, but FAN
+> `fork_join/16` constructs 16 connected TCP socket pairs and asio's io_uring
+> backend allocates per-socket ring memory at registration time. Per-CPU perf
+> mmap buffers consumed enough of the 8 MB RLIMIT_MEMLOCK that
+> `io_uring_queue_init` returned `ENOMEM` even with `-m 1`. `--per-thread`
+> attaches the ring buffer to the bench thread only and resolved the
+> allocation pressure without sudo/prlimit. Sample counts (~10500 per side)
+> are comparable to the IOCTX runs.
+
+> Note on bench asymmetry: corosio's `fork_join` calls
+> `set_option(no_delay(true))` on both ends of each socket pair
+> (`perf/bench/corosio/fan_out_bench.cpp:100`); asio's does not
+> (`perf/bench/asio/coroutine/fan_out_bench.cpp:87-92`). Both run over the
+> loopback interface with 64-byte messages, so TCP_NODELAY only matters if
+> Nagle would actually defer; with synchronous request/response and no
+> pipelining the effect is small but is a real difference between the two
+> benches.
+
+**Throughput observed during profiling:**
+- corosio: 6.52 Kops/s (fork_join/16, 65204 ops in 10 s)
+- asio:    9.10 Kops/s (fork_join/16, 90973 ops in 10 s)
+- Loss vs asio: **−28.7%** (corosio at ~71.7% of asio)
+
+For context: corosio mean latency 153 us, asio mean latency 110 us. Each "op"
+is a full fan-out of 16 client writes + 16 server reads + 16 server writes +
+16 client reads + a zero-duration timer round-trip on the parent.
+
+**Top 5 hot symbols — corosio (flat, `--no-children`):**
+1. `entry_SYSRETQ_unsafe_stack` (kernel) — 7.57%. Catch-all kernel-syscall
+   return symbol; the call-graph attributes ~1.5 pp to write paths via
+   `io_uring_tcp_socket::write_some` and the rest to recv/io_uring syscalls.
+2. `tcp_ack` (kernel) — 2.67%.
+3. `srso_alias_return_thunk` (kernel) — 1.85%. SRSO mitigation thunk; charged
+   to many kernel call sites.
+4. `tcp_sendmsg_locked` (kernel) — 1.77%.
+5. `__tcp_transmit_skb` (kernel) — 1.76%.
+
+The single hottest *userspace* corosio symbol is `capy::write` (the resume
+shim) at 0.53%; the scheduler `do_one` is at 0.50%. Kernel TCP processing
+dominates this benchmark — see "Comparison to IOCTX" below.
+
+**Top 5 hot symbols — asio:**
+1. `tcp_ack` (kernel) — 3.50%.
+2. `__tcp_transmit_skb` (kernel) — 2.60%.
+3. `tcp_sendmsg_locked` (kernel) — 2.25%.
+4. `srso_alias_safe_ret` (kernel) — 2.04%.
+5. `srso_alias_return_thunk` (kernel) — 1.92%.
+
+Asio's hottest userspace symbol is `io_uring_service::io_queue::perform_io`
+at 0.33%.
+
+**Corosio-only symbols in the top 25 userspace** (with one-sentence "what does
+this function do", citing file:line):
+- `capy::write<...native_tcp_socket<io_uring_t>...>.resume` — 0.53%. Resume
+  point of the `capy::write` composed operation that loops `write_some`
+  until the full buffer is sent
+  (`capy::write` is defined in capy's headers; see `boost/capy/write.hpp`).
+- `io_uring_scheduler::do_one(long)` — 0.50%. The scheduler's per-iteration
+  dispatch step
+  (`include/boost/corosio/native/detail/io_uring/io_uring_scheduler.hpp:832`).
+  Now visible at half its IOCTX share (was 2.59% there) because real I/O
+  work amortizes the fixed cost.
+- `native_write_awaitable::await_suspend` — 0.39%. Thin awaitable that
+  forwards to `io_uring_tcp_socket::write_some`
+  (`include/boost/corosio/native/native_tcp_socket.hpp:151-157`).
+- `io_uring_tcp_socket::read_some` — 0.38%. The read implementation including
+  the speculative `readv` fast path added in 65043641
+  (`include/boost/corosio/native/detail/io_uring/io_uring_types.hpp:128-180`).
+- `io_uring_tcp_socket::write_some` — 0.19%. The write counterpart with the
+  speculative `writev` fast path
+  (`include/boost/corosio/native/detail/io_uring/io_uring_types.hpp:209` ff.).
+- `buffer_param::copy_impl<ConstBufferSequence,...>` — 0.18% + 0.05% (two
+  instantiations). The type-erased buffer-sequence iterator that fills an
+  `iovec[]` for each socket op
+  (`include/boost/corosio/detail/buffer_param.hpp:333-365`).
+- `io_uring_scheduler::process_completions()` — 0.16%. Drains the CQ ring
+  into the scheduler's ready queue
+  (`include/boost/corosio/native/detail/io_uring/io_uring_scheduler.hpp`).
+- `uring_read_op::do_handler` — 0.18%. Completion-handler invoked when the
+  read CQE arrives; restores the suspended coroutine and resumes it (same
+  header).
+- `io_uring_scheduler::run()` — 0.27%. Top-level event loop calling `do_one`
+  until stopped.
+
+**Counter deltas (from `FAN_stat.txt`, 5 s each):**
+- IPC: corosio **0.820**, asio **1.091** (corosio **−25%**).
+- Branch-miss rate (of branches): corosio **9.27%**, asio **8.04%**.
+- Cache-miss rate (of cache-references): corosio **0.102%**, asio **0.140%**.
+  (Asio takes proportionally more L1d misses — different from IOCTX where
+  the gap was much larger; here both libraries are doing real kernel-side
+  work that shares the kernel's working set.)
+- dTLB load misses: corosio 1.42 M, asio 0.43 M (corosio sees **3.3×** more).
+- Context switches: corosio 149, asio 202. CPU-migrations: corosio 97, asio
+  165. Both benches are single-bench-thread + 16 sockets, so context switches
+  reflect kernel softirq / network-stack scheduling; asio's higher count
+  tracks its higher op rate.
+- LLC-load-misses: `<not supported>` on this host.
+- Per-op (5 s window, corosio 32637 ops, asio 45786 ops):
+  - corosio: **939 K cycles/op, 770 K instructions/op**
+  - asio:    **668 K cycles/op, 729 K instructions/op**
+  - Corosio runs only ~6% more instructions per op but spends **41% more
+    cycles per op** — the same IPC-deficit signature as IOCTX, only this
+    time the lost cycles are spent in kernel TCP processing rather than the
+    scheduler. Corosio's user/sys breakdown is 0.79 s user / 3.43 s sys; asio
+    is 0.27 s user / 3.58 s sys (similar sys, much more user time for
+    corosio — again, larger per-op userspace path).
+
+**Comparison to IOCTX:**
+
+- The IOCTX-flagged corosio-only symbols are **dramatically smaller** in FAN.
+  `process_expired` was implicated as ~13 pp of IOCTX (via
+  `entry_SYSRETQ_unsafe_stack` → `__vdso_clock_gettime` and `pthread_mutex_lock`
+  from `timer_service::process_expired`); in FAN, `process_expired` itself is
+  **0.05%**, `__vdso_clock_gettime` standalone is **0.31%**, and
+  `pthread_mutex_lock` is **0.35%**. Likewise `io_uring_submit_and_get_events`
+  is **0.05%** (was ~8% in IOCTX). The per-`do_one` fixed costs are now
+  amortized across genuine per-iteration work and are no longer the bottleneck.
+- New userspace symbols hot in FAN but absent from IOCTX top-25:
+  `capy::write.resume`, `native_write_awaitable::await_suspend`,
+  `io_uring_tcp_socket::{read_some,write_some}`, `buffer_param::copy_impl`,
+  `uring_read_op::do_handler`, `io_uring_scheduler::process_completions`. These
+  are all per-socket-op userspace work, not coroutine-spawn cost.
+- **No coroutine-spawn allocator/page-fault hot spots appear in FAN.** IOCTX
+  showed asio dominated by `do_anonymous_page` / `clear_page_erms` /
+  `__handle_mm_fault` / `thread_info_base::allocate` from fresh awaitable
+  frames; none of that is in FAN's top 25 for either side. The 16 child
+  coroutines per iteration evidently reuse their frames via asio's
+  `awaitable_thread` pool and capy's `recycling_memory_resource`, so the
+  spawn path is **not** an additional cost over IOCTX — the loss is the same
+  signature as IOCTX (IPC deficit) but moved from scheduler fixed costs into
+  per-socket-op userspace work.
+
+**Working hypothesis:**
+
+The 28.7% FAN loss is dominated by per-socket-op userspace overhead — the
+`io_uring_tcp_socket::{read_some,write_some}` path (speculative `readv`/`writev`
+fast path, iovec construction via `buffer_param::copy_impl`,
+`native_{read,write}_awaitable::await_suspend` shim, and the surrounding
+`capy::{read,write}` composed-op resume) — rather than the per-dispatch fixed
+costs identified in IOCTX. Corosio's per-op userspace path is wider than asio's
+io_uring_socket_service path despite executing only ~6% more retired
+instructions; the cycle deficit (corosio 939 K cyc/op vs asio 668 K cyc/op)
+points to lower IPC in that path (0.82 vs 1.09) — likely from branch mispredicts
+in the buffer-iteration / iovec-construction code (corosio branch-miss rate
+9.27% vs asio 8.04%) and from the speculative-readv path's branchy short-read
+handling. Hypothesis only — would need confirmation by either (a) profiling a
+variant of the corosio bench with the speculative fast path disabled, or
+(b) `perf record -e branch-misses` to attribute mispredicts directly to
+specific source lines in `io_uring_types.hpp`.
+
+**Important context (same as IOCTX):**
+Any high cost in `timer_service::process_expired()` is *correctness overhead*
+from commit 2c73112d, not inherent — see the IOCTX section's blockquote for why.
+In FAN this cost is already small (0.05%) because each `do_one` does real
+I/O work, so the optimization (skipping when `timer_service::empty()` is true)
+will not move the FAN number measurably. The FAN loss lives elsewhere.
+
+---
+
+**Source citations (FAN-specific, for traceability):**
+- corosio bench source: `perf/bench/corosio/fan_out_bench.cpp:75-145`
+  (`bench_fork_join`)
+- asio bench source: `perf/bench/asio/coroutine/fan_out_bench.cpp:75-160`
+  (`bench_fork_join`)
+- corosio `io_uring_tcp_socket::read_some` (with speculative readv):
+  `include/boost/corosio/native/detail/io_uring/io_uring_types.hpp:128-205`
+- corosio `io_uring_tcp_socket::write_some` (with speculative writev):
+  `include/boost/corosio/native/detail/io_uring/io_uring_types.hpp:209` ff.
+- corosio `native_write_awaitable::await_suspend`:
+  `include/boost/corosio/native/native_tcp_socket.hpp:151-157`
+- corosio `buffer_param::copy_impl`:
+  `include/boost/corosio/detail/buffer_param.hpp:333-365`
+
+**FAN artifacts in this directory:**
+- `FAN_corosio.{data,folded,svg}` - corosio profile
+- `FAN_asio.{data,folded,svg}` - asio profile
+- `FAN_diff.svg` - differential flamegraph (red = corosio hotter)
+- `FAN_stat.txt` - perf stat microarchitectural counters
+- `FAN_top_symbols.txt` - flat top symbols (raw)
+- `FAN_{corosio,asio}_stdout.txt` - captured benchmark stdout
