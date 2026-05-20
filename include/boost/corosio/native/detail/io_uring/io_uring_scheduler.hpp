@@ -853,6 +853,15 @@ io_uring_scheduler::do_one(long timeout_us)
         process_completions();
     }
 
+    // Drain expired timers eagerly, for the same reason the kernel CQE
+    // pump runs unconditionally above: when completed_ops_ stays non-
+    // empty (e.g. continuous loopback I/O whose CQEs land in the top-
+    // of-do_one process_completions call), the leader-wait branch
+    // below — the only other place process_expired() runs — is never
+    // reached. Without this, stopper-timer-based shutdowns (and any
+    // other timer dependent on a busy I/O loop yielding) deadlock.
+    timer_svc_->process_expired();
+
     lock_type lock(dispatch_mutex_);
     for (;;)
     {
