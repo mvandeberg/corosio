@@ -867,3 +867,190 @@ c. Build with `spec_state::may_speculate_read()` permanently false on
 - `HTTP_top_user_symbols.txt` - userspace-only top symbols (DSO filter on corosio_bench)
 - `HTTP_strace.txt` - syscall counts and time
 - `HTTP_{corosio,asio}_stdout.txt` - captured benchmark stdout
+
+## TAIL (socket_latency:concurrent/16 — p99 investigation)
+
+Profile of corosio (io_uring) only, focused on the p99 tail. Prior W/T/L report:
+p50 is +1284 % vs asio (corosio is much faster typical case) but p99 is −77 % (much
+worse worst case). CPU profiling alone cannot explain a tail issue, so this
+section uses sched event tracing (`sched_switch`, `sched_wakeup`) to find the
+worst wakeup-to-run gaps.
+
+CCX-pinned (`taskset -c 0-7,16-23`). Recording:
+- CPU profile: `perf record -F 999 -g --call-graph fp --per-thread -m 1` (10 s) —
+  the `-m 32` mmap size exhausted the user's 8 MiB memlock allowance and caused
+  the bench's `io_uring_queue_init_params` to fail (`Cannot allocate memory`).
+  Per-thread mode with `-m 1` succeeded.
+- Sched events: a workaround was needed (see below). The bench was launched in
+  the background first to claim its full memlock for io_uring; then
+  `perf record -e sched:sched_switch,sched:sched_wakeup -a -m 1` attached system-wide
+  for 5 s. However, **`perf script`, `perf report`, and `perf sched latency` all
+  fail with "incompatible file format" on this system (perf 6.19.11) for any
+  tracepoint capture**, regardless of record flags. Tested workaround: a fresh
+  `perf trace -e sched:sched_switch,sched:sched_wakeup -a -T` capture run during
+  a second bench instance produced a text dump (93 893 lines) that the analysis
+  script could parse. The binary `.data` file is saved but unreadable; the text
+  file is the source of truth.
+
+**Throughput observed during profiling:**
+- corosio: 138.71 Kops/s (10 s run), 140.04 Kops/s (15 s parallel-trace run)
+- p50 latency: 7 073 ns (CPU run) / 7 053 ns (trace run)
+- p99 latency: 490 424 ns (CPU run) / 485 033 ns (trace run)
+- p99.9 latency: 596 865 ns (CPU run) / 578 813 ns (trace run)
+- max latency: 4 154 µs (CPU run) / 7 597 µs (trace run)
+- Ratio to asio: corosio p50 is ~17× faster than asio (118 075 ns); corosio p99
+  is ~3.7× *slower* than asio (130 799 ns). This confirms the W/T/L direction
+  (sign matches; magnitude within run-to-run noise).
+
+**Top 5 hot symbols — corosio CPU profile (context):**
+
+Userspace+kernel flat self time (no callchain accumulation):
+
+| % | symbol | DSO |
+|---|---|---|
+| 6.96 | `entry_SYSRETQ_unsafe_stack` | kernel |
+| 3.09 | `tcp_ack` | kernel |
+| 2.61 | `__tcp_transmit_skb` | kernel |
+| 2.17 | `tcp_sendmsg_locked` | kernel |
+| 1.99 | `std::__introsort_loop` (bench's latency vector sort) | corosio_bench |
+
+The userspace corosio symbols are deep in the noise (`io_uring_tcp_socket::write_some`
+0.77 %, `read_some` 0.52 %, `io_uring_scheduler::do_one` 0.06 %). The CPU profile
+looks like a textbook TCP loopback benchmark — kernel networking dominates,
+userspace is fine. No "spec-readv at 7 %" shape from the HTTP investigation
+appears here, because `concurrent/16` doesn't run the HTTP handler and the
+single-packet ping-pong pattern has no speculative-readv opportunity.
+
+**Bench-thread sched analysis from `TAIL_corosio_topgaps.txt`:**
+
+The bench is single-threaded (one comm `corosio_bench`, tid 993177). It never
+sleeps:
+
+- `sched_wakeup` events targeting bench: **0**
+- `sched_switch` events with `prev_pid=bench` (bench going OFF-CPU): 207
+- All 207 transitions are `prev_state=256` (CFS preemption while still
+  runnable, not voluntary sleep) or runqueue migration
+
+Top 5 worst preemption gaps (bench is OFF the CPU but still runnable):
+
+| off-CPU (µs) | preempted by | resume_ts (µs since epoch) |
+|--------------|--------------|---------------------------|
+| 256.0 | migration/4 | 3826876818977 |
+| 20.0 | migration/4 | 3826878287674 |
+| 20.0 | kworker/6:1 | 3826876593729 |
+| 19.0 | kworker/2:0 | 3826878640668 |
+| 19.0 | migration/4 | 3826877078942 |
+
+Distribution of bench off-CPU periods (n=206): p50=6 µs, p90=10 µs, p99=20 µs,
+max=256 µs.
+
+**perf sched latency summary:**
+
+`perf sched latency` failed with "incompatible file format" on this system
+(see `TAIL_corosio_sched_latency.txt`). Same root cause as `perf script`
+failing. Equivalent information is in the topgaps text and bench off-CPU
+distribution above.
+
+**Working theory for the p99 outliers:**
+
+**Scheduler preemption is NOT the dominant cause of the p99 tail.** The bench
+thread spends a total of <2 ms off the CPU across the entire 5-second sample
+(206 events × ~6 µs mean ≈ 1.3 ms), and its longest single off-CPU period
+(256 µs) is roughly half of the reported p99 (485–490 µs) and a third of the
+reported p99.9 (579–597 µs). One 256 µs preemption could explain at most a
+single tail observation, not the ~14 000 ops per second that fall above p99.
+
+If the bench never sleeps and is rarely preempted, where does ~480 µs of tail
+latency come from on every 100th operation? Hypotheses, in rough order of
+plausibility:
+
+- **In-process queueing under 16-way concurrency** (most likely). The bench
+  runs 16 ping-pong pairs on a single thread serviced by one io_uring ring.
+  When 16 CQEs complete in the same batch, the scheduler dispatches them in
+  some order — the last coroutine to resume sees the latency of "wait for 15
+  other coroutines' send+recv steps to finish on this thread before I can run".
+  At ~7 µs per typical op and 16 in flight, the worst-case in-process queueing
+  delay is naturally ~16 × 7 µs ≈ 112 µs, but the actual p99 of 485 µs is ~4×
+  that — suggesting a CQE-batch processing pattern that locally amplifies the
+  fan-out. *Hypothesis only — would need confirmation by measuring per-op
+  "queued behind N other coroutines" depth, or by re-running at concurrent/4
+  and concurrent/64 to see the p99 ratio scale linearly with N.*
+- **CQE-batch buildup spikes** — `do_one` may drain a long CQE list while
+  holding the dispatch path, leading to processing-time clumps. The CPU
+  profile attributes only 0.06 % to `do_one`, so this is dispatch ordering,
+  not raw cycles. *Hypothesis only — would need confirmation by tracing CQE
+  count per `io_uring_enter` return.*
+- **TCP loopback retransmit / Nagle / delayed ACK pause** — the kernel
+  networking stack accounts for ~80 % of CPU samples. A `tcp_schedule_loss_probe`
+  symbol shows up at 0.75 %; if the kernel ever decides to defer-send under
+  contention, that's a ~200–500 µs window. *Hypothesis only — would need
+  confirmation by `tcp_v4_rcv` callchain inspection or `ss -ti` during the
+  bench to see retransmits.*
+- **Allocator pauses** — the bench's own latency-histogram sort
+  (`std::__introsort_loop` at 1.99 %) is end-of-run noise. There is no
+  free/alloc on the hot per-op path visible in the profile. Considered unlikely.
+- **Kernel scheduler preemption** — directly contradicted by the off-CPU
+  data; max 256 µs and only one event of that magnitude. Considered ruled out.
+
+The most-likely single cause is **in-thread coroutine dispatch ordering under
+N=16 concurrency**: at the steady-state ops/sec (≈140 K) the typical op takes
+~7 µs but the worst-position-in-the-fan-out op gets queued behind ~60 µs of
+other coroutines' work + ring submission + kernel TCP send + ring completion.
+Notably, asio's p99 (131 µs) is *also* much higher than its p50 (118 µs) — the
+absolute p99–p50 gap is similar in microseconds (~13 µs for asio, ~480 µs for
+corosio), but the p50 is so different that the ratio looks alarming for corosio.
+The asio model "I block until I have work" stretches every op to ~120 µs, which
+amortizes the queueing delay across all ops; corosio's busy-poll model leaves
+typical ops at ~7 µs but exposes the queueing delay raw on the tail.
+
+**Comparison to IOCTX/FAN/ACC/HTTP:**
+
+- The IOCTX/FAN findings on `entry_SYSRETQ_unsafe_stack` (7 %) and kernel TCP
+  dominance reproduce here — same kernel-stack pattern.
+- HTTP's "speculative readv fails 100 %" shape does **not** appear here. This
+  bench is a 16-byte ping-pong; the first speculative readv after a write would
+  always race with the kernel and there's no opportunity for it to succeed —
+  but the relative cost (the symbol `[k] do_readv` 0.57 %, `[k] vfs_readv`
+  0.95 %, libc `readv` 0.19 %) is far smaller than HTTP's. Total `readv`-path
+  cost is ~2 % vs HTTP's ~7 % — meaningful but not headline.
+- ACC's "speculative accept4" shape is absent (no accept loop on this bench).
+- This is a **new tail-latency shape** — IOCTX/FAN/ACC/HTTP all explained
+  *throughput / median* gaps via CPU-time hotspots; this section explains
+  the p99 tail via *coroutine dispatch ordering*, an effect that's invisible
+  to CPU profiling and to the W/T/L throughput report.
+
+**Recommended next investigation steps:**
+
+In order of expected information value:
+
+1. Re-run `socket_latency` at `concurrent/1`, `concurrent/4`, `concurrent/16`,
+   `concurrent/64` and plot p99 vs N. If p99 ≈ N × p50, the tail is fan-out
+   queueing and the fix is to either spread connections over multiple
+   io_contexts or to reorder CQE dispatch (e.g., LIFO).
+2. Add an in-bench measurement of "how many CQEs were ready in the batch
+   that contained my completion" — directly counts queueing depth.
+3. Run `socket_latency:pingpong/64` (one connection, deeper pipeline) — if
+   p99 stays close to p50 there, the tail is concurrency-induced, confirming
+   (1).
+4. Try `iouring_setup_attach_wq` or running 16 pairs across 2 io_contexts —
+   does halving the fan-out halve the p99?
+5. Capture `bpftrace -e 'kprobe:io_uring_enter { @[args.nr] = count(); }'`
+   to see CQE batch sizes; large batches → confirms the (CQE-buildup) sub-hypothesis.
+
+**No code change is recommended at this point.** The p99 gap is real but the
+root cause needs the experiments above before any fix should be designed.
+A "fix" that lowers p99 at the cost of p50 would lose the +1284 % p50 win.
+
+---
+
+**TAIL artifacts in this directory:**
+- `TAIL_corosio_cpu.{data,folded,svg}` — corosio CPU profile (per-thread mode)
+- `TAIL_corosio_cpu_stdout.txt` — bench output (throughput, latency percentiles)
+- `TAIL_corosio_sched.data` — sched-event binary capture (unreadable by perf
+  script on this system; kept for completeness / future perf version)
+- `TAIL_corosio_sched.txt` — `perf trace` text dump of sched events (93 893 lines)
+- `TAIL_corosio_sched_stdout.txt` — bench stdout during sched capture
+- `TAIL_corosio_topgaps.txt` — top wakeup-to-switch gaps and bench off-CPU
+  distribution (Python-processed from the text dump)
+- `TAIL_corosio_sched_latency.txt` — documentation of the `perf sched latency`
+  failure on this perf version
