@@ -923,13 +923,32 @@ single-packet ping-pong pattern has no speculative-readv opportunity.
 
 **Bench-thread sched analysis from `TAIL_corosio_topgaps.txt`:**
 
-The bench is single-threaded (one comm `corosio_bench`, tid 993177). It never
-sleeps:
+The bench is single-threaded (one comm `corosio_bench`, tid 993177). For this
+5-second run, it never voluntarily blocks:
 
 - `sched_wakeup` events targeting bench: **0**
 - `sched_switch` events with `prev_pid=bench` (bench going OFF-CPU): 207
-- All 207 transitions are `prev_state=256` (CFS preemption while still
-  runnable, not voluntary sleep) or runqueue migration
+- All 207 transitions are `prev_state=256` (TASK_RUNNING — CFS preemption
+  while still runnable, not voluntary sleep) or runqueue migration
+
+> **Why doesn't the bench ever block?** corosio's io_uring scheduler does
+> have a blocking primitive — `do_one(-1)` calls
+> `io_uring_wait_cqe_timeout(&ring_, &cqe, NULL)` at
+> `io_uring_scheduler.hpp:970` — but that branch is only entered when
+> `completed_ops_.empty()`. Under continuous I/O at concurrent/16, the
+> dispatch loop never sees an empty `completed_ops_`: each speculative
+> read/write/op-push keeps the queue non-empty across iterations. This is
+> the same architectural property that caused the timer-fairness deadlock
+> fixed in commit 2c73112d (see the IOCTX section's blockquote on `do_one`).
+> Asio's io_uring backend takes the equivalent blocking path more often —
+> it doesn't pre-populate a sync-completion queue from speculative syscalls
+> — which is the structural reason its p50 is higher (~118 µs vs corosio's
+> ~7 µs) and its CPU samples show it as a "sleeping" workload to perf.
+>
+> So "the bench never sleeps" here is a *consequence* of the same
+> always-non-empty-`completed_ops_` pattern seen in HTTP, not evidence that
+> corosio is fundamentally a busy-poll architecture. It is functionally
+> busy-looping *in this regime* only.
 
 Top 5 worst preemption gaps (bench is OFF the CPU but still runnable):
 
@@ -998,10 +1017,19 @@ N=16 concurrency**: at the steady-state ops/sec (≈140 K) the typical op takes
 other coroutines' work + ring submission + kernel TCP send + ring completion.
 Notably, asio's p99 (131 µs) is *also* much higher than its p50 (118 µs) — the
 absolute p99–p50 gap is similar in microseconds (~13 µs for asio, ~480 µs for
-corosio), but the p50 is so different that the ratio looks alarming for corosio.
-The asio model "I block until I have work" stretches every op to ~120 µs, which
-amortizes the queueing delay across all ops; corosio's busy-poll model leaves
-typical ops at ~7 µs but exposes the queueing delay raw on the tail.
+corosio). The p50 ratio looks alarming because asio's typical op carries
+io_uring_wait_cqe_timeout block-and-wake overhead (~120 µs per op) while
+corosio's typical op skips that path entirely (because `completed_ops_` is
+never empty under continuous I/O — see the blockquote above). Asio "blocks
+until I have work" on every op, amortizing the queueing delay across all
+ops; corosio dispatches directly out of `completed_ops_` and leaves typical
+ops at ~7 µs but exposes the queueing delay raw on the worst-positioned op
+of each CQE batch.
+
+*Hypothesis — would need confirmation by the concurrent/N scaling experiment
+below.* If the p99 grows roughly linearly with N, the cause is in-thread
+fan-out queueing. If it stays flat or sub-linear, the cause is something
+else (single-event timing artifacts, kernel TCP, etc.).
 
 **Comparison to IOCTX/FAN/ACC/HTTP:**
 
