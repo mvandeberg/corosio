@@ -1,0 +1,81 @@
+=== corosio ===
+Boost.Corosio Benchmarks
+========================
+Backend: io_uring
+Duration: 5s per benchmark
+Warmup: 0.5s per benchmark
+
+=== (corosio) [http_server] concurrent/16 ===
+  Ops:           506656
+  Throughput:    101.33 Kops/s
+  Elapsed:       5.000 s
+  Latency:
+    mean:  157870.16 ns
+    p50:   156998.00 ns
+    p90:   164742.00 ns
+    p99:   175243.00 ns
+    p99.9: 203781.49 ns
+    min:   146508.00 ns
+    max:   1031539.00 ns
+  Connections:   16
+
+
+Benchmarks complete.
+
+ Performance counter stats for '/home/michael/git/boost/libs/corosio/build_profile/perf/bench/corosio_bench --library corosio --category http_server --bench concurrent/16 --duration 5 --warmup 0.5 --backend io_uring':
+
+    30,915,702,503      cycles                                                                  (71.41%)
+    25,185,020,604      instructions                                                            (71.42%)
+     5,676,069,527      branches                                                                (71.42%)
+       522,599,592      branch-misses                                                           (71.44%)
+     3,740,074,258      cache-references                                                        (71.45%)
+         7,879,851      cache-misses                                                            (71.44%)
+         1,911,886      dTLB-load-misses                                                        (71.42%)
+   <not supported>      LLC-load-misses                                                       
+               145      context-switches                                                      
+                93      cpu-migrations                                                        
+
+       5.611190600 seconds time elapsed
+
+       0.844608000 seconds user
+       3.494876000 seconds sys
+
+
+=== asio ===
+
+=== (asio) [http_server] concurrent/16 ===
+  Ops:           726272
+  Throughput:    145.25 Kops/s
+  Elapsed:       5.000 s
+  Latency:
+    mean:  110124.94 ns
+    p50:   109388.00 ns
+    p90:   115059.00 ns
+    p99:   126543.61 ns
+    p99.9: 152226.29 ns
+    min:   105050.00 ns
+    max:   1738712.00 ns
+  Connections:   16
+
+
+Benchmarks complete.
+
+ Performance counter stats for '/home/michael/git/boost/libs/corosio/build_profile/perf/bench/corosio_bench --library asio --category http_server --bench concurrent/16 --duration 5 --warmup 0.5':
+
+    30,971,982,629      cycles                                                                  (71.41%)
+    35,660,091,575      instructions                                                            (71.42%)
+     7,955,882,138      branches                                                                (71.42%)
+       599,017,332      branch-misses                                                           (71.44%)
+     2,654,354,011      cache-references                                                        (71.46%)
+         4,087,793      cache-misses                                                            (71.44%)
+           396,928      dTLB-load-misses                                                        (71.41%)
+   <not supported>      LLC-load-misses                                                       
+               214      context-switches                                                      
+               166      cpu-migrations                                                        
+
+       5.627663982 seconds time elapsed
+
+       0.444519000 seconds user
+       3.524153000 seconds sys
+
+

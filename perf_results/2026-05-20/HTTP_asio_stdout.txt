@@ -1,0 +1,19 @@
+
+=== (asio) [http_server] concurrent/16 ===
+  Ops:           1451600
+  Throughput:    145.16 Kops/s
+  Elapsed:       10.000 s
+  Latency:
+    mean:  110195.44 ns
+    p50:   109538.00 ns
+    p90:   113997.00 ns
+    p99:   133453.01 ns
+    p99.9: 163861.40 ns
+    min:   104899.00 ns
+    max:   3711498.00 ns
+  Connections:   16
+
+
+Benchmarks complete.
+[ perf record: Woken up 1480 times to write data ]
+[ perf record: Captured and wrote 2.914 MB /home/michael/git/boost/libs/corosio/perf_results/2026-05-20/HTTP_asio.data (10723 samples) ]

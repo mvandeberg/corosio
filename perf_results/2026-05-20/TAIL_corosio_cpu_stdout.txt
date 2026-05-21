@@ -1,0 +1,24 @@
+Boost.Corosio Benchmarks
+========================
+Backend: io_uring
+Duration: 10s per benchmark
+Warmup: 0.5s per benchmark
+
+=== (corosio) [socket_latency] concurrent/16 ===
+  Ops:           1387135
+  Throughput:    138.71 Kops/s
+  Elapsed:       10.000 s
+  Latency:
+    mean:  115311.52 ns
+    p50:   7073.00 ns
+    p90:   467350.00 ns
+    p99:   490423.66 ns
+    p99.9: 596864.79 ns
+    min:   6712.00 ns
+    max:   4154259.00 ns
+  Num Pairs:     16
+
+
+Benchmarks complete.
+[ perf record: Woken up 1497 times to write data ]
+[ perf record: Captured and wrote 2.949 MB /home/michael/git/boost/libs/corosio/perf_results/2026-05-20/TAIL_corosio_cpu.data (10774 samples) ]

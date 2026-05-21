@@ -1,0 +1,75 @@
+=== corosio ===
+Boost.Corosio Benchmarks
+========================
+Backend: io_uring
+Duration: 5s per benchmark
+Warmup: 0.5s per benchmark
+
+=== (corosio) [io_context] single_threaded ===
+  Items:         11037000
+  Rate:          2.21 Mops/s
+  Elapsed:       5.000 s
+
+
+=== (corosio) [io_context] single_threaded_lockless ===
+  Items:         11375000
+  Rate:          2.27 Mops/s
+  Elapsed:       5.000 s
+
+
+Benchmarks complete.
+
+ Performance counter stats for '/home/michael/git/boost/libs/corosio/build_profile/perf/bench/corosio_bench --library corosio --backend io_uring --enable-microbenchmarks --category io_context --bench single_threaded --duration 5 --warmup 0.5':
+
+    60,853,160,971      cycles                                                                  (71.43%)
+    82,387,484,024      instructions                                                            (71.44%)
+    18,353,002,790      branches                                                                (71.44%)
+       553,296,105      branch-misses                                                           (71.45%)
+     4,252,763,896      cache-references                                                        (71.43%)
+        43,179,441      cache-misses                                                            (71.41%)
+         5,666,029      dTLB-load-misses                                                        (71.41%)
+   <not supported>      LLC-load-misses                                                       
+               147      context-switches                                                      
+                31      cpu-migrations                                                        
+
+      11.003678623 seconds time elapsed
+
+       7.258066000 seconds user
+       3.660350000 seconds sys
+
+
+=== asio ===
+
+=== (asio) [io_context] single_threaded ===
+  Items:         16365000
+  Rate:          3.27 Mops/s
+  Elapsed:       5.000 s
+
+
+=== (asio) [io_context] single_threaded_lockless ===
+  Items:         16850000
+  Rate:          3.37 Mops/s
+  Elapsed:       5.000 s
+
+
+Benchmarks complete.
+
+ Performance counter stats for '/home/michael/git/boost/libs/corosio/build_profile/perf/bench/corosio_bench --library asio --enable-microbenchmarks --category io_context --bench single_threaded --duration 5 --warmup 0.5':
+
+    60,087,358,345      cycles                                                                  (71.41%)
+   139,187,867,748      instructions                                                            (71.41%)
+    29,013,974,913      branches                                                                (71.43%)
+       662,165,662      branch-misses                                                           (71.44%)
+     3,909,097,279      cache-references                                                        (71.44%)
+       199,594,728      cache-misses                                                            (71.44%)
+        14,488,692      dTLB-load-misses                                                        (71.42%)
+   <not supported>      LLC-load-misses                                                       
+               122      context-switches                                                      
+                13      cpu-migrations                                                        
+
+      11.001839082 seconds time elapsed
+
+       6.315856000 seconds user
+       4.588739000 seconds sys
+
+

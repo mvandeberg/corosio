@@ -1,0 +1,24 @@
+Boost.Corosio Benchmarks
+========================
+Backend: io_uring
+Duration: 10s per benchmark
+Warmup: 0.5s per benchmark
+
+=== (corosio) [fan_out] fork_join/16 ===
+  Ops:           65204
+  Throughput:    6.52 Kops/s
+  Elapsed:       10.000 s
+  Latency:
+    mean:  153332.47 ns
+    p50:   153303.00 ns
+    p90:   157951.00 ns
+    p99:   166959.00 ns
+    p99.9: 197291.04 ns
+    min:   147803.00 ns
+    max:   555871.00 ns
+  Fan Out:       16
+
+
+Benchmarks complete.
+[ perf record: Woken up 45 times to write data ]
+[ perf record: Captured and wrote 2.801 MB /home/michael/git/boost/libs/corosio/perf_results/2026-05-20/FAN_corosio.data (10498 samples) ]

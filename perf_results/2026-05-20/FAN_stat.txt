@@ -1,0 +1,81 @@
+=== corosio ===
+Boost.Corosio Benchmarks
+========================
+Backend: io_uring
+Duration: 5s per benchmark
+Warmup: 0.5s per benchmark
+
+=== (corosio) [fan_out] fork_join/16 ===
+  Ops:           32637
+  Throughput:    6.53 Kops/s
+  Elapsed:       5.000 s
+  Latency:
+    mean:  153163.14 ns
+    p50:   151779.00 ns
+    p90:   158542.00 ns
+    p99:   171542.60 ns
+    p99.9: 202878.08 ns
+    min:   147912.00 ns
+    max:   281357.00 ns
+  Fan Out:       16
+
+
+Benchmarks complete.
+
+ Performance counter stats for '/home/michael/git/boost/libs/corosio/build_profile/perf/bench/corosio_bench --library corosio --category fan_out --bench fork_join/16 --duration 5 --warmup 0.5 --backend io_uring':
+
+    30,636,896,686      cycles                                                                  (71.41%)
+    25,108,205,596      instructions                                                            (71.43%)
+     5,661,309,804      branches                                                                (71.45%)
+       524,665,459      branch-misses                                                           (71.43%)
+     3,529,429,119      cache-references                                                        (71.43%)
+         3,587,338      cache-misses                                                            (71.44%)
+         1,416,672      dTLB-load-misses                                                        (71.42%)
+   <not supported>      LLC-load-misses                                                       
+               149      context-switches                                                      
+                97      cpu-migrations                                                        
+
+       5.512732012 seconds time elapsed
+
+       0.788734000 seconds user
+       3.432669000 seconds sys
+
+
+=== asio ===
+
+=== (asio) [fan_out] fork_join/16 ===
+  Ops:           45786
+  Throughput:    9.16 Kops/s
+  Elapsed:       5.000 s
+  Latency:
+    mean:  109171.36 ns
+    p50:   107756.00 ns
+    p90:   114038.00 ns
+    p99:   122729.35 ns
+    p99.9: 146567.95 ns
+    min:   104740.00 ns
+    max:   233045.00 ns
+  Fan Out:       16
+
+
+Benchmarks complete.
+
+ Performance counter stats for '/home/michael/git/boost/libs/corosio/build_profile/perf/bench/corosio_bench --library asio --category fan_out --bench fork_join/16 --duration 5 --warmup 0.5':
+
+    30,587,752,877      cycles                                                                  (71.41%)
+    33,366,410,207      instructions                                                            (71.41%)
+     7,388,406,695      branches                                                                (71.43%)
+       594,227,187      branch-misses                                                           (71.42%)
+     2,688,023,546      cache-references                                                        (71.44%)
+         3,771,841      cache-misses                                                            (71.46%)
+           428,419      dTLB-load-misses                                                        (71.44%)
+   <not supported>      LLC-load-misses                                                       
+               202      context-switches                                                      
+               165      cpu-migrations                                                        
+
+       5.515486057 seconds time elapsed
+
+       0.270894000 seconds user
+       3.576800000 seconds sys
+
+

@@ -1,0 +1,74 @@
+=== top 25 hot symbols: corosio ===
+# Overhead       Samples  Command        Shared Object        Symbol                                                                                                                                                                                                                                                                                                                                                                                                                                   
+# ........  ............  .............  ...................  .........................................................................................................................................................................................................................................................................................................................................................................................................................................
+#
+    25.92%          5429  corosio_bench  [kernel.kallsyms]    [k] entry_SYSRETQ_unsafe_stack
+     3.80%           797  corosio_bench  [kernel.kallsyms]    [k] __pi__text
+     3.63%           760  corosio_bench  [kernel.kallsyms]    [k] __do_sys_io_uring_enter
+     3.37%           706  corosio_bench  [vdso]               [.] __vdso_clock_gettime
+     2.62%           548  corosio_bench  libc.so.6            [.] pthread_mutex_lock
+     2.59%           539  corosio_bench  corosio_bench        [.] boost::corosio::detail::io_uring_scheduler::do_one(long)
+     2.53%           529  corosio_bench  [kernel.kallsyms]    [k] do_syscall_64
+     2.47%           517  corosio_bench  [kernel.kallsyms]    [k] entry_SYSCALL_64
+     2.38%           498  corosio_bench  [kernel.kallsyms]    [k] io_cqring_wait
+     2.05%           432  corosio_bench  liburing.so.2.14     [.] 0x00000000000026e4
+     1.93%           407  corosio_bench  [kernel.kallsyms]    [k] __irqentry_text_end
+     1.77%           370  corosio_bench  [kernel.kallsyms]    [k] entry_SYSCALL_64_after_hwframe
+     1.57%           329  corosio_bench  [kernel.kallsyms]    [k] fget
+     1.38%           290  corosio_bench  [kernel.kallsyms]    [k] srso_alias_safe_ret
+     1.04%           218  corosio_bench  corosio_bench        [.] boost::corosio::detail::io_uring_scheduler::poll()
+     1.02%           214  corosio_bench  [kernel.kallsyms]    [k] do_anonymous_page
+     0.99%           208  corosio_bench  [kernel.kallsyms]    [k] srso_alias_return_thunk
+     0.86%           180  corosio_bench  libc.so.6            [.] 0x00000000000a5cd2
+     0.81%           170  corosio_bench  corosio_bench        [.] boost::capy::recycling_memory_resource::deallocate_slow(void*, unsigned long)
+     0.79%           166  corosio_bench  [kernel.kallsyms]    [k] __x64_sys_io_uring_enter
+     0.74%           155  corosio_bench  libc.so.6            [.] cfree
+     0.72%           151  corosio_bench  [kernel.kallsyms]    [k] __handle_mm_fault
+     0.72%           150  corosio_bench  libstdc++.so.6.0.34  [.] operator new(unsigned long)
+     0.69%           139  corosio_bench  [kernel.kallsyms]    [k] syscall_return_via_sysret
+     0.62%           129  corosio_bench  liburing.so.2.14     [.] 0x00000000000026e2
+     0.59%           124  corosio_bench  corosio_bench        [.] boost::capy::recycling_memory_resource::allocate_fast(unsigned long, unsigned long)
+     0.58%           120  corosio_bench  corosio_bench        [.] boost::corosio::detail::io_uring_scheduler::post(std::__n4861::coroutine_handle<void>) const
+     0.53%           111  corosio_bench  corosio_bench        [.] boost::capy::detail::run_async_trampoline<boost::corosio::io_context::executor_type, boost::capy::detail::default_handler, std::pmr::memory_resource*> boost::capy::detail::make_trampoline<boost::corosio::io_context::executor_type, boost::capy::detail::default_handler, std::pmr::memory_resource*>(boost::corosio::io_context::executor_type, boost::capy::detail::default_handler, std::pmr::memory_resource*) [clone .resume]
+     0.52%           111  corosio_bench  corosio_bench        [.] boost::capy::recycling_memory_resource::allocate_slow(unsigned long, unsigned long)
+     0.52%           109  corosio_bench  [kernel.kallsyms]    [k] asm_exc_page_fault
+     0.47%            99  corosio_bench  corosio_bench        [.] _ZNO5boost4capy17run_async_wrapperINS_7corosio10io_context13executor_typeENS0_6detail15default_handlerEPNSt3pmr15memory_resourceEEclITkNS0_10IoRunnableENS0_4taskIvEEEEvT_
+     0.47%            99  corosio_bench  [kernel.kallsyms]    [k] lru_add
+
+=== top 25 hot symbols: asio ===
+# Overhead       Samples  Command        Shared Object        Symbol                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
+# ........  ............  .............  ...................  ....................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................
+#
+     5.68%          1191  corosio_bench  [kernel.kallsyms]    [k] __irqentry_text_end
+     4.34%           904  corosio_bench  corosio_bench        [.] boost::asio::awaitable<boost::asio::detail::awaitable_thread_entry_point, boost::asio::any_io_executor> boost::asio::detail::co_spawn_entry_point<boost::asio::detail::detached_handler, boost::asio::any_io_executor, boost::asio::detail::awaitable_as_function<void, boost::asio::any_io_executor> >(boost::asio::awaitable<void, boost::asio::any_io_executor>*, boost::asio::detail::co_spawn_state<boost::asio::detail::detached_handler, boost::asio::any_io_executor, boost::asio::detail::awaitable_as_function<void, boost::asio::any_io_executor>, void>) [clone .resume]
+     3.44%           714  corosio_bench  [kernel.kallsyms]    [k] do_anonymous_page
+     2.62%           541  corosio_bench  libc.so.6            [.] 0x00000000000a5cd2
+     2.45%           510  corosio_bench  corosio_bench        [.] _ZN5boost4asio8co_spawnINS0_10io_context19basic_executor_typeISaIvELm0EEENS0_15any_io_executorETkNS0_20completion_token_forIFvNSt15__exception_ptr13exception_ptrEEEERKNS0_10detached_tEEEDaRKT_NS0_9awaitableIvT0_EEOT1_NS0_10constraintIXaaoosr11is_executorISE_EE5valuesr9execution11is_executorISE_EE5valuesr14is_convertibleISE_SI_EE5valueEiE4typeE
+     2.35%           490  corosio_bench  [kernel.kallsyms]    [k] __handle_mm_fault
+     1.83%           383  corosio_bench  corosio_bench        [.] boost::asio::detail::awaitable_thread<boost::asio::any_io_executor>::pump()
+     1.71%           356  corosio_bench  corosio_bench        [.] boost::asio::detail::awaitable_thread<boost::asio::any_io_executor>::~awaitable_thread()
+     1.58%           327  corosio_bench  libc.so.6            [.] cfree
+     1.55%           324  corosio_bench  corosio_bench        [.] void* boost::asio::detail::thread_info_base::allocate<boost::asio::detail::thread_info_base::awaitable_frame_tag>(boost::asio::detail::thread_info_base::awaitable_frame_tag, boost::asio::detail::thread_info_base*, unsigned long, unsigned long)
+     1.54%           324  corosio_bench  [kernel.kallsyms]    [k] asm_exc_page_fault
+     1.53%           318  corosio_bench  [kernel.kallsyms]    [k] clear_page_erms
+     1.35%           281  corosio_bench  [kernel.kallsyms]    [k] handle_mm_fault
+     1.31%           274  corosio_bench  [kernel.kallsyms]    [k] mod_memcg_lruvec_state
+     1.27%           261  corosio_bench  [kernel.kallsyms]    [k] srso_alias_safe_ret
+     1.24%           255  corosio_bench  [kernel.kallsyms]    [k] lruvec_stat_mod_folio
+     1.22%           252  corosio_bench  [kernel.kallsyms]    [k] get_page_from_freelist
+     1.19%           250  corosio_bench  [kernel.kallsyms]    [k] srso_alias_return_thunk
+     1.15%           240  corosio_bench  [kernel.kallsyms]    [k] lru_add
+     1.13%           236  corosio_bench  [kernel.kallsyms]    [k] native_irq_return_iret
+     1.08%           226  corosio_bench  [kernel.kallsyms]    [k] lock_vma_under_rcu
+     1.06%           223  corosio_bench  corosio_bench        [.] void* boost::asio::detail::thread_info_base::allocate<boost::asio::detail::thread_info_base::executor_function_tag>(boost::asio::detail::thread_info_base::executor_function_tag, boost::asio::detail::thread_info_base*, unsigned long, unsigned long)
+     1.06%           221  corosio_bench  corosio_bench        [.] boost::asio::detail::awaitable_async_op<void (), boost::asio::detail::co_spawn_dispatch, boost::asio::any_io_executor>::await_suspend(std::__n4861::coroutine_handle<void>)::{lambda(void*)#1}::__invoke(void*)
+     1.01%           210  corosio_bench  corosio_bench        [.] boost::asio::detail::scheduler::do_poll_one(boost::asio::detail::conditionally_enabled_mutex::scoped_lock&, boost::asio::detail::scheduler_thread_info&, boost::system::error_code const&)
+     1.00%           205  corosio_bench  corosio_bench        [.] boost::asio::detail::scheduler::work_finished()
+     0.97%           204  corosio_bench  [kernel.kallsyms]    [k] __alloc_frozen_pages_noprof
+     0.93%           195  corosio_bench  [kernel.kallsyms]    [k] unmap_page_range
+     0.93%           191  corosio_bench  [kernel.kallsyms]    [k] do_user_addr_fault
+     0.91%           188  corosio_bench  [kernel.kallsyms]    [k] get_mem_cgroup_from_mm
+     0.87%           183  corosio_bench  [kernel.kallsyms]    [k] charge_memcg
+     0.86%           179  corosio_bench  corosio_bench        [.] boost::asio::awaitable<boost::asio::detail::awaitable_thread_entry_point, boost::asio::any_io_executor> boost::asio::detail::co_spawn_entry_point<boost::asio::detail::detached_handler, boost::asio::any_io_executor, boost::asio::detail::awaitable_as_function<void, boost::asio::any_io_executor> >(boost::asio::awaitable<void, boost::asio::any_io_executor>*, boost::asio::detail::co_spawn_state<boost::asio::detail::detached_handler, boost::asio::any_io_executor, boost::asio::detail::awaitable_as_function<void, boost::asio::any_io_executor>, void>) [clone .destroy]
+     0.84%           176  corosio_bench  corosio_bench        [.] void boost::asio::execution::detail::any_executor_base::execute<boost::asio::detail::binder0<boost::asio::detail::awaitable_async_op_handler<void (), boost::asio::any_io_executor, void> > >(boost::asio::detail::binder0<boost::asio::detail::awaitable_async_op_handler<void (), boost::asio::any_io_executor, void> >&&) const
+

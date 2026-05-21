@@ -1,0 +1,19 @@
+
+=== (asio) [fan_out] fork_join/16 ===
+  Ops:           90973
+  Throughput:    9.10 Kops/s
+  Elapsed:       10.000 s
+  Latency:
+    mean:  109886.68 ns
+    p50:   109208.00 ns
+    p90:   113807.00 ns
+    p99:   132691.40 ns
+    p99.9: 164609.63 ns
+    min:   104199.00 ns
+    max:   389153.00 ns
+  Fan Out:       16
+
+
+Benchmarks complete.
+[ perf record: Woken up 47 times to write data ]
+[ perf record: Captured and wrote 2.896 MB /home/michael/git/boost/libs/corosio/perf_results/2026-05-20/FAN_asio.data (10496 samples) ]

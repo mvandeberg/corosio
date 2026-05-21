@@ -1,0 +1,16 @@
+
+=== (asio) [io_context] single_threaded ===
+  Items:         32953000
+  Rate:          3.30 Mops/s
+  Elapsed:       10.000 s
+
+
+=== (asio) [io_context] single_threaded_lockless ===
+  Items:         33912000
+  Rate:          3.39 Mops/s
+  Elapsed:       10.000 s
+
+
+Benchmarks complete.
+[ perf record: Woken up 58 times to write data ]
+[ perf record: Captured and wrote 3.743 MB /home/michael/git/boost/libs/corosio/perf_results/2026-05-20/IOCTX_asio.data (20896 samples) ]

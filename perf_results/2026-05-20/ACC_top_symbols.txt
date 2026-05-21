@@ -1,0 +1,64 @@
+=== ACC overall top 25 symbols: corosio ===
+# Overhead       Samples  Command        Shared Object        Symbol                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
+# ........  ............  .............  ...................  ............................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................
+#
+     6.92%           720  corosio_bench  [kernel.kallsyms]    [k] entry_SYSRETQ_unsafe_stack
+     2.83%           298  corosio_bench  [kernel.kallsyms]    [k] srso_alias_safe_ret
+     2.04%           215  corosio_bench  [kernel.kallsyms]    [k] srso_alias_return_thunk
+     1.16%           122  corosio_bench  [nf_conntrack]       [k] nf_conntrack_in
+     1.15%           122  corosio_bench  [kernel.kallsyms]    [k] __tcp_transmit_skb
+     1.13%           119  corosio_bench  [kernel.kallsyms]    [k] nf_hook_slow
+     1.12%           118  corosio_bench  [kernel.kallsyms]    [k] tcp_v4_rcv
+     1.06%           111  corosio_bench  [kernel.kallsyms]    [k] __memcg_slab_post_alloc_hook
+     1.05%           111  corosio_bench  [nf_conntrack]       [k] nf_conntrack_tcp_packet
+     0.99%           104  corosio_bench  [kernel.kallsyms]    [k] tcp_ack
+     0.97%           102  corosio_bench  [kernel.kallsyms]    [k] __pi__text
+     0.92%            97  corosio_bench  [kernel.kallsyms]    [k] do_syscall_64
+     0.80%            84  corosio_bench  [kernel.kallsyms]    [k] __dev_queue_xmit
+     0.77%            81  corosio_bench  [kernel.kallsyms]    [k] kmem_cache_free
+     0.65%            68  corosio_bench  [kernel.kallsyms]    [k] read_tsc
+     0.65%            68  corosio_bench  [kernel.kallsyms]    [k] __ip_queue_xmit
+     0.63%            66  corosio_bench  [kernel.kallsyms]    [k] ip_route_output_key_hash_rcu
+     0.62%            65  corosio_bench  [kernel.kallsyms]    [k] entry_SYSCALL_64
+     0.61%            64  corosio_bench  [kernel.kallsyms]    [k] obj_cgroup_charge_account
+     0.59%            62  corosio_bench  [kernel.kallsyms]    [k] ip_rcv
+     0.56%            59  corosio_bench  [kernel.kallsyms]    [k] kmem_cache_alloc_node_noprof
+     0.55%            58  corosio_bench  [kernel.kallsyms]    [k] kmem_cache_alloc_noprof
+     0.55%            58  corosio_bench  [kernel.kallsyms]    [k] _copy_from_user
+     0.55%            58  corosio_bench  [kernel.kallsyms]    [k] net_rx_action
+     0.54%            57  corosio_bench  [kernel.kallsyms]    [k] tcp_rcv_state_process
+     0.53%            56  corosio_bench  [kernel.kallsyms]    [k] __alloc_skb
+     0.53%            56  corosio_bench  [kernel.kallsyms]    [k] ip_output
+
+=== ACC overall top 25 symbols: asio ===
+# Overhead       Samples  Command        Shared Object         Symbol                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
+# ........  ............  .............  ....................  ......................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................
+#
+     3.18%           335  corosio_bench  [kernel.kallsyms]     [k] entry_SYSRETQ_unsafe_stack
+     2.43%           256  corosio_bench  [kernel.kallsyms]     [k] srso_alias_safe_ret
+     1.82%           191  corosio_bench  [kernel.kallsyms]     [k] srso_alias_return_thunk
+     1.66%           175  corosio_bench  [nf_conntrack]        [k] nf_conntrack_in
+     1.42%           150  corosio_bench  [kernel.kallsyms]     [k] __tcp_transmit_skb
+     1.41%           149  corosio_bench  [kernel.kallsyms]     [k] tcp_v4_rcv
+     1.37%           144  corosio_bench  [nf_conntrack]        [k] nf_conntrack_tcp_packet
+     1.30%           137  corosio_bench  [kernel.kallsyms]     [k] tcp_ack
+     1.27%           134  corosio_bench  [kernel.kallsyms]     [k] nf_hook_slow
+     1.20%           127  corosio_bench  [kernel.kallsyms]     [k] __memcg_slab_post_alloc_hook
+     1.08%           114  corosio_bench  [kernel.kallsyms]     [k] kmem_cache_free
+     0.87%            92  corosio_bench  [kernel.kallsyms]     [k] __siphash_unaligned
+     0.87%            91  corosio_bench  [kernel.kallsyms]     [k] __ip_queue_xmit
+     0.82%            86  corosio_bench  [kernel.kallsyms]     [k] __dev_queue_xmit
+     0.78%            82  corosio_bench  [kernel.kallsyms]     [k] ip_route_output_key_hash_rcu
+     0.77%            81  corosio_bench  [kernel.kallsyms]     [k] process_backlog
+     0.77%            81  corosio_bench  [kernel.kallsyms]     [k] ip_rcv
+     0.75%            79  corosio_bench  [kernel.kallsyms]     [k] net_rx_action
+     0.74%            78  corosio_bench  [kernel.kallsyms]     [k] __alloc_skb
+     0.67%            70  corosio_bench  [kernel.kallsyms]     [k] tcp_rcv_state_process
+     0.67%            70  corosio_bench  [kernel.kallsyms]     [k] kmem_cache_alloc_noprof
+     0.64%            82  corosio_bench  corosio_bench         [.] void std::__introsort_loop<__gnu_cxx::__normal_iterator<double*, std::vector<double, std::allocator<double> > >, long, __gnu_cxx::__ops::_Iter_less_iter>(__gnu_cxx::__normal_iterator<double*, std::vector<double, std::allocator<double> > >, __gnu_cxx::__normal_iterator<double*, std::vector<double, std::allocator<double> > >, long, __gnu_cxx::__ops::_Iter_less_iter)
+     0.63%            66  corosio_bench  [kernel.kallsyms]     [k] ip_finish_output2
+     0.62%            65  corosio_bench  [kernel.kallsyms]     [k] __rcu_read_unlock
+     0.61%            64  corosio_bench  [kernel.kallsyms]     [k] kmem_cache_alloc_node_noprof
+     0.61%            64  corosio_bench  [kernel.kallsyms]     [k] ip_output
+     0.60%            64  corosio_bench  [kernel.kallsyms]     [k] __ip_local_out
+

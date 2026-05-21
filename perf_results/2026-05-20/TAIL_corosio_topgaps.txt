@@ -1,0 +1,70 @@
+# Sched-event gap analysis: socket_latency:concurrent/16 (corosio io_uring)
+# Source: TAIL_corosio_sched.txt (87607 parsed events)
+# Bench tid: 993177 (corosio_bench, single-threaded)
+
+# === KEY FINDING ===
+# Bench thread had 0 sched_wakeup events. It never sleeps/blocks.
+# It runs the io_uring poll loop continuously. The 206 off-CPU
+# periods are ALL CFS preemptions by other tasks (prev_state=256 or runqueue migration).
+#
+# Top 20 wakeup-to-switch gaps OVERALL (microseconds):
+# (These are NOT the bench thread — bench has 0 wakeups.)
+    gap_us  comm                       tid        wakeup_ts_us
+  266164.0  migration/7                 61   3826879855605.000
+    1000.0  kworker/20:0            933803   3826875952729.000
+     999.0  kworker/6:1             988212   3826876592710.000
+     999.0  kworker/2:0             953965   3826876272720.000
+     998.0  kworker/2:0             953965   3826880304595.000
+     997.0  kworker/0:0             950445   3826878351657.000
+     178.0  perf                    993184   3826879835501.000
+     165.0  kworker/4:2             987532   3826878262649.000
+     120.0  ThreadPoolServi         534829   3826879023277.000
+     104.0  kworker/5:0             973486   3826878272650.000
+      80.0  kworker/9:2             958094   3826877326681.000
+      43.0  kworker/23:2            948211   3826877368677.000
+      26.0  kworker/19:0            960283   3826880241588.000
+      25.0  perf                    993184   3826878788001.000
+      22.0  kworker/7:1             990856   3826880325586.000
+      18.0  qemu-system-x86        1259411   3826876223718.000
+      18.0  perf                    993184   3826880121775.000
+      15.0  brave                   531888   3826879023241.000
+      15.0  brave                   531888   3826878418638.000
+      13.0  perf                    993184   3826879655822.000
+
+# === BENCH THREAD OFF-CPU PERIODS (preemption gaps) ===
+# Pair: sched_switch where prev_pid=BENCH ---> next sched_switch where next_pid=BENCH
+# Total off-CPU events: 206 over ~5s capture
+
+# Top 20 longest off-CPU gaps for bench:
+    off_us  preempted_by                resume_ts_us
+     256.0  migration/4            3826876818977.000
+      20.0  migration/4            3826878287674.000
+      20.0  kworker/6:1            3826876593729.000
+      19.0  kworker/2:0            3826878640668.000
+      19.0  migration/4            3826877078942.000
+      18.0  migration/6            3826876279742.000
+      16.0  migration/4            3826877124719.000
+      16.0  migration/6            3826876654717.000
+      16.0  migration/0            3826876637731.000
+      15.0  migration/4            3826878350934.000
+      15.0  kworker/2:0            3826877616687.000
+      15.0  migration/2            3826876584718.000
+      14.0  migration/0            3826878384670.000
+      14.0  migration/1            3826877649700.000
+      14.0  migration/4            3826876886723.000
+      13.0  kworker/0:0            3826878352667.000
+      12.0  kworker/18:0           3826880560605.000
+      10.0  kworker/18:0           3826879856612.000
+      10.0  kworker/2:0            3826879760625.000
+      10.0  migration/7            3826878350953.000
+
+# Off-CPU gap distribution (206 samples):
+  min   : 3.00 us
+  p50   : 6.00 us
+  p90   : 10.00 us
+  p99   : 20.00 us
+  max   : 256.00 us
+
+# Compare to bench-reported latency: p99 ~488us, p99.9 ~588us, max ~4154us.
+# The bench's longest off-CPU period (256us) is ONLY HALF of its p99 latency.
+# Conclusion: scheduler preemption is NOT the dominant cause of the p99 tail.

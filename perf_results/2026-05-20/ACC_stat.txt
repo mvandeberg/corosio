@@ -1,0 +1,42 @@
+=== corosio ===
+
+ Performance counter stats for '/home/michael/git/boost/libs/corosio/build_profile/perf/bench/corosio_bench --library corosio --category accept_churn --bench concurrent/4 --duration 5 --warmup 0.5 --backend io_uring':
+
+    30,378,529,884      cycles                                                                  (71.44%)
+    22,312,604,460      instructions                                                            (71.47%)
+     5,055,549,932      branches                                                                (71.43%)
+       541,885,592      branch-misses                                                           (71.39%)
+     3,270,915,103      cache-references                                                        (71.41%)
+        56,219,435      cache-misses                                                            (71.42%)
+         1,511,926      dTLB-load-misses                                                        (71.44%)
+   <not supported>      LLC-load-misses                                                       
+               923      context-switches                                                      
+               139      cpu-migrations                                                        
+
+       5.549651359 seconds time elapsed
+
+       0.692751000 seconds user
+       3.479318000 seconds sys
+
+
+=== asio ===
+
+ Performance counter stats for '/home/michael/git/boost/libs/corosio/build_profile/perf/bench/corosio_bench --library asio --category accept_churn --bench concurrent/4 --duration 5 --warmup 0.5':
+
+    30,458,562,089      cycles                                                                  (71.41%)
+    25,753,089,612      instructions                                                            (71.42%)
+     5,699,525,073      branches                                                                (71.43%)
+       565,685,278      branch-misses                                                           (71.46%)
+     3,031,413,334      cache-references                                                        (71.43%)
+        40,854,224      cache-misses                                                            (71.44%)
+         1,301,043      dTLB-load-misses                                                        (71.42%)
+   <not supported>      LLC-load-misses                                                       
+               898      context-switches                                                      
+               176      cpu-migrations                                                        
+
+       5.551926710 seconds time elapsed
+
+       0.404572000 seconds user
+       3.442787000 seconds sys
+
+

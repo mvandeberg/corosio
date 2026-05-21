@@ -1,0 +1,21 @@
+Boost.Corosio Benchmarks
+========================
+Backend: io_uring
+Duration: 10s per benchmark
+Warmup: 0.5s per benchmark
+
+=== (corosio) [io_context] single_threaded ===
+  Items:         21830000
+  Rate:          2.18 Mops/s
+  Elapsed:       10.000 s
+
+
+=== (corosio) [io_context] single_threaded_lockless ===
+  Items:         22656000
+  Rate:          2.27 Mops/s
+  Elapsed:       10.000 s
+
+
+Benchmarks complete.
+[ perf record: Woken up 55 times to write data ]
+[ perf record: Captured and wrote 3.364 MB /home/michael/git/boost/libs/corosio/perf_results/2026-05-20/IOCTX_corosio.data (20985 samples) ]

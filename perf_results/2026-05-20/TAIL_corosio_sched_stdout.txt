@@ -1,0 +1,22 @@
+Boost.Corosio Benchmarks
+========================
+Backend: io_uring
+Duration: 15s per benchmark
+Warmup: 1s per benchmark
+
+=== (corosio) [socket_latency] concurrent/16 ===
+  Ops:           2083666
+  Throughput:    138.91 Kops/s
+  Elapsed:       15.000 s
+  Latency:
+    mean:  115151.86 ns
+    p50:   7094.00 ns
+    p90:   467449.00 ns
+    p99:   488269.00 ns
+    p99.9: 581142.70 ns
+    min:   6712.00 ns
+    max:   3950578.00 ns
+  Num Pairs:     16
+
+
+Benchmarks complete.

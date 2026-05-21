@@ -1,0 +1,8 @@
+# perf sched latency failed on this system: "incompatible file format"
+# This is the same root cause that prevented `perf script` from reading tracepoint files
+# (perf 6.19.11 on this Arch system cannot parse tracepoint metadata in any saved
+# perf.data file, regardless of record flags).
+#
+# Workaround: text-based extraction via `perf trace -e sched:sched_switch,sched:sched_wakeup`,
+# results in TAIL_corosio_sched.txt and analyzed by the Python script that produced
+# TAIL_corosio_topgaps.txt.

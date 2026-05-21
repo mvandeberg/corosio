@@ -1,0 +1,19 @@
+
+=== (asio) [accept_churn] concurrent/4 ===
+  Ops:           389112
+  Throughput:    38.91 Kops/s
+  Elapsed:       10.000 s
+  Latency:
+    mean:  102764.32 ns
+    p50:   101080.00 ns
+    p90:   106880.00 ns
+    p99:   145202.89 ns
+    p99.9: 252582.89 ns
+    min:   91181.00 ns
+    max:   927951.00 ns
+  Num Loops:     4
+
+
+Benchmarks complete.
+[ perf record: Woken up 1514 times to write data ]
+[ perf record: Captured and wrote 2.981 MB /home/michael/git/boost/libs/corosio/perf_results/2026-05-20/ACC_asio.data (10553 samples) ]

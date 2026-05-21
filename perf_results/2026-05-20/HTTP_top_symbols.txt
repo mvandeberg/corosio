@@ -1,0 +1,64 @@
+=== HTTP overall top 25 symbols: corosio ===
+# Overhead       Samples  Command        Shared Object        Symbol                                                                                                                                                                                                                                                                                                                                                                                                    
+# ........  ............  .............  ...................  ..........................................................................................................................................................................................................................................................................................................................................................................................................
+#
+     7.05%           752  corosio_bench  [kernel.kallsyms]    [k] entry_SYSRETQ_unsafe_stack
+            |          
+            |--1.81%--boost::corosio::detail::io_uring_tcp_socket::write_some(std::__n4861::coroutine_handle<void>, boost::capy::executor_ref, boost::corosio::buffer_param, std::stop_token, std::error_code*, unsigned long*)
+            |          boost::corosio::native_tcp_socket<boost::corosio::io_uring_t{}>::native_write_awaitable<boost::capy::detail::slice_impl<boost::capy::const_buffer>::data_view>::await_suspend(std::__n4861::coroutine_handle<void>, boost::capy::io_env const*)
+            |          _ZN5boost4capy5writeITkNS0_11WriteStreamENS_7corosio17native_tcp_socketIXtlNS2_10io_uring_tEEEEETkNS0_19ConstBufferSequenceENS0_12const_bufferEEENS0_4taskINS0_9io_resultIJmEEEEERT_T0_.resume
+            |          boost::corosio::detail::uring_read_op::do_handler(void*, boost::corosio::detail::scheduler_op*, unsigned int, unsigned int)
+            |          boost::corosio::detail::io_uring_scheduler::do_one(long)
+            |          boost::corosio::detail::io_uring_scheduler::run()
+            |          _ZN13corosio_bench12_GLOBAL__N_128bench_concurrent_connectionsITnDaXtlN5boost7corosio10io_uring_tEEEEEvRN5bench5stateE
+            |          bench::benchmark_runner::run_entry(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void (bench::state&)> const&, std::vector<long, std::allocator<long> >, bool)
+            |          bench::benchmark_runner::run(char const*, char const*, bool)
+            |          int perf::dispatch_backend<main::$_0>(char const*, main::$_0&&)
+            |          main
+            |          0x7f6cc91186c1
+            |          __libc_start_main
+            |          _start
+            |          
+            |--1.54%--boost::corosio::detail::io_uring_scheduler::process_completions()
+            |          boost::corosio::detail::io_uring_scheduler::do_one(long)
+            |          boost::corosio::detail::io_uring_scheduler::run()
+            |          _ZN13corosio_bench12_GLOBAL__N_128bench_concurrent_connectionsITnDaXtlN5boost7corosio10io_uring_tEEEEEvRN5bench5stateE
+            |          bench::benchmark_runner::run_entry(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void (bench::state&)> const&, std::vector<long, std::allocator<long> >, bool)
+            |          bench::benchmark_runner::run(char const*, char const*, bool)
+            |          int perf::dispatch_backend<main::$_0>(char const*, main::$_0&&)
+            |          main
+            |          0x7f6cc91186c1
+            |          __libc_start_main
+            |          _start
+=== HTTP overall top 25 symbols: asio ===
+# Overhead       Samples  Command        Shared Object        Symbol                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
+# ........  ............  .............  ...................  ..................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................
+#
+     3.66%           390  corosio_bench  [kernel.kallsyms]    [k] tcp_ack
+            |          
+             --0.99%--tcp_ack
+                       tcp_rcv_established
+                       tcp_v4_do_rcv
+                       tcp_v4_rcv
+                       ip_protocol_deliver_rcu
+                       ip_local_deliver_finish
+                       __netif_receive_skb_one_core
+                       process_backlog
+                       __napi_poll
+                       net_rx_action
+                       handle_softirqs
+                       do_softirq.part.0
+                       __local_bh_enable_ip
+                       __dev_queue_xmit
+                       ip_finish_output2
+                       ip_output
+                       __ip_queue_xmit
+                       __tcp_transmit_skb
+                       tcp_write_xmit
+                       __tcp_push_pending_frames
+                       tcp_sendmsg_locked
+                       tcp_sendmsg
+                       ____sys_sendmsg
+                       __sys_sendmsg_sock
+                       io_sendmsg
+                       __io_issue_sqe
