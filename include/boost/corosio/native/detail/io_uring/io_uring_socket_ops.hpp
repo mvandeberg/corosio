@@ -78,9 +78,10 @@ uring_set_result(io_uring_op* self, bool is_read, bool empty_buf) noexcept
 */
 struct uring_read_op : io_uring_op
 {
-    iovec  iovecs[io_uring_max_iov];
-    int    iovec_count = 0;
-    int    fd          = -1;
+    iovec       iovecs[io_uring_max_iov];
+    int         iovec_count = 0;
+    std::size_t iov_total   = 0;   // sum of iovec[i].iov_len, set in prepare
+    int         fd          = -1;
     detail::speculative_state* spec_state = nullptr;
 
     uring_read_op() noexcept
@@ -124,6 +125,11 @@ struct uring_read_op : io_uring_op
                 reinterpret_cast<capy::mutable_buffer*>(iovecs),
                 io_uring_max_iov));
         empty_buffer = (iovec_count == 0);
+        // Pre-compute the requested-total so do_handler doesn't loop
+        // over iovecs again on the read CQE fast path.
+        iov_total = 0;
+        for (int i = 0; i < iovec_count; ++i)
+            iov_total += iovecs[i].iov_len;
         start(token);
     }
 
@@ -164,8 +170,16 @@ struct uring_read_op : io_uring_op
 
         if (self->res > 0 && self->spec_state)
         {
-            // Kernel signalled readiness — restore speculation.
-            self->spec_state->on_async_read_ready();
+            // Re-arm speculative reads only on a full-buffer completion:
+            // res == iov_total tells us the kernel had at least that
+            // much data queued, so the next user-level read_some has a
+            // good chance of finding more without an EAGAIN. Short
+            // reads (res < iov_total) mean the kernel buffer was
+            // drained by this very read; an immediate speculative readv
+            // would race a refill it can't win. iov_total is cached at
+            // prepare() time to keep this fast path branch-light.
+            if (static_cast<std::size_t>(self->res) >= self->iov_total)
+                self->spec_state->on_async_read_ready();
         }
 
         if (self->bytes_out)
@@ -445,6 +459,10 @@ io_uring_submit_op(io_uring_scheduler& sched, io_uring_op* op) noexcept
 
         op->prep_func(op, sqe);
         ::io_uring_sqe_set_data(sqe, op);
+        // Count this op against the in-flight gate in do_one: it
+        // expects exactly one F_MORE-less CQE per submitted SQE
+        // (multishot ops decrement only on the terminal CQE).
+        sched.inflight_inc();
         // Release pairs with the acquire in io_uring_op::request_cancel:
         // a stop_token firing after we release the mutex will see
         // sqe_set==true and submit a cancel-by-user_data SQE.

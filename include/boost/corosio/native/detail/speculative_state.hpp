@@ -60,6 +60,17 @@ public:
     }
 
     /// Restore speculative reads (kernel signalled readiness via CQE).
+    ///
+    /// Called conditionally by the read CQE handler: only when the
+    /// async read returned the full requested buffer size, which
+    /// indicates the kernel had at least that much data ready and more
+    /// may still be queued. Short reads (res < requested) signal a
+    /// drained kernel buffer and deliberately *do not* re-arm — the
+    /// next user-level read_some would speculatively syscall against
+    /// an empty buffer and burn an EAGAIN. This split-decision policy
+    /// is what makes HTTP `concurrent/16` (always-short bursty reads)
+    /// stop wasting syscalls while `socket_throughput:multithread/N`
+    /// (always-full streaming reads) keeps its speculative fast path.
     void on_async_read_ready() noexcept
     {
         try_read_.store( true, std::memory_order_relaxed );

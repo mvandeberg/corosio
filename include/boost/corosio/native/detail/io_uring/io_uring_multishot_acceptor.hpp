@@ -231,44 +231,25 @@ public:
         std::error_code*            ec,
         io_object::implementation** impl_out)
     {
-        sockaddr_storage peer_storage{};
-        socklen_t        peer_len = sizeof(peer_storage);
-        int accepted_fd = ::accept4(fd_,
-            reinterpret_cast<sockaddr*>(&peer_storage), &peer_len,
-            SOCK_NONBLOCK | SOCK_CLOEXEC);
-        if (accepted_fd >= 0)
-        {
-            auto* op = new uring_accept_op();
-            op->h            = h;
-            op->ex           = ex;
-            op->ec_out       = ec;
-            op->impl_out     = impl_out;
-            op->peer_service = peer_service_;
-            op->adopt_fn     = &Derived::adopt_thunk;
-            op->accepted_fd  = accepted_fd;
-            op->peer_storage = peer_storage;
-            op->peer_len     = peer_len;
-            sched_->post(op);
-            return;
-        }
-        // accept4 returned <0 — only EAGAIN/EWOULDBLOCK should fall
-        // through to the parked/waiter path. Other errors (EBADF, etc.)
-        // surface through the existing scheduler-completion path so the
-        // user sees them via the op's ec_out. Build an op with `err`
-        // set so do_handler delivers make_err(err).
-        if (errno != EAGAIN && errno != EWOULDBLOCK)
-        {
-            int saved_errno = errno;
-            auto* op = new uring_accept_op();
-            op->h        = h;
-            op->ex       = ex;
-            op->ec_out   = ec;
-            op->impl_out = impl_out;
-            op->err      = saved_errno;
-            sched_->post(op);
-            return;
-        }
-
+        // The multishot SQE is submitted from listen_acceptor() and
+        // re-armed automatically by on_accept_cqe_impl. From that point
+        // every new connection produces a CQE — userspace never wins
+        // a race against ::accept4 against the kernel's listen queue,
+        // because by the time we'd call ::accept4 the kernel has
+        // already surfaced the connection through the multishot CQE.
+        //
+        // Empirically (perf_results/2026-05-20 and 2026-05-21
+        // measurements on accept_churn:concurrent/4): the previous
+        // unconditional speculative ::accept4 here returned EAGAIN
+        // 100 % of the time (13,576 / 13,576 and 14,112 / 14,112 in
+        // independent runs) and burned one wasted syscall per
+        // dispatch_or_queue call — the dominant ACC cost.
+        //
+        // Drop the speculative path entirely. Either we consume a
+        // parked fd from ready_fds_ (a CQE arrived with no waiter
+        // queued — happens during the brief window between dispatch
+        // and re-suspend of a running coro), or we queue a waiter and
+        // wait for the next CQE.
         uring_accept_op* ready_op = nullptr;
         {
             std::lock_guard lk(mutex_);

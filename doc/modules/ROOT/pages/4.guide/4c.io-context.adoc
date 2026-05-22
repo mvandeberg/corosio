@@ -310,6 +310,11 @@ On macOS and FreeBSD, the `io_context` uses kqueue:
 
 == Next Steps
 
+* xref:4c2.configuration.adoc[Configuration] — tuning inline budget
+  and event buffer size
+* xref:4c3.latency-characteristics.adoc[Latency Characteristics] —
+  understanding the p50/p99 trade-off and when to spread across
+  multiple `io_context` instances
 * xref:4d.sockets.adoc[Sockets] — I/O with TCP sockets
 * xref:4e.tcp-acceptor.adoc[Acceptors] — Accept incoming connections
 * xref:4h.timers.adoc[Timers] — Async delays and timeouts

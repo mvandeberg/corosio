@@ -1,0 +1,183 @@
+//
+// Copyright (c) 2026 Michael Vandeberg
+//
+// Distributed under the Boost Software License, Version 1.0. (See accompanying
+// file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+//
+// Official repository: https://github.com/cppalliance/corosio
+//
+
+= Latency Characteristics
+
+Corosio's dispatch loop is designed to keep coroutines making progress
+without ever yielding to the kernel while there's work to do. This
+choice produces a latency distribution that differs from event-loop
+libraries that block per operation: very fast median latency at all
+concurrency levels, at the cost of a wider tail when many connections
+share a single `io_context`.
+
+This page explains the property, the trade-off, and when to reach for
+multiple `io_context` instances.
+
+== The Property — `do_one` Doesn't Block While Work Exists
+
+Each iteration of `io_context::do_one` (called from `run()` or
+`poll()`) does, in order:
+
+. Pump the io_uring (or epoll/IOCP) ring for any ready completions,
+  splicing newly-ready ops into an internal queue.
+. Drain expired timers.
+. Pop one ready op from the queue and dispatch it (resume the
+  coroutine).
+
+The kernel wait (`io_uring_wait_cqe_timeout` on Linux, equivalent on
+other platforms) only runs when the queue is empty and no ready
+completions exist. Under continuous I/O the queue stays non-empty —
+fresh CQEs land in step 1 every iteration — and `do_one` never blocks.
+
+This is intentional. It means:
+
+* The median connection finds its completion already drained into the
+  ready queue and dispatches immediately.
+* No per-operation block-and-wake syscall overhead is paid on the
+  median.
+* CPU utilization stays high under load.
+
+== The Trade-off — Tail Latency Under Single-Context Concurrency
+
+Because `do_one` dispatches one op per iteration, when several
+operations complete in the same kernel batch they form a queue. The
+worst-positioned op in that batch waits for every preceding dispatch
+to complete before it gets serviced.
+
+This shows up clearly on a fan-out benchmark with N concurrent
+connections doing TCP ping-pong on a single `io_context`:
+
+[cols="1,1,1,1,1",options="header"]
+|===
+| Concurrent connections | corosio p50 | corosio p99 | Reactor-loop library p50 | Reactor-loop library p99
+
+| 1
+| 7 µs
+| 9 µs
+| 9 µs
+| 11 µs
+
+| 4
+| 7 µs
+| 104 µs
+| 30 µs
+| 36 µs
+
+| 16
+| 7 µs
+| 483 µs
+| 115 µs
+| 134 µs
+|===
+
+Two patterns:
+
+* Corosio's p50 stays flat as concurrency grows. The median is the
+  property of "never blocks" — each median op dispatches without going
+  through the kernel.
+* A library that blocks per op pays the kernel block-and-wake cost on
+  every dispatch. Its p50 scales linearly with N — at N=16 the median
+  is 115 µs, the floor of the kernel wake path.
+
+For p99, the relationship inverts. Corosio exposes the queue position
+directly on the worst-positioned op of each batch. A per-op-blocking
+library smooths the tail at the cost of paying that smoothing on
+every op.
+
+Total throughput at N=16 is essentially equivalent across the two
+library shapes (~140 K op/s on this microbenchmark) — the same total
+work, distributed differently.
+
+== Which Workloads Benefit From Which Shape
+
+[cols="1,1",options="header"]
+|===
+| Workload | Suggested shape
+
+| Request-response services where the SLA is median or mean latency,
+  or where p99 is set generously enough that bounded queue waits are
+  acceptable
+| Single `io_context` (corosio default) — fast p50, high CPU
+  efficiency.
+
+| Hard p99 / p99.9 latency SLAs, especially under sustained
+  load (real-time control, low-latency trading, interactive
+  streaming where stutter must be rare)
+| Spread connections across multiple `io_context` instances, each on
+  its own thread — see below.
+
+| Throughput-bound workloads (bulk data transfer, batch processing)
+  where individual op latency is uninteresting
+| Either; pick whichever fits the threading model.
+|===
+
+== Mitigating Tail Latency: Multiple `io_context` Instances
+
+When a single context's tail is unacceptable, the standard mitigation
+is to spread connections across multiple `io_context` instances, one
+per thread:
+
+[source,cpp]
+----
+constexpr int num_workers = 4;
+std::vector<corosio::io_context> contexts(num_workers);
+
+// Distribute incoming connections round-robin across contexts.
+int next = 0;
+auto on_accept = [&](corosio::tcp_socket sock)
+{
+    auto& target = contexts[next++ % num_workers];
+    // Hand `sock` to a coroutine running on `target`'s executor.
+};
+
+// Run each context on its own thread.
+std::vector<std::thread> threads;
+for (auto& ioc : contexts)
+    threads.emplace_back([&ioc] { ioc.run(); });
+----
+
+With M contexts each handling N/M connections, the per-context queue
+depth is M times shallower, and p99 drops correspondingly. The cost is
+that work is no longer load-balanced across contexts in flight —
+hot connections stay on whichever context accepted them.
+
+A single `io_context` with a concurrency hint > 1 (see
+xref:4c.io-context.adoc#_thread_safety[Thread Safety]) is a different
+mechanism: it lets multiple threads cooperatively dispatch from the
+*same* queue. That improves throughput on multi-threaded workloads
+but does *not* change the tail-latency distribution per connection;
+the queue is shared, the worst-positioned op still waits.
+
+== Measuring Your Own Workload
+
+If you're choosing between single- and multi-context for your
+application, measure both with your real workload, not with a
+microbenchmark. The fan-out microbench above is unrepresentative in
+two ways:
+
+* It does pure ping-pong with no application work between ops, so the
+  dispatch chain dominates measured latency. Real applications spend
+  most of their per-op time in their own logic.
+* It runs 16 connections at 100 % offered load, so the queue is always
+  saturated. Most production workloads are bursty, and queue depth
+  follows the burst structure rather than the steady-state concurrency
+  count.
+
+A workload that's CPU-bound between ops typically sees a much
+smaller p50/p99 gap than the microbench numbers above suggest, because
+the dispatch chain is short relative to per-op work.
+
+== Next Steps
+
+* xref:4c.io-context.adoc#_thread_safety[Thread Safety] — running one
+  `io_context` on multiple threads
+* xref:4c2.configuration.adoc[Configuration] — tuning a single
+  `io_context` (inline budget, event buffer size)
+* xref:benchmark-report.adoc[Benchmarks] — full latency / throughput
+  comparison data
