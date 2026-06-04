@@ -11,6 +11,7 @@
 #define BOOST_COROSIO_NATIVE_DETAIL_REACTOR_REACTOR_OP_COMPLETE_HPP
 
 #include <boost/corosio/detail/dispatch_coro.hpp>
+#include <boost/corosio/native/detail/coro_op_complete.hpp>
 #include <boost/corosio/native/detail/endpoint_convert.hpp>
 #include <boost/corosio/native/detail/make_err.hpp>
 #include <boost/corosio/io/io_object.hpp>
@@ -52,10 +53,7 @@ complete_io_op(Op& op)
 
     *op.bytes_out = op.bytes_transferred;
 
-    op.cont_op.cont.h = op.h;
-    capy::executor_ref saved_ex(op.ex);
-    auto prevent = std::move(op.impl_ptr);
-    dispatch_coro(saved_ex, op.cont_op.cont).resume();
+    coro_resume(&op);
 }
 
 /** Complete a datagram recv operation (connected mode).
@@ -82,10 +80,7 @@ complete_dgram_recv_op(Op& op)
 
     *op.bytes_out = op.bytes_transferred;
 
-    op.cont_op.cont.h = op.h;
-    capy::executor_ref saved_ex(op.ex);
-    auto prevent = std::move(op.impl_ptr);
-    dispatch_coro(saved_ex, op.cont_op.cont).resume();
+    coro_resume(&op);
 }
 
 /** Complete a wait operation.
@@ -114,10 +109,7 @@ complete_wait_op(Op& op)
     else
         *op.ec_out = {};
 
-    op.cont_op.cont.h = op.h;
-    capy::executor_ref saved_ex(op.ex);
-    auto prevent = std::move(op.impl_ptr);
-    dispatch_coro(saved_ex, op.cont_op.cont).resume();
+    coro_resume(&op);
 }
 
 /** Complete a connect operation with endpoint caching.
@@ -160,10 +152,7 @@ complete_connect_op(Op& op)
     else
         *op.ec_out = {};
 
-    op.cont_op.cont.h = op.h;
-    capy::executor_ref saved_ex(op.ex);
-    auto prevent = std::move(op.impl_ptr);
-    dispatch_coro(saved_ex, op.cont_op.cont).resume();
+    coro_resume(&op);
 }
 
 /** Construct and register a peer socket from an accepted fd.
@@ -269,10 +258,7 @@ complete_accept_op(Op& op)
             *op.impl_out = nullptr;
     }
 
-    op.cont_op.cont.h = op.h;
-    capy::executor_ref saved_ex(op.ex);
-    auto prevent = std::move(op.impl_ptr);
-    dispatch_coro(saved_ex, op.cont_op.cont).resume();
+    coro_resume(&op);
 }
 
 /** Complete a datagram operation (send_to or recv_from).
@@ -300,10 +286,7 @@ complete_datagram_op(Op& op)
 
     *op.bytes_out = op.bytes_transferred;
 
-    op.cont_op.cont.h = op.h;
-    capy::executor_ref saved_ex(op.ex);
-    auto prevent = std::move(op.impl_ptr);
-    dispatch_coro(saved_ex, op.cont_op.cont).resume();
+    coro_resume(&op);
 }
 
 /** Complete a datagram operation with source endpoint capture.
@@ -340,10 +323,7 @@ complete_datagram_op(Op& op, Endpoint* source_out)
             op.source_addrlen,
             Endpoint{});
 
-    op.cont_op.cont.h = op.h;
-    capy::executor_ref saved_ex(op.ex);
-    auto prevent = std::move(op.impl_ptr);
-    dispatch_coro(saved_ex, op.cont_op.cont).resume();
+    coro_resume(&op);
 }
 
 } // namespace boost::corosio::detail

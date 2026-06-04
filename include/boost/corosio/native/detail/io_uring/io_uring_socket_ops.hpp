@@ -24,6 +24,7 @@
 #include <boost/corosio/native/detail/io_uring/io_uring_buffer.hpp>
 #include <boost/corosio/native/detail/io_uring/io_uring_op.hpp>
 #include <boost/corosio/native/detail/io_uring/io_uring_scheduler.hpp>
+#include <boost/corosio/native/detail/coro_op_complete.hpp>
 #include <boost/corosio/native/detail/make_err.hpp>
 #include <boost/corosio/native/detail/speculative_state.hpp>
 
@@ -165,16 +166,11 @@ struct uring_read_op : io_uring_op
         std::uint32_t /*bytes*/, std::uint32_t /*error*/) noexcept
     {
         auto* self = static_cast<uring_read_op*>(base);
-        self->stop_cb.reset();
-
-        if (owner == nullptr)
-        {
-            // Shutdown drain: break the impl_ptr cycle. The op storage
-            // is owned by the impl, which destructs once the cycle is
-            // broken (if this was the last ref).
-            auto suicide = std::move(self->impl_ptr);
+        if (coro_drain_if_shutdown(owner, self))
             return;
-        }
+
+        if (self->sched_)
+            self->sched_->reset_inline_budget();
 
         uring_set_result(self, true, self->empty_buffer);
 
@@ -188,10 +184,7 @@ struct uring_read_op : io_uring_op
             *self->bytes_out =
                 self->res >= 0 ? static_cast<std::size_t>(self->res) : 0u;
 
-        self->cont_op.cont.h = self->h;
-        auto next = dispatch_coro(self->ex, self->cont_op.cont);
-        auto suicide = std::move(self->impl_ptr);
-        next.resume();
+        coro_resume(self);
         // suicide drops here; may destroy impl + self.
     }
 };
@@ -286,13 +279,11 @@ struct uring_write_op : io_uring_op
         std::uint32_t /*bytes*/, std::uint32_t /*error*/) noexcept
     {
         auto* self = static_cast<uring_write_op*>(base);
-        self->stop_cb.reset();
-
-        if (owner == nullptr)
-        {
-            auto suicide = std::move(self->impl_ptr);
+        if (coro_drain_if_shutdown(owner, self))
             return;
-        }
+
+        if (self->sched_)
+            self->sched_->reset_inline_budget();
 
         uring_set_result(self, false, self->empty_buffer);
 
@@ -306,10 +297,7 @@ struct uring_write_op : io_uring_op
             *self->bytes_out =
                 self->res >= 0 ? static_cast<std::size_t>(self->res) : 0u;
 
-        self->cont_op.cont.h = self->h;
-        auto next = dispatch_coro(self->ex, self->cont_op.cont);
-        auto suicide = std::move(self->impl_ptr);
-        next.resume();
+        coro_resume(self);
     }
 };
 
@@ -392,13 +380,11 @@ struct uring_connect_op : io_uring_op
         std::uint32_t /*bytes*/, std::uint32_t /*error*/) noexcept
     {
         auto* self = static_cast<uring_connect_op*>(base);
-        self->stop_cb.reset();
-
-        if (owner == nullptr)
-        {
-            auto suicide = std::move(self->impl_ptr);
+        if (coro_drain_if_shutdown(owner, self))
             return;
-        }
+
+        if (self->sched_)
+            self->sched_->reset_inline_budget();
 
         uring_set_result(self, false, false);
 
@@ -417,10 +403,7 @@ struct uring_connect_op : io_uring_op
             }
         }
 
-        self->cont_op.cont.h = self->h;
-        auto next = dispatch_coro(self->ex, self->cont_op.cont);
-        auto suicide = std::move(self->impl_ptr);
-        next.resume();
+        coro_resume(self);
     }
 };
 
@@ -562,14 +545,11 @@ struct uring_wait_op : io_uring_op
         std::uint32_t /*bytes*/, std::uint32_t /*error*/) noexcept
     {
         auto* self = static_cast<uring_wait_op*>(base);
-        self->stop_cb.reset();
-
-        if (owner == nullptr)
-        {
-            // Shutdown drain: break the impl_ptr cycle.
-            auto suicide = std::move(self->impl_ptr);
+        if (coro_drain_if_shutdown(owner, self))
             return;
-        }
+
+        if (self->sched_)
+            self->sched_->reset_inline_budget();
 
         if (self->ec_out)
         {
@@ -581,10 +561,7 @@ struct uring_wait_op : io_uring_op
                 *self->ec_out = {};
         }
 
-        self->cont_op.cont.h = self->h;
-        auto next = dispatch_coro(self->ex, self->cont_op.cont);
-        auto suicide = std::move(self->impl_ptr);
-        next.resume();
+        coro_resume(self);
     }
 };
 
@@ -662,13 +639,11 @@ struct uring_local_connect_op : io_uring_op
         std::uint32_t /*bytes*/, std::uint32_t /*error*/) noexcept
     {
         auto* self = static_cast<uring_local_connect_op*>(base);
-        self->stop_cb.reset();
-
-        if (owner == nullptr)
-        {
-            auto suicide = std::move(self->impl_ptr);
+        if (coro_drain_if_shutdown(owner, self))
             return;
-        }
+
+        if (self->sched_)
+            self->sched_->reset_inline_budget();
 
         uring_set_result(self, false, false);
 
@@ -688,10 +663,7 @@ struct uring_local_connect_op : io_uring_op
             }
         }
 
-        self->cont_op.cont.h = self->h;
-        auto next = dispatch_coro(self->ex, self->cont_op.cont);
-        auto suicide = std::move(self->impl_ptr);
-        next.resume();
+        coro_resume(self);
     }
 };
 

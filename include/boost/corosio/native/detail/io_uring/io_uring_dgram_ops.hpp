@@ -18,6 +18,7 @@
 
 #include <boost/corosio/detail/dispatch_coro.hpp>
 #include <boost/corosio/native/detail/io_uring/io_uring_op.hpp>
+#include <boost/corosio/native/detail/coro_op_complete.hpp>
 #include <boost/corosio/native/detail/speculative_state.hpp>
 #include <boost/corosio/native/detail/io_uring/io_uring_socket_ops.hpp>
 #include <boost/corosio/native/detail/make_err.hpp>
@@ -132,13 +133,11 @@ struct uring_dgram_send_op : io_uring_op
         std::uint32_t /*bytes*/, std::uint32_t /*error*/) noexcept
     {
         auto* self = static_cast<uring_dgram_send_op*>(base);
-        self->stop_cb.reset();
-
-        if (owner == nullptr)
-        {
-            auto suicide = std::move(self->impl_ptr);
+        if (coro_drain_if_shutdown(owner, self))
             return;
-        }
+
+        if (self->sched_)
+            self->sched_->reset_inline_budget();
 
         if (self->ec_out)
         {
@@ -159,10 +158,7 @@ struct uring_dgram_send_op : io_uring_op
             self->spec_state->on_async_write_ready();
         }
 
-        self->cont_op.cont.h = self->h;
-        auto next = dispatch_coro(self->ex, self->cont_op.cont);
-        auto suicide = std::move(self->impl_ptr);
-        next.resume();
+        coro_resume(self);
     }
 };
 
@@ -299,13 +295,11 @@ struct uring_dgram_recv_op : io_uring_op
         std::uint32_t /*bytes*/, std::uint32_t /*error*/) noexcept
     {
         auto* self = static_cast<uring_dgram_recv_op*>(base);
-        self->stop_cb.reset();
-
-        if (owner == nullptr)
-        {
-            auto suicide = std::move(self->impl_ptr);
+        if (coro_drain_if_shutdown(owner, self))
             return;
-        }
+
+        if (self->sched_)
+            self->sched_->reset_inline_budget();
 
         if (self->ec_out)
         {
@@ -332,10 +326,7 @@ struct uring_dgram_recv_op : io_uring_op
             self->source_writer(self->source_writer_ctx,
                 self->source_storage, self->source_len);
 
-        self->cont_op.cont.h = self->h;
-        auto next = dispatch_coro(self->ex, self->cont_op.cont);
-        auto suicide = std::move(self->impl_ptr);
-        next.resume();
+        coro_resume(self);
     }
 };
 

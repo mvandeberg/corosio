@@ -335,6 +335,17 @@ protected:
     /// Wake a blocked reactor (e.g. write to eventfd or pipe).
     virtual void interrupt_reactor() const = 0;
 
+    /** Backend one-time initialization hook.
+
+        Called at the top of each run/run_one/poll/poll_one/wait_one
+        entry point, before the outstanding-work check. Default is a
+        no-op: epoll/kqueue/select create their fds in their
+        constructors. io_uring overrides this to lazily create its ring,
+        deferred from construction so `configure_single_threaded` can
+        select ring flags before the ring exists.
+    */
+    virtual void ensure_initialized() {}
+
 private:
     struct work_cleanup
     {
@@ -569,6 +580,8 @@ reactor_scheduler::restart()
 inline std::size_t
 reactor_scheduler::run()
 {
+    ensure_initialized();
+
     if (outstanding_work_.load(std::memory_order_acquire) == 0)
     {
         stop();
@@ -594,6 +607,8 @@ reactor_scheduler::run()
 inline std::size_t
 reactor_scheduler::run_one()
 {
+    ensure_initialized();
+
     if (outstanding_work_.load(std::memory_order_acquire) == 0)
     {
         stop();
@@ -608,6 +623,8 @@ reactor_scheduler::run_one()
 inline std::size_t
 reactor_scheduler::wait_one(long usec)
 {
+    ensure_initialized();
+
     if (outstanding_work_.load(std::memory_order_acquire) == 0)
     {
         stop();
@@ -622,6 +639,8 @@ reactor_scheduler::wait_one(long usec)
 inline std::size_t
 reactor_scheduler::poll()
 {
+    ensure_initialized();
+
     if (outstanding_work_.load(std::memory_order_acquire) == 0)
     {
         stop();
@@ -647,6 +666,8 @@ reactor_scheduler::poll()
 inline std::size_t
 reactor_scheduler::poll_one()
 {
+    ensure_initialized();
+
     if (outstanding_work_.load(std::memory_order_acquire) == 0)
     {
         stop();
