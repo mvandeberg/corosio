@@ -187,17 +187,10 @@ public:
         {
             if (sched_->try_consume_inline_budget())
             {
-                if (ec)
-                {
-                    if (stop_now)
-                        *ec = capy::error::canceled;
-                    else if (err)
-                        *ec = make_err(err);
-                    else if (n == 0 && !empty_buf)
-                        *ec = capy::error::eof;
-                    else
-                        *ec = {};
-                }
+                decode_io_result(
+                    ec, stop_now, err ? make_err(err) : std::error_code{},
+                    /*is_read=*/true,
+                    n < 0 ? 0u : static_cast<std::size_t>(n), empty_buf);
                 if (bytes)
                     *bytes = (n < 0) ? 0u : static_cast<std::size_t>(n);
                 rd_.cont_op.cont.h = h;
@@ -271,10 +264,9 @@ public:
         {
             if (sched_->try_consume_inline_budget())
             {
-                if (ec)
-                    *ec = stop_now ? capy::error::canceled
-                          : err   ? make_err(err)
-                                  : std::error_code{};
+                decode_io_result(
+                    ec, stop_now, err ? make_err(err) : std::error_code{},
+                    /*is_read=*/false, /*bytes=*/0, /*empty_buffer=*/false);
                 if (bytes)
                     *bytes = (n < 0) ? 0u : static_cast<std::size_t>(n);
                 wr_.cont_op.cont.h = h;
@@ -950,17 +942,10 @@ public:
         {
             if (sched_->try_consume_inline_budget())
             {
-                if (ec)
-                {
-                    if (stop_now)
-                        *ec = capy::error::canceled;
-                    else if (err)
-                        *ec = make_err(err);
-                    else if (n == 0 && !empty_buf)
-                        *ec = capy::error::eof;
-                    else
-                        *ec = {};
-                }
+                decode_io_result(
+                    ec, stop_now, err ? make_err(err) : std::error_code{},
+                    /*is_read=*/true,
+                    n < 0 ? 0u : static_cast<std::size_t>(n), empty_buf);
                 if (bytes)
                     *bytes = (n < 0) ? 0u : static_cast<std::size_t>(n);
                 rd_.cont_op.cont.h = h;
@@ -1034,10 +1019,9 @@ public:
         {
             if (sched_->try_consume_inline_budget())
             {
-                if (ec)
-                    *ec = stop_now ? capy::error::canceled
-                          : err   ? make_err(err)
-                                  : std::error_code{};
+                decode_io_result(
+                    ec, stop_now, err ? make_err(err) : std::error_code{},
+                    /*is_read=*/false, /*bytes=*/0, /*empty_buffer=*/false);
                 if (bytes)
                     *bytes = (n < 0) ? 0u : static_cast<std::size_t>(n);
                 wr_.cont_op.cont.h = h;
@@ -1866,10 +1850,9 @@ private:
         {
             if (sched_->try_consume_inline_budget())
             {
-                if (ec)
-                    *ec = stop_now ? capy::error::canceled
-                          : err   ? make_err(err)
-                                  : std::error_code{};
+                decode_io_result(
+                    ec, stop_now, err ? make_err(err) : std::error_code{},
+                    /*is_read=*/false, /*bytes=*/0, /*empty_buffer=*/false);
                 if (bytes)
                     *bytes = (n < 0) ? 0u : static_cast<std::size_t>(n);
                 send_.cont_op.cont.h = h;
@@ -1957,10 +1940,9 @@ private:
         {
             if (sched_->try_consume_inline_budget())
             {
-                if (ec)
-                    *ec = stop_now ? capy::error::canceled
-                          : err   ? make_err(err)
-                                  : std::error_code{};
+                decode_io_result(
+                    ec, stop_now, err ? make_err(err) : std::error_code{},
+                    /*is_read=*/false, /*bytes=*/0, /*empty_buffer=*/false);
                 if (bytes)
                     *bytes = (n < 0) ? 0u : static_cast<std::size_t>(n);
                 if (n >= 0 && want_source && source_out && !empty_buf)
@@ -2422,10 +2404,9 @@ private:
         {
             if (sched_->try_consume_inline_budget())
             {
-                if (ec)
-                    *ec = stop_now ? capy::error::canceled
-                          : err   ? make_err(err)
-                                  : std::error_code{};
+                decode_io_result(
+                    ec, stop_now, err ? make_err(err) : std::error_code{},
+                    /*is_read=*/false, /*bytes=*/0, /*empty_buffer=*/false);
                 if (bytes)
                     *bytes = (n < 0) ? 0u : static_cast<std::size_t>(n);
                 send_.cont_op.cont.h = h;
@@ -2513,10 +2494,9 @@ private:
         {
             if (sched_->try_consume_inline_budget())
             {
-                if (ec)
-                    *ec = stop_now ? capy::error::canceled
-                          : err   ? make_err(err)
-                                  : std::error_code{};
+                decode_io_result(
+                    ec, stop_now, err ? make_err(err) : std::error_code{},
+                    /*is_read=*/false, /*bytes=*/0, /*empty_buffer=*/false);
                 if (bytes)
                     *bytes = (n < 0) ? 0u : static_cast<std::size_t>(n);
                 if (n >= 0 && want_source && source_out && !empty_buf)

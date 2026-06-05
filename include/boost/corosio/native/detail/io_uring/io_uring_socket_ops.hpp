@@ -59,17 +59,13 @@ inline constexpr std::size_t io_uring_max_iov = 16;
 inline void
 uring_set_result(io_uring_op* self, bool is_read, bool empty_buf) noexcept
 {
-    if (!self->ec_out)
-        return;
-
-    if (self->cancelled.load(std::memory_order_acquire))
-        *self->ec_out = capy::error::canceled;
-    else if (self->res < 0)
-        *self->ec_out = make_err(-self->res);
-    else if (is_read && self->res == 0 && !empty_buf)
-        *self->ec_out = capy::error::eof;
-    else
-        *self->ec_out = {};
+    decode_io_result(
+        self->ec_out,
+        self->cancelled.load(std::memory_order_acquire),
+        self->res < 0 ? make_err(-self->res) : std::error_code{},
+        is_read,
+        self->res >= 0 ? static_cast<std::size_t>(self->res) : 0u,
+        empty_buf);
 }
 
 /** Scatter-gather read via `IORING_OP_READV`.
@@ -551,15 +547,12 @@ struct uring_wait_op : io_uring_op
         if (self->sched_)
             self->sched_->reset_inline_budget();
 
-        if (self->ec_out)
-        {
-            if (self->cancelled.load(std::memory_order_acquire))
-                *self->ec_out = capy::error::canceled;
-            else if (self->res < 0)
-                *self->ec_out = make_err(-self->res);
-            else
-                *self->ec_out = {};
-        }
+        // Wait reports only success/cancel/error — no bytes, no EOF.
+        decode_io_result(
+            self->ec_out,
+            self->cancelled.load(std::memory_order_acquire),
+            self->res < 0 ? make_err(-self->res) : std::error_code{},
+            /*is_read=*/false, /*bytes=*/0, /*empty_buffer=*/false);
 
         coro_resume(self);
     }

@@ -12,8 +12,11 @@
 
 #include <boost/corosio/detail/dispatch_coro.hpp>
 #include <boost/corosio/native/detail/coro_op.hpp>
+#include <boost/capy/error.hpp>
 
+#include <cstddef>
 #include <memory>
+#include <system_error>
 
 /*
     Shared completion-tail helpers for proactor ops. Every IOCP and io_uring
@@ -34,6 +37,55 @@
 */
 
 namespace boost::corosio::detail {
+
+/** Translate a decoded I/O result into `*ec_out` using the cancelled /
+    error / EOF / success priority shared by every native backend.
+
+    The raw error encodings differ per backend (reactor positive `errno`,
+    io_uring negative `res`, IOCP `DWORD`), so the native-error -> error_code
+    step stays backend-local: the caller passes @a err already converted
+    (an empty error_code means "no error"). This helper owns only the
+    priority logic, which is byte-for-byte identical everywhere:
+
+        cancelled                          -> operation_canceled
+        err set                            -> err
+        is_read && bytes == 0 && !empty    -> end_of_file
+        otherwise                          -> success
+
+    Writes nothing when @a ec_out is null. Does not touch bytes_out — callers
+    that report a byte count write it separately (connect/wait carry none).
+
+    @param ec_out        Destination (may be null).
+    @param cancelled     The op's cancellation flag.
+    @param err           Backend error already converted to error_code, or a
+                         default-constructed error_code on success.
+    @param is_read       True only for reads that should map a 0-byte
+                         completion to EOF — false for writes, connect, wait,
+                         and datagrams (a 0-byte datagram is success, not EOF).
+    @param bytes         Bytes transferred (consulted only for the EOF test).
+    @param empty_buffer  True when the submitted buffer was zero-length,
+                         which suppresses the otherwise-spurious EOF.
+*/
+inline void
+decode_io_result(
+    std::error_code* ec_out,
+    bool             cancelled,
+    std::error_code  err,
+    bool             is_read,
+    std::size_t      bytes,
+    bool             empty_buffer) noexcept
+{
+    if (!ec_out)
+        return;
+    if (cancelled)
+        *ec_out = capy::error::canceled;
+    else if (err)
+        *ec_out = err;
+    else if (is_read && bytes == 0 && !empty_buffer)
+        *ec_out = capy::error::eof;
+    else
+        *ec_out = {};
+}
 
 /** Completion prologue shared by every proactor handler.
 

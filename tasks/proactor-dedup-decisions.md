@@ -570,13 +570,42 @@ op-model abstraction — judged not worth the risk/complexity for the remaining 
 The IOCP socket layer stays separate (no split-object collapse), mirroring how Asio keeps
 its win_iocp sockets separate from the POSIX socket layer.
 
+### Phase 4 — shared result-decode helper (`decode_io_result`) [implemented, verified-linux]
+
+Resolves the Phase-1 `decode_result` deferral below. The `(cancelled -> canceled / err ->
+make_err / read && 0 bytes && !empty -> eof / else success)` priority was duplicated ~20×
+across the three backends (reactor inlined it in all 7 `complete_*_op`; io_uring had
+`uring_set_result` plus inlined copies in wait, both dgram handlers, and all 8 inline
+speculative-success fast paths in `io_uring_types.hpp`; IOCP inlined it in `invoke_handler`).
+
+- **Chosen seam (NOT a `Traits` hook):** a free `decode_io_result(ec_out, cancelled, err,
+  is_read, bytes, empty_buffer)` in `coro_op_complete.hpp`. The only real divergence — the
+  native-error encoding (reactor positive `errno`, io_uring negative `res`, IOCP `DWORD`) —
+  stays backend-local: each caller converts to a `std::error_code` in one line and passes it
+  in (`{}` == success). The helper owns only the (identical) priority logic. A `std::function`
+  callback design was rejected — this is the hottest path in the library, so the helper is a
+  plain inline function over already-normalized inputs.
+- **Wired:** reactor (all 7 `complete_*_op`), io_uring (`uring_set_result`, wait, both dgram
+  do_handlers, and the 8 inline speculative-success paths in `io_uring_types.hpp`), IOCP
+  (`win_overlapped_op::invoke_handler`). 13 completion-handler sites + 8 io_uring inline sites.
+- **Behavior-preserving, verified:** the reactor's `is_read_operation()` already folds in the
+  empty-buffer case (it returns false for a zero-length read), so the reactor passes
+  `empty_buffer=false` and the shared EOF test reduces to its original `is_read && bytes==0`.
+  Datagrams pass `is_read=false` (a 0-byte datagram is success, not EOF), matching prior
+  behavior. Full ASAN suite 125/125; `socket_latency`/`local_socket_latency` perf flat
+  (io_uring 137K, epoll 135K, local 324K — unchanged).
+- **Not converted (deliberate):** the degenerate "already stop-requested" bypasses in
+  `io_uring_types.hpp` (`if (ec) *ec = canceled;`) — not decode-shaped, a forced-cancel fast
+  path. The IOCP acceptor/signal/resolver/file-service decode sites and the posix
+  resolver/signal/file completion paths (different result shapes — addrinfo/signal number)
+  are left for the IOCP Windows pass; only `invoke_handler` (the shared socket completion
+  point) is wired so far. **IOCP edit is unverified — needs a Windows build.**
+
 #### Phase 1 deferrals (to Phase 3)
 
-- **`decode_result` as a formal `Traits` hook** and a single `complete_io_op<Traits>`
-  collapsing decode+resume. Phase 1 keeps decode backend-local (io_uring's
-  `uring_set_result`, IOCP's inline `invoke_handler` decode) and shares only the
-  backend-agnostic prologue/resume tail. The full `Traits::decode_result` lands with the
-  traits structs in Phase 3.
+- **`decode_result`** — DONE in Phase 4 above (as a free helper, not a `Traits` hook).
+  Original note: Phase 1 kept decode backend-local (io_uring's `uring_set_result`, IOCP's
+  inline `invoke_handler` decode) and shared only the backend-agnostic prologue/resume tail.
 - **io_uring file ops** (`io_uring_file_ops.hpp`): the EMBEDDED file ops
   (`uring_file_read_op` / `uring_file_write_op`) are now routed through
   `proactor_drain_if_shutdown` + `proactor_resume` (done in the follow-up dedup pass,

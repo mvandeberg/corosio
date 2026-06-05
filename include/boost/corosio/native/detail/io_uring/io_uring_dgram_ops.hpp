@@ -139,15 +139,12 @@ struct uring_dgram_send_op : io_uring_op
         if (self->sched_)
             self->sched_->reset_inline_budget();
 
-        if (self->ec_out)
-        {
-            if (self->cancelled.load(std::memory_order_acquire))
-                *self->ec_out = capy::error::canceled;
-            else if (self->res < 0)
-                *self->ec_out = make_err(-self->res);
-            else
-                *self->ec_out = {};
-        }
+        // Datagram send: no EOF (a 0-byte send is success).
+        decode_io_result(
+            self->ec_out,
+            self->cancelled.load(std::memory_order_acquire),
+            self->res < 0 ? make_err(-self->res) : std::error_code{},
+            /*is_read=*/false, /*bytes=*/0, /*empty_buffer=*/false);
         if (self->bytes_out)
             *self->bytes_out = (self->res >= 0)
                 ? static_cast<std::size_t>(self->res) : 0;
@@ -301,15 +298,13 @@ struct uring_dgram_recv_op : io_uring_op
         if (self->sched_)
             self->sched_->reset_inline_budget();
 
-        if (self->ec_out)
-        {
-            if (self->cancelled.load(std::memory_order_acquire))
-                *self->ec_out = capy::error::canceled;
-            else if (self->res < 0)
-                *self->ec_out = make_err(-self->res);
-            else
-                *self->ec_out = {};   // zero-byte datagram is success, not EOF
-        }
+        // Datagram recv: a 0-byte datagram is success, not EOF — is_read
+        // stays false so the shared decode never maps it to end_of_file.
+        decode_io_result(
+            self->ec_out,
+            self->cancelled.load(std::memory_order_acquire),
+            self->res < 0 ? make_err(-self->res) : std::error_code{},
+            /*is_read=*/false, /*bytes=*/0, /*empty_buffer=*/false);
         if (self->bytes_out)
             *self->bytes_out = (self->res >= 0)
                 ? static_cast<std::size_t>(self->res) : 0;

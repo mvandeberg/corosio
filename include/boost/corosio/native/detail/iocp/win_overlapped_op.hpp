@@ -23,6 +23,7 @@
 #include <boost/corosio/native/detail/make_err.hpp>
 #include <boost/corosio/detail/dispatch_coro.hpp>
 #include <boost/corosio/native/detail/coro_op.hpp>
+#include <boost/corosio/native/detail/coro_op_complete.hpp>
 
 #include <atomic>
 #include <coroutine>
@@ -107,17 +108,12 @@ struct overlapped_op
     {
         stop_cb.reset();
 
-        if (ec_out)
-        {
-            if (cancelled.load(std::memory_order_acquire))
-                *ec_out = capy::error::canceled;
-            else if (dwError != 0)
-                *ec_out = make_err(dwError);
-            else if (is_read && bytes_transferred == 0 && !empty_buffer)
-                *ec_out = capy::error::eof;
-            else
-                *ec_out = {};
-        }
+        decode_io_result(
+            ec_out,
+            cancelled.load(std::memory_order_acquire),
+            dwError != 0 ? make_err(dwError) : std::error_code{},
+            is_read, static_cast<std::size_t>(bytes_transferred),
+            empty_buffer);
 
         if (bytes_out)
             *bytes_out = static_cast<std::size_t>(bytes_transferred);
