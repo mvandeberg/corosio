@@ -194,6 +194,15 @@ higher-level stream, drive the mocket directly instead.
 See xref:5.testing/5c.patterns.adoc[Testing Patterns] for a TLS-over-mocket
 example.
 
+== Other Members
+
+A mocket also forwards a few socket-like queries to the underlying socket:
+
+* `is_open()` — whether the underlying socket is open.
+* `cancel()` — cancel pending I/O on the underlying socket; outstanding
+  operations complete with `capy::cond::canceled`.
+* `context()` — the `capy::execution_context` that owns the mocket.
+
 == Thread Safety
 
 * Use a mocket from a single thread only.

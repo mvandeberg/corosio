@@ -597,7 +597,7 @@ ctx.set_hostname("api.example.com");  // Set before creating stream
 
 // Pointer form wraps the connected socket without taking ownership
 corosio::wolfssl_stream secure( &sock, ctx );
-co_await secure.handshake( corosio::wolfssl_stream::client );
+co_await secure.handshake( corosio::tls_stream::client );
 ----
 
 === TLS Server Context

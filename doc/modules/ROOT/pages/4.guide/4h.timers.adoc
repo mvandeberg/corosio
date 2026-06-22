@@ -38,11 +38,25 @@ co_await t.wait();  // Suspends for 5 seconds
 
 == Construction
 
+A timer is constructed from an execution context or an executor. You can
+optionally pass an initial expiry — an absolute `time_point` or a relative
+duration — to set it directly in the constructor:
+
 [source,cpp]
 ----
 corosio::io_context ioc;
-corosio::timer t(ioc);  // From execution context
+
+corosio::timer t1(ioc);             // From an execution context
+corosio::timer t2(ioc.get_executor());  // From an executor
+
+corosio::timer t3(ioc, 5s);         // With an initial relative expiry
+corosio::timer t4(ioc.get_executor(),
+    std::chrono::steady_clock::now() + 5s);  // With an absolute expiry
 ----
+
+The execution context must be a corosio `io_context`; constructing a timer
+from any other context throws `std::logic_error` (a timer service is
+required).
 
 == Setting Expiry Time
 
@@ -197,26 +211,45 @@ capy::task<void> periodic_task(corosio::io_context& ioc)
 
 === Operation Timeout
 
+`cancel_after` and `cancel_at` (from `<boost/corosio/cancel.hpp>`) wrap any
+I/O awaitable so it is cancelled if it does not complete in time. On timeout
+the wrapped operation completes with `capy::cond::canceled`; otherwise its
+result is passed through unchanged, so structured bindings work exactly as on
+the underlying operation:
+
 [source,cpp]
 ----
+#include <boost/corosio/cancel.hpp>
+
 capy::task<void> with_timeout(
     corosio::io_context& ioc,
-    corosio::tcp_socket& sock)
+    corosio::tcp_socket& sock,
+    capy::mutable_buffer buf)
 {
     corosio::timer timeout(ioc);
-    timeout.expires_after(30s);
 
-    // Start both operations
-    auto read_task = sock.read_some(buffer);
-    auto timeout_task = timeout.wait();
+    // Cancel the read if it takes longer than 30 seconds.
+    auto [ec, n] = co_await corosio::cancel_after(
+        sock.read_some(buf), timeout, 30s);
 
-    // In practice, use parallel composition utilities
-    // This is simplified for illustration
+    if (ec == capy::cond::canceled)
+        std::cout << "read timed out\n";
 }
 ----
 
-NOTE: For proper timeout handling, use Capy's parallel composition utilities
-like `when_any` or cancellation tokens.
+Use `cancel_at` to specify an absolute deadline instead of a relative
+duration. Both also have a convenience overload that omits the explicit timer
+and allocates one internally — handy for a one-off timeout, though reusing an
+explicit timer avoids the per-call allocation:
+
+[source,cpp]
+----
+auto [ec, n] = co_await corosio::cancel_after(sock.read_some(buf), 30s);
+----
+
+NOTE: The convenience overload builds its timer from the awaiting coroutine's
+executor, which must be backed by an `io_context`. Pass an explicit timer if
+you need to control where the timer lives.
 
 === Rate Limiting
 

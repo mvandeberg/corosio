@@ -44,7 +44,9 @@ for (auto const& entry : results)
 [source,cpp]
 ----
 corosio::io_context ioc;
-corosio::resolver r(ioc);  // From execution context
+
+corosio::resolver r1(ioc);                 // From an execution context
+corosio::resolver r2(ioc.get_executor());  // From an executor
 ----
 
 == Resolving Names
@@ -178,6 +180,72 @@ public:
     std::string const& service_name() const;
 };
 ----
+
+== Reverse Resolution
+
+The resolver also performs *reverse* lookups: given an `endpoint`, it returns
+the host and service names via the system's `getnameinfo()`. Pass an
+`endpoint` to `resolve()` instead of host and service strings:
+
+[source,cpp]
+----
+corosio::endpoint ep(corosio::ipv4_address::loopback(), 80);
+
+auto [ec, result] = co_await r.resolve(ep);
+if (!ec)
+    std::cout << result.host_name() << ":" << result.service_name() << "\n";
+----
+
+A reverse lookup completes with a single `reverse_resolver_result`, not a
+list:
+
+[source,cpp]
+----
+class reverse_resolver_result
+{
+public:
+    corosio::endpoint   endpoint() const noexcept;
+    std::string const&  host_name() const noexcept;
+    std::string const&  service_name() const noexcept;
+};
+----
+
+=== Reverse Flags
+
+An optional `reverse_flags` argument controls the lookup, mirroring the
+`getnameinfo()` flags:
+
+[cols="1,3"]
+|===
+| Flag | Description
+
+| `none`
+| No special behavior (default)
+
+| `numeric_host`
+| Return the numeric address instead of resolving a host name
+
+| `numeric_service`
+| Return the numeric port instead of resolving a service name
+
+| `name_required`
+| Fail if the host name cannot be determined
+
+| `datagram_service`
+| Look up the datagram (UDP) service rather than the stream (TCP) service
+|===
+
+Flags combine with `|`:
+
+[source,cpp]
+----
+auto [ec, result] = co_await r.resolve(
+    ep, corosio::reverse_flags::numeric_service);
+----
+
+Reverse resolution shares the resolver's single-inflight constraint and, like
+forward resolution, runs on the `io_context` thread pool (see the
+*Single-Inflight Constraint* and *Platform Notes* sections below).
 
 == Connecting to Resolved Addresses
 

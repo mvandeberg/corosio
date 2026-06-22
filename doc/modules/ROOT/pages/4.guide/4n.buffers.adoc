@@ -294,7 +294,7 @@ capy::task<packet_header> read_header(corosio::io_stream& stream)
     if (ec)
         throw std::system_error(ec);
 
-    return header;
+    co_return header;
 }
 ----
 

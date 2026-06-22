@@ -363,7 +363,7 @@ public:
             Returns success on successful accept, or an error code on
             failure including:
             - operation_canceled: Cancelled via stop_token or cancel().
-                Check `ec == cond::canceled` for portable comparison.
+                Check `ec == capy::cond::canceled` for portable comparison.
 
         @par Preconditions
         The acceptor must be listening (`is_open() == true`).
@@ -409,7 +409,7 @@ public:
             (including cancellation) the error code is set and the payload
             socket is unconnected. Errors include:
             - operation_canceled: Cancelled via stop_token or cancel().
-                Check `ec == cond::canceled` for portable comparison.
+                Check `ec == capy::cond::canceled` for portable comparison.
 
         @par Preconditions
         The acceptor must be listening (`is_open() == true`). This acceptor
@@ -458,7 +458,7 @@ public:
     /** Cancel any pending asynchronous operations.
 
         All outstanding operations complete with `errc::operation_canceled`.
-        Check `ec == cond::canceled` for portable comparison.
+        Check `ec == capy::cond::canceled` for portable comparison.
     */
     void cancel();
 

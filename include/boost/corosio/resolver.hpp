@@ -436,7 +436,7 @@ public:
     /** Cancel any pending asynchronous operations.
 
         All outstanding operations complete with `errc::operation_canceled`.
-        Check `ec == cond::canceled` for portable comparison.
+        Check `ec == capy::cond::canceled` for portable comparison.
     */
     void cancel();
 

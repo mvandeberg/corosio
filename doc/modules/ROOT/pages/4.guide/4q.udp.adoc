@@ -183,6 +183,24 @@ Connected mode is useful for two reasons:
   the resulting ICMP error on a subsequent `send` or `recv` instead of
   silently discarding it.
 
+== Socket Information
+
+Query the socket's endpoints and the underlying OS handle:
+
+[source,cpp]
+----
+corosio::endpoint local = sock.local_endpoint();   // address/port bound to
+corosio::endpoint peer  = sock.remote_endpoint();  // connected peer, if any
+auto fd                 = sock.native_handle();     // raw OS socket handle
+----
+
+`local_endpoint()` returns the bound address and port, or a
+default-constructed endpoint if the socket is not bound. `remote_endpoint()`
+returns the peer set by `connect()`, or a default-constructed endpoint if the
+socket is not connected. `native_handle()` exposes the underlying descriptor
+for advanced use, such as setting options the library does not wrap. All three
+are `const noexcept`.
+
 == Message Flags
 
 `send_to`, `recv_from`, `send`, and `recv` accept an optional
@@ -291,6 +309,25 @@ Related options:
 | `multicast_interface_v4` / `multicast_interface_v6`
 | Choose the outgoing interface for IPv4 / IPv6 multicast.
 |===
+
+== Waiting for Readiness
+
+`wait()` reports when the socket becomes readable, writable, or has an error
+pending, without transferring any data:
+
+[source,cpp]
+----
+auto [ec] = co_await sock.wait(corosio::wait_type::read);
+if (!ec)
+{
+    // a datagram is ready; recv_from will not block
+}
+----
+
+This is useful when integrating with code that issues its own `recvfrom`, or
+to apply readiness-based backpressure. The `wait_type` values are `read`,
+`write`, and `error`. See xref:4.guide/4r.wait.adoc[Waiting for Readiness] for
+the semantics shared with TCP sockets.
 
 == Cancellation
 

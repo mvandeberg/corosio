@@ -93,6 +93,26 @@ corosio::native_io_context<corosio::epoll> ioc(opts);
 | Disable all scheduler mutex and condition variable operations.
   Eliminates synchronization overhead when only one thread calls
   `run()`.  See <<single-threaded-mode>> for restrictions.
+
+| `enable_sqpoll`
+| false
+| io_uring
+| Enable `IORING_SETUP_SQPOLL`: a kernel thread busy-polls the
+  submission ring so submission needs no `io_uring_enter` syscall.
+  Best for sustained traffic.
+
+| `sq_thread_idle_ms`
+| 0
+| io_uring
+| Idle timeout before the SQPOLL kernel thread parks.  `0` uses the
+  kernel default (1ms); 100-1000ms suits bursty workloads.  Ignored
+  unless `enable_sqpoll` is true.
+
+| `sq_thread_cpu`
+| -1
+| io_uring
+| Pin the SQPOLL kernel thread to this CPU; `-1` leaves it unpinned.
+  Ignored unless `enable_sqpoll` is true.
 |===
 
 Options that do not apply to the active backend are silently ignored.
@@ -157,6 +177,28 @@ and DNS resolution use a shared thread pool.
 * *Concurrent file operations*: increase to match expected
   parallelism (e.g. 4 for four concurrent file reads).
 * *No file I/O*: leave at 1 (the pool is created lazily).
+
+=== io_uring Submission Polling (`enable_sqpoll`)
+
+On the io_uring backend, SQPOLL has the kernel poll the submission ring,
+removing the `io_uring_enter` syscall from the submit path.
+
+[source,cpp]
+----
+#include <boost/corosio/native/native_io_context.hpp>
+
+corosio::io_context_options opts;
+opts.enable_sqpoll      = true;
+opts.sq_thread_idle_ms  = 200;  // park after 200ms idle
+opts.sq_thread_cpu      = 3;    // pin the poller off the dispatch core
+
+corosio::native_io_context<corosio::io_uring> ioc(opts);
+----
+
+* *Sustained, latency-sensitive traffic*: enable it, and pin the poll thread
+  (`sq_thread_cpu`) off the dispatch core to avoid cache contention.
+* *Bursty or mostly-idle workloads*: raise `sq_thread_idle_ms` (100-1000ms) to
+  avoid park/unpark thrash, or leave SQPOLL off.
 
 [#single-threaded-mode]
 === Single-Threaded Mode (`single_threaded`)

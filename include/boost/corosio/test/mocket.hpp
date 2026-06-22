@@ -223,7 +223,7 @@ public:
     /** Cancel pending I/O operations.
 
         Cancels any pending asynchronous operations on the underlying
-        socket. Outstanding operations complete with `cond::canceled`.
+        socket. Outstanding operations complete with `capy::cond::canceled`.
     */
     void cancel()
     {

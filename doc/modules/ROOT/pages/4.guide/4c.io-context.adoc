@@ -75,6 +75,23 @@ The concurrency hint affects:
 
 Use `1` for single-threaded programs to avoid synchronization overhead.
 
+=== With Options
+
+For finer control, construct from an `io_context_options`:
+
+[source,cpp]
+----
+corosio::io_context_options opts;
+opts.max_events_per_poll = 256;
+
+corosio::io_context ioc(opts);
+----
+
+To select a specific backend at compile time, construct a
+`native_io_context<Backend>` (for example `corosio::native_io_context<corosio::epoll>`)
+instead. See xref:4.guide/4c2.configuration.adoc[Configuration] for the full
+set of tuning options.
+
 == Running the Event Loop
 
 === run()
@@ -118,6 +135,19 @@ auto m = ioc.run_until(deadline);  // Run until time point
 ----
 
 These return the number of handlers executed within the time limit.
+
+=== run_one_for() / run_one_until()
+
+Process at most one work item within a time limit:
+
+[source,cpp]
+----
+auto n = ioc.run_one_for(100ms);       // One handler, or time out
+auto m = ioc.run_one_until(deadline);  // One handler, or reach the deadline
+----
+
+These return `0` or `1`. As with `run_one()`, the context must be restarted
+with `restart()` before calling them again after they return.
 
 === poll() / poll_one()
 

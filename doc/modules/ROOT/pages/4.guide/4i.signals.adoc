@@ -61,6 +61,19 @@ corosio::signal_set s2(ioc, SIGINT, SIGTERM);
 corosio::signal_set s3(ioc, SIGINT, SIGTERM, SIGHUP);
 ----
 
+=== From an Executor
+
+Every constructor also accepts an executor instead of an execution context;
+the signal set is associated with the executor's context:
+
+[source,cpp]
+----
+auto ex = ioc.get_executor();
+
+corosio::signal_set s4(ex);                  // Empty
+corosio::signal_set s5(ex, SIGINT, SIGTERM); // With initial signals
+----
+
 == Supported Signals
 
 === Windows

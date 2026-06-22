@@ -67,7 +67,7 @@ namespace boost::corosio {
     All asynchronous operations support cancellation through
     `std::stop_token` via the affine protocol, or explicitly
     through cancel(). Cancelled operations complete with
-    `capy::cond::canceled`. Datagram sends and receives are
+    `capy::capy::cond::canceled`. Datagram sends and receives are
     atomic — there is no partial progress on cancellation.
 
     @par Thread Safety
@@ -253,7 +253,7 @@ public:
         /** Request cancellation of pending asynchronous operations.
 
             All outstanding operations complete with operation_canceled
-            error. Check ec == cond::canceled for portable comparison.
+            error. Check ec == capy::cond::canceled for portable comparison.
         */
         virtual void cancel() noexcept = 0;
 
@@ -560,7 +560,7 @@ public:
         @par Cancellation
         Supports cancellation via the awaitable's stop_token or by
         calling cancel(). On cancellation, yields
-        `capy::cond::canceled`.
+        `capy::capy::cond::canceled`.
 
         @return An awaitable that completes with io_result<>.
 
@@ -734,7 +734,7 @@ public:
     /** Cancel any pending asynchronous operations.
 
         All outstanding operations complete with
-        errc::operation_canceled. Check ec == cond::canceled
+        errc::operation_canceled. Check ec == capy::cond::canceled
         for portable comparison.
     */
     void cancel();

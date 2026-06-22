@@ -74,7 +74,8 @@ capy::task<> server(corosio::io_context& ioc)
     corosio::local_stream_acceptor acc(ioc);
     acc.open();
 
-    auto ec = acc.bind(corosio::local_endpoint("/tmp/my_app.sock"));
+    auto ec = acc.bind(corosio::local_endpoint("/tmp/my_app.sock"),
+                       corosio::bind_option::unlink_existing);
     if (ec) co_return;
 
     ec = acc.listen();
@@ -91,14 +92,18 @@ capy::task<> server(corosio::io_context& ioc)
 }
 ----
 
-The acceptor does **not** automatically remove the socket file on close.
-You must `unlink()` the path before binding (if it exists) and after you
-are done:
+The acceptor does **not** automatically remove the socket file. Pass
+`bind_option::unlink_existing` to remove a stale socket file before binding,
+and `unlink()` the path yourself once you are done (the option is ignored for
+abstract paths):
 
 [source,cpp]
 ----
-::unlink("/tmp/my_app.sock");  // remove stale socket
-acc.bind(corosio::local_endpoint("/tmp/my_app.sock"));
+acc.bind(corosio::local_endpoint("/tmp/my_app.sock"),
+         corosio::bind_option::unlink_existing);  // removes any stale file
+
+// ... later, after the acceptor is closed ...
+::unlink("/tmp/my_app.sock");
 ----
 
 === Client

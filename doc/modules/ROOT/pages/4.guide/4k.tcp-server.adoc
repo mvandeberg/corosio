@@ -267,6 +267,33 @@ The accept loop runs until `tcp_server::stop()` is called, which requests the
 workers' stop token. Note that `stop()` does not close the acceptors, so a
 suspended accept completes once more before the loop exits.
 
+[#stopping]
+=== Stopping: stop() and join()
+
+Shutting a server down cleanly is a three-step sequence — signal, drain, join:
+
+[source,cpp]
+----
+server.stop();   // 1. Request the accept loops and active workers to stop
+ioc.run();       // 2. Drain pending completions until run() returns
+server.join();   // 3. Block until every accept loop has finished
+----
+
+`stop()` requests the accept loops' and active workers' stop tokens and
+returns immediately — it does not wait.
+
+`join()` then blocks the calling thread until all accept loops have finished,
+synchronizing the shutdown so the server can be safely destroyed or restarted.
+Call it only after `stop()` and after `ioc.run()` has returned. To restart a
+stopped server, complete the full cycle above and then call `start()` again.
+
+[WARNING]
+====
+`join()` blocks the calling thread. Calling it from inside a worker coroutine,
+or while `ioc.run()` is still executing on another thread, deadlocks. Call it
+from the thread that drove `ioc.run()`, after `run()` returns.
+====
+
 == Complete Example
 
 [source,cpp]
@@ -419,9 +446,13 @@ connection limits at a higher layer.
 
 == Thread Safety
 
-The `tcp_server` class is not thread-safe. All operations on the server
-must occur from coroutines running on its `io_context`. Workers may not be
-accessed concurrently.
+The `tcp_server` class is not thread-safe. With one exception, all operations
+on the server must occur from coroutines running on its `io_context`, and
+workers may not be accessed concurrently.
+
+The exception is `join()`, which may be called from any thread — typically the
+one that drove `ioc.run()` — but deadlocks if called from within the
+`io_context` event loop or a worker coroutine (see <<stopping>>).
 
 For multi-threaded operation, create one server per thread, or use external
 synchronization.

@@ -144,7 +144,7 @@ public:
         /** Request cancellation of pending asynchronous operations.
 
             All outstanding operations complete with operation_canceled error.
-            Check `ec == cond::canceled` for portable comparison.
+            Check `ec == capy::cond::canceled` for portable comparison.
         */
         virtual void cancel() noexcept = 0;
 
@@ -361,7 +361,7 @@ public:
             - timed_out: Connection attempt timed out
             - network_unreachable: No route to host
             - operation_canceled: Cancelled via stop_token or cancel().
-                Check `ec == cond::canceled` for portable comparison.
+                Check `ec == capy::cond::canceled` for portable comparison.
 
         @throws std::system_error if the socket needs to be opened
             and the open fails.
@@ -415,7 +415,7 @@ public:
     /** Cancel any pending asynchronous operations.
 
         All outstanding operations complete with `errc::operation_canceled`.
-        Check `ec == cond::canceled` for portable comparison.
+        Check `ec == capy::cond::canceled` for portable comparison.
     */
     void cancel();
 
