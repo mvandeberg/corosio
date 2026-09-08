@@ -41,14 +41,25 @@ function emit(payload) {
   process.exit(0);
 }
 
-// Pinned MrDocs version (Task 14 / Phase-2 exit). The cache DFS below can
-// surface more than one `mrdocs` binary (e.g. the `develop` and `master`
-// reference-collector tags), and their `--version` strings can differ — so
-// picking the FIRST one found made the "no-warnings" gate nondeterministic.
-// We constrain the search to the binary whose BASE version (the `X.Y.Z`
-// before any `+build` metadata) matches this pin; if none matches we error
-// loudly rather than silently scan with an unexpected version. Override via
-// MRDOCS_VERSION for a deliberate bump.
+// MRDOCS_ROOT, when set, is AUTHORITATIVE and no version check is applied to it.
+// doc/build_antora.sh installs the reference-snippets extension into exactly one
+// MrDocs and exports MRDOCS_ROOT (writing it to $GITHUB_ENV so it survives into
+// later workflow steps). That install is the one the rendered reference was
+// generated with, which is the invariant this check actually needs: measure the
+// reference surface with the same MrDocs that produced it.
+//
+// It must not be version-matched, because the `develop-release` asset is a moving
+// target. Measured: the same asset name reported `0.8.0+e31308f6c944` locally and
+// `2026.9.5` in CI days apart. A pin against it fails CLOSED but uselessly — the
+// check reports SKIPPED, and a reseed then tries to wipe the whole grandfathered
+// mrdocs_warnings backlog. That is exactly what happened on the first CI reseed,
+// and the baseline-diff safety net is what caught it.
+//
+// The pin survives only as a tiebreaker for the FALLBACK cache scan, where the
+// reference-collector cache can hold several `mrdocs` binaries (the `develop` and
+// `master` tags) and picking the first would be nondeterministic. Override with
+// MRDOCS_VERSION. The resolved binary and its reported version are emitted in the
+// payload either way, so a scheme change is visible instead of silent.
 const PINNED_VERSION = process.env.MRDOCS_VERSION || '0.8.0';
 
 function findOnPath(names) {
@@ -73,12 +84,9 @@ function findAllOnPath(names) {
 // Search the Antora reference-collector cache the extension populates
 // (getUserCacheDir('antora')/reference-collector/mrdocs/<platform>/<tag>/bin/mrdocs).
 // Returns EVERY executable found so the caller can pick the pin-matching one.
-function findAllMrDocsInCache() {
+function findMrDocsUnder(...bases) {
   const found = [];
-  const bases = [
-    process.env.MRDOCS_ROOT,
-    path.join(os.homedir(), '.cache/antora/reference-collector/mrdocs'),
-  ].filter(Boolean);
+  bases = bases.filter(Boolean);
   for (const base of bases) {
     if (!fs.existsSync(base)) continue;
     const stack = [base];
@@ -108,8 +116,13 @@ function mrdocsBaseVersion(exe) {
   return m ? m[1].split('+')[0] : null;
 }
 
-// Candidate search space: PATH first, then the reference-collector cache.
-const candidates = [...findAllOnPath(['mrdocs', 'mrdocs.exe']), ...findAllMrDocsInCache()];
+// MRDOCS_ROOT wins outright when it is set; otherwise fall back to PATH and the
+// reference-collector cache, where the pin disambiguates.
+const rootCandidates = findMrDocsUnder(process.env.MRDOCS_ROOT);
+const candidates = rootCandidates.length
+  ? rootCandidates
+  : [...findAllOnPath(['mrdocs', 'mrdocs.exe']),
+     ...findMrDocsUnder(path.join(os.homedir(), '.cache/antora/reference-collector/mrdocs'))];
 if (candidates.length === 0) {
   emit({
     error: 'mrdocs executable not found (checked PATH and the Antora reference-collector cache). ' +
@@ -119,21 +132,40 @@ if (candidates.length === 0) {
   });
 }
 
-// Select the FIRST candidate whose base version matches the pin.
+// From MRDOCS_ROOT: take it as-is. From the fallback scan: take the first whose
+// BASE version (the `X.Y.Z` before any `+build` metadata) matches the pin.
 let mrdocsExe = null;
+let mrdocsVersion = null;
 const inspected = [];
-for (const c of candidates) {
-  const v = mrdocsBaseVersion(c);
-  inspected.push(`${c} => ${v ?? '(version unreadable)'}`);
-  if (v === PINNED_VERSION) { mrdocsExe = c; break; }
-}
-if (!mrdocsExe) {
-  emit({
-    error: `no MrDocs binary matching pinned version ${PINNED_VERSION} found ` +
-           `(set MRDOCS_VERSION to override). Candidates inspected:\n  ${inspected.join('\n  ')}`,
-    summary: { total: 0 },
-    findings: [],
-  });
+if (rootCandidates.length) {
+  mrdocsExe = rootCandidates[0];
+  mrdocsVersion = mrdocsBaseVersion(mrdocsExe);
+  inspected.push(`${mrdocsExe} => ${mrdocsVersion ?? '(version unreadable)'} [MRDOCS_ROOT]`);
+  if (mrdocsVersion === null) {
+    // Unreadable means it cannot be run at all. Fail rather than scan with it:
+    // a skipped check is what wipes a gated backlog on the next reseed.
+    emit({
+      error: `MRDOCS_ROOT names a MrDocs that will not report a version: ${mrdocsExe}`,
+      summary: { total: 0 },
+      findings: [],
+    });
+  }
+} else {
+  for (const c of candidates) {
+    const v = mrdocsBaseVersion(c);
+    inspected.push(`${c} => ${v ?? '(version unreadable)'}`);
+    if (v === PINNED_VERSION) { mrdocsExe = c; mrdocsVersion = v; break; }
+  }
+  if (!mrdocsExe) {
+    emit({
+      error: `no MrDocs binary matching pinned version ${PINNED_VERSION} found, and ` +
+             `MRDOCS_ROOT is not set (set MRDOCS_ROOT to the install the docs were ` +
+             `built with, or MRDOCS_VERSION to change the fallback pin). ` +
+             `Candidates inspected:\n  ${inspected.join('\n  ')}`,
+      summary: { total: 0 },
+      findings: [],
+    });
+  }
 }
 
 if (!fs.existsSync(CONFIG_PATH)) {
@@ -220,4 +252,7 @@ for (const line of lines) {
   }
 }
 
-emit({ summary: { total: findings.length }, findings });
+// Report which binary was used and what version it claims, so a develop-release
+// version-scheme change is visible in the run log instead of silent.
+emit({ mrdocs: { exe: mrdocsExe, version: mrdocsVersion, source: rootCandidates.length ? 'MRDOCS_ROOT' : 'pin' },
+       summary: { total: findings.length }, findings });

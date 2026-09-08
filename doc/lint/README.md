@@ -41,7 +41,18 @@ node lint/extract-docstrings.mjs && vale --output=JSON lint/.docstrings
 node lint/doc-lint.mjs
 node lint/sentence-length.mjs
 node lint/selftest.mjs
+
+# mrdocs-warnings needs the MrDocs the site build used. build_antora.sh exports
+# MRDOCS_ROOT; point it at that install rather than relying on the cache scan.
+MRDOCS_ROOT="$PWD/build/mrdocs/MrDocs-0.8.0-Linux" node lint/mrdocs-warnings.mjs
 ```
+
+`mrdocs-warnings.mjs` applies **no** version check to a binary under `MRDOCS_ROOT`, on
+purpose: the `develop-release` asset is a rolling build whose reported version has already
+changed scheme once (`0.8.0+<sha>` locally, `2026.9.5` in CI, days apart, same asset). What
+the check needs is the MrDocs that produced the rendered reference, which is what
+`MRDOCS_ROOT` names. The `PINNED_VERSION` constant is only a tiebreaker for the fallback
+cache scan.
 
 A `0` in the output is not evidence of a clean run by itself — it is at least as often
 evidence the run never happened. Confirm a non-zero total somewhere before trusting a zero.
@@ -175,6 +186,7 @@ exact rule and confirming the failure, at the port commit.
 | strict gate, B2 | a bare `----` listing holding code, against the strict step's real spec | **exit 1** |
 | strict gate, C2 | a 28-word sentence on a hard-slice page | **exit 1** |
 | strict gate, clean | the same spec against an unmodified tree | exit 0, before and after both plants |
+| MrDocs pin | the CI reseed itself, against a binary reporting `2026.9.5` | **caught by the safety net**: the pin rejected the only candidate, `mrdocs_warnings` reported SKIPPED, and `baseline-diff.mjs` refused the candidate rather than let it wipe a 460-fingerprint gated backlog. Re-tested after the fix: with `MRDOCS_ROOT` set, `MRDOCS_VERSION=9999.1.2` is ignored and the check reports its 460 warnings; with `MRDOCS_ROOT` unset the fallback pin still resolves; with `MRDOCS_ROOT` naming an unrunnable binary the check errors instead of silently reporting zero |
 | reseed gate-spec extractor | run against the two-step gate | recovers exactly the 6 live specs. It first recovered **8** — the awk program contains the string it searches for, so it matched its own source line and captured the `grep`/`sed` lines below as specs, one of them the invalid regex `[^`. The pattern is anchored to `^ *- name:` for that reason, and the toggle is `inblock = 0` rather than `exit` so the second gate step is not silently dropped |
 
 `selftest.mjs` automates the subset it can (37 assertions at the port) and is the standing

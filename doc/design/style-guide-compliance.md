@@ -43,6 +43,13 @@ MrDocs builds, and their environment drift would read as new violations. Run the
 Documentation workflow via `workflow_dispatch`, review the candidate, commit it, then move
 those three specs into the strict step.
 
+The first reseed attempt was **refused** by `baseline-diff.mjs`: `mrdocs_warnings` came
+back SKIPPED because of the version pin described in 4.3. That pin is fixed, so the
+reseed needs re-running. Note also that CI and local Vale counts genuinely differ
+(`vale_adoc` 66 in CI against 132 locally, from the Ruby-vs-JS asciidoctor Vale shells
+out to) — which is the drift that keeps the wording gates non-strict until the reseed
+lands.
+
 **Note for phase 7.** `sentence-length.mjs` does not treat Doxygen's `@n` as a
 sentence boundary, so `io_context`'s boost-wide thread-safety idiom
 ("Distinct objects: Safe.@n Shared objects: Safe, unless ...") is measured as one
@@ -83,7 +90,7 @@ These were settled before the plan was written. Each shapes the phasing.
 | D-4 | Remediate both corpora: pages *and* extracted header docstrings | The docstring corpus carries the larger share of the C2/C4 backlog and all of C11. Capy gates `vale_docstrings`; excluding it would leave most of the problem unmeasured. |
 | D-5 | Gate runs report-only during the burn-down; `--strict` and a blocking `selftest.mjs` are the **final phase's exit criteria** | Matches Capy's stated intent on Corosio's timeline. Section 7 records the cost: until the flip, a new violation sits in the report until a reseed grandfathers it. |
 | D-6 | Corosio gets its own `doc/STYLE_GUIDE.md`, retaining every rule, with Capy-specific carve-outs and evidence replaced by Corosio's | The guide is normative for Corosio's authors and agents; it must describe Corosio's corpus, not Capy's. |
-| D-7 | Port `mrdocs-warnings.mjs`; do **not** port `run-a11y.mjs` | See sections 4.3 and 4.4. |
+| D-7 | Port `mrdocs-warnings.mjs` (with its version pin removed); do **not** port `run-a11y.mjs` | See sections 4.3 and 4.4. |
 
 ## 3. Measured current state
 
@@ -179,25 +186,39 @@ candidates to settle while writing the guide are one term each for: the
 mock-socket testing vocabulary (`mocket`, socket pair), and TLS context vs stream.
 Extend the table; do not let synonyms drift.
 
-### 4.3 `mrdocs-warnings.mjs` — ported unchanged
+### 4.3 `mrdocs-warnings.mjs` — ported, and its version pin removed
 
-An earlier reading of this task assumed the script's `PINNED_VERSION = '0.8.0'`
-contradicted Corosio's MrDocs arrangement. It does not, and the pin needs no edit.
-
-Capy's `local-playbook.yml` carries the identical "deliberately no `version` key,
-real pin is `MRDOCS_ROOT`" setup as Corosio's, because both libraries need the
-develop build that carries `reference-snippets.lua`. And the script matches on the
-**base** version: `mrdocsBaseVersion()` strips build metadata after `+`. Measured
-against the binaries this arrangement actually produces:
+**This section previously said the pin needed no edit. That was wrong, and the first
+CI reseed proved it.** The claim rested on measuring the MrDocs binary on a developer
+machine, which reported `0.8.0+<sha>`; `mrdocsBaseVersion()` strips the `+` metadata,
+so base `0.8.0` matched `PINNED_VERSION`. The mistake was generalising from that: the
+`develop-release` asset is a moving target, and the same asset name reported
 
 ```
-$ ~/.cache/antora/reference-collector/mrdocs/linux/develop/bin/mrdocs --version
-MrDocs version 0.8.0+f942a24de24b
+0.8.0+e31308f6c944     (local, downloaded by doc/build_antora.sh)
+2026.9.5               (CI, days later, same asset)
 ```
 
-Base version `0.8.0` matches the pin. Corosio's `doc/build_antora.sh` fetches the
-same `develop-release` asset, so it lands on the same base version. Port with the
-path renames only; `MRDOCS_VERSION` remains the override for a deliberate bump.
+Upstream moved to a date-based version. The pin then rejected the only candidate, the
+check reported SKIPPED, and the reseed candidate carried `mrdocs_warnings: 0` against
+a 460-fingerprint gated baseline — which would have wiped the whole MrDocs gate.
+`baseline-diff.mjs` refused the candidate for exactly that reason, which is the
+F4 fail-closed rule doing its job.
+
+The fix is not a new number. **`MRDOCS_ROOT`, when set, is authoritative and gets no
+version check.** `doc/build_antora.sh` installs the reference-snippets extension into
+exactly one MrDocs and exports `MRDOCS_ROOT`, writing it to `$GITHUB_ENV` so it
+survives into later workflow steps. That install is the one the rendered reference was
+generated with, which is the invariant the check needs: measure the reference surface
+with the same MrDocs that produced it. Pinning a version against a rolling asset
+cannot express that and can only fail.
+
+`PINNED_VERSION` survives as a tiebreaker for the fallback cache scan, where the
+reference-collector cache can hold several binaries (the `develop` and `master` tags)
+and picking the first would be nondeterministic. `MRDOCS_VERSION` still overrides it.
+The resolved binary, its reported version, and which of the two paths chose it are
+emitted in the payload, so a future scheme change shows up in the run log instead of
+turning into another silent skip.
 
 ### 4.4 `run-a11y.mjs` — not ported
 
