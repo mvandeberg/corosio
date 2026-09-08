@@ -441,7 +441,7 @@ include::example$snippets/4b_concurrent_programming.cpp[tag=accept_loop]
 ----
 
 Each `handle_client` coroutine runs independently. The accept loop continues
-immediately after spawning.
+immediately after starting.
 
 This works well when:
 
@@ -490,14 +490,14 @@ from running.
 
 === Dangling References in Async Code
 
-Spawned coroutines must not hold references to destroyed objects:
+Started coroutines must not hold references to destroyed objects:
 
 [source,cpp]
 ----
 include::example$snippets/4b_concurrent_programming.cpp[tag=dangling_reference,indent=0]
 ----
 
-A coroutine may outlive the scope that spawned it. Ensure captured data lives
+A coroutine may outlive the scope that started it. Ensure captured data lives
 long enough.
 
 === Cross-Executor Access

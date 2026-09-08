@@ -209,7 +209,7 @@ effective_concurrency_hint(
         behavior. The safe teardown pattern is to stop submitting new
         work, let every `run()` call return (each returns once no
         outstanding work remains), and join the threads that ran the
-        loop before destroying the context. Work launched with
+        loop before destroying the context. Work started with
         `capy::run` / `capy::run_async` is work-tracked, so a normal
         `run()` completion already waits for it.
 

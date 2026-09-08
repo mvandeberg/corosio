@@ -39,11 +39,11 @@ Consider a 100 Mbps link with a 50-millisecond RTT. The bandwidth-delay product 
 100,000,000 bits/sec × 0.050 sec = 5,000,000 bits = 625,000 bytes
 ----
 
-To fully utilize this link, the sender must have 625,000 bytes of data in flight simultaneously. If the TCP window is smaller than the BDP, the sender will finish transmitting its window and then sit idle waiting for ACKs, leaving bandwidth unused.
+To use this link fully, the sender must have 625,000 bytes of data in flight simultaneously. If the TCP window is smaller than the BDP, the sender will finish transmitting its window and then sit idle waiting for ACKs, leaving bandwidth unused.
 
 Networks with high bandwidth and high latency -- satellite links, transcontinental fiber, data center interconnects -- have large BDPs. These are sometimes called *long fat networks*, and they expose the original TCP window's 65,535-byte limit as a severe bottleneck.
 
-On a transoceanic link at 10 Gbps with a 100-millisecond RTT, the BDP is 125 megabytes. A 64 KB window would utilize less than 0.05% of the available bandwidth. Without the window scale extension, such a link would be essentially unusable for a single TCP connection.
+On a transoceanic link at 10 Gbps with a 100-millisecond RTT, the BDP is 125 megabytes. A 64 KB window would use less than 0.05% of the available bandwidth. Without the window scale extension, such a link would be unusable for a single TCP connection.
 
 == Window Scaling
 

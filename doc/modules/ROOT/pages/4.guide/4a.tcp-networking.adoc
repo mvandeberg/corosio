@@ -16,7 +16,7 @@ client-server model, you can skip to xref:4.guide/4c.io-context.adoc[I/O Context
 
 == What is a Network?
 
-A network is simply computers talking to each other. Your laptop sending a
+A network is computers talking to each other. Your laptop sending a
 request to a web server, two game consoles playing together, a phone streaming
 video—all involve computers exchanging data over a network.
 
@@ -475,7 +475,7 @@ TCP is appropriate for most applications where correctness matters.
 
 UDP includes a checksum covering the header and data. The receiver verifies
 the checksum and discards corrupted packets. Unlike TCP, UDP doesn't
-retransmit—the data is simply lost.
+retransmit—the data is lost.
 
 Corosio supports TCP, UDP, and Unix domain sockets. See
 xref:4.guide/4p.unix-sockets.adoc[Unix Domain Sockets] for local inter-process

@@ -195,7 +195,7 @@ include::example$snippets/4d_sockets.cpp[tag=read_eof,indent=0]
 
 EOF is signaled only by `ec == capy::cond::eof`. A successful read with
 `n == 0 && !ec` is not EOF: it occurs when the buffer has zero length, and
-the request simply completes with nothing to do.
+the request completes with nothing to do.
 
 === Reading Exact Amounts
 

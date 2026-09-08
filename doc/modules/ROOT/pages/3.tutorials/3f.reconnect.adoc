@@ -113,7 +113,7 @@ When the stop source is signaled:
 
 1. The loop only inspects the `delay()` call for cancellation, so that is
    where the stop is observed: `delay()` returns `cond::canceled`. A stop
-   requested mid-`connect()` is not checked there; it simply falls through to
+   requested mid-`connect()` is not checked there; it falls through to
    the next `delay()` call, which then returns `cond::canceled`. Either way
    the coroutine exits cleanly.
 2. The coroutine checks the error and executes `co_return`.

@@ -30,7 +30,7 @@ send. While simple, this pattern demonstrates core concepts:
 
 * Using `tcp_server` for connection management
 * Implementing workers with `worker_base`
-* Launching session coroutines with `launcher`
+* Starting session coroutines with `launcher`
 * Reading and writing data with sockets
 
 == Architecture
@@ -58,7 +58,7 @@ Each worker:
 * Stores a reference to the `io_context` for executor access
 * Owns its socket (returned via `socket()`)
 * Owns any per-connection state (like the buffer)
-* Implements `run()` to launch the session coroutine
+* Implements `run()` to start the session coroutine
 
 == Session Coroutine
 

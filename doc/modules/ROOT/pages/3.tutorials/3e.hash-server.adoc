@@ -40,7 +40,7 @@ back on the original executor when it finishes.
 This tutorial demonstrates:
 
 * Accepting connections with `tcp_acceptor`
-* Spawning independent session coroutines with `run_async`
+* Starting independent session coroutines with `run_async`
 * Switching executors with `capy::run()` for CPU-bound work
 * The trampoline that returns the coroutine to its home executor
 
@@ -110,7 +110,7 @@ restored automatically after. You never need to manually post back.
 
 == Accept Loop
 
-The accept loop creates a socket per connection and spawns a session:
+The accept loop creates a socket per connection and starts a session:
 
 [source,cpp]
 ----
@@ -150,7 +150,7 @@ These two functions serve different purposes:
   caller on its original executor
 |===
 
-In this example, `run_async` launches the accept loop from `main`, and
+In this example, `run_async` starts the accept loop from `main`, and
 `run` switches individual hash computations to the thread pool from within
 a session coroutine.
 

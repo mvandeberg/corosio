@@ -430,7 +430,7 @@ public:
             connection. The implementation must invoke the launcher
             exactly once to start the handling coroutine.
 
-            @param launch Handle to launch the connection coroutine.
+            @param launch Handle to start the connection coroutine.
         */
         virtual void run(launcher launch) = 0;
 
@@ -438,11 +438,11 @@ public:
         virtual corosio::tcp_socket& socket() = 0;
     };
 
-    /** Move-only handle to launch a worker coroutine.
+    /** Move-only handle to start a worker coroutine.
 
         Passed to @ref worker_base::run to start the connection-handling
         coroutine. The launcher ensures the worker returns to the idle
-        pool when the coroutine completes or if launching fails.
+        pool when the coroutine completes or if starting fails.
 
         The launcher must be invoked exactly once via `operator()`.
         If destroyed without invoking, the worker is returned to the
@@ -462,7 +462,7 @@ public:
         }
 
     public:
-        /// Return the worker to the pool if not launched.
+        /// Return the worker to the pool if not started.
         ~launcher()
         {
             if (w_)
@@ -478,7 +478,7 @@ public:
         launcher& operator=(launcher const&) = delete;
         launcher& operator=(launcher&&)      = delete;
 
-        /** Launch the connection-handling coroutine.
+        /** Start the connection-handling coroutine.
 
             Starts the given coroutine on the specified executor. When
             the coroutine completes, the worker is automatically returned
@@ -615,7 +615,7 @@ public:
 
     /** Start accepting connections.
 
-        Launches accept loops for all bound endpoints. Incoming
+        Starts accept loops for all bound endpoints. Incoming
         connections are dispatched to idle workers from the pool.
         
         Calling `start()` on an already-running server has no effect.
@@ -689,7 +689,7 @@ public:
 
     /** Block until all accept loops complete.
 
-        Blocks the calling thread until all accept coroutines launched
+        Blocks the calling thread until all accept coroutines started
         by @ref start have finished executing. This synchronizes the
         shutdown sequence, ensuring the server is fully stopped before
         restarting or destroying it.

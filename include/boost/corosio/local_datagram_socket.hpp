@@ -75,7 +75,7 @@ namespace boost::corosio {
     Shared objects: Unsafe. A socket must not have concurrent
     operations of the same type (e.g., two simultaneous
     recv_from). One send and one recv may be in flight
-    simultaneously. Note that recv and recv_from share the
+    simultaneously. Both recv and recv_from share the
     same internal read slot, so they must not overlap; likewise
     send and send_to share the write slot.
 
