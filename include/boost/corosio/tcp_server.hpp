@@ -671,7 +671,7 @@ public:
         - Workers observing their stop token should exit promptly.
 
         @par Postconditions
-        No new connections will be accepted. Active workers continue
+        The server accepts no new connections. Active workers continue
         until they observe their stop token or complete naturally.
 
         @par What Happens Next
@@ -694,7 +694,7 @@ public:
         shutdown sequence, ensuring the server is fully stopped before
         restarting or destroying it.
 
-        @pre @ref stop has been called and `ioc.run()` has returned.
+        @pre @ref stop was called and `ioc.run()` returned.
 
         @par Postconditions
         All accept loops have completed. The server is in the stopped
@@ -709,7 +709,7 @@ public:
         @par !example deadlock_scenarios
 
         @par Thread Safety
-        May be called from any thread, but will deadlock if called
+        May be called from any thread, but deadlocks if called
         from within the io_context event loop or from a worker coroutine.
 
         @see stop, start

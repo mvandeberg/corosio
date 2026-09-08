@@ -188,7 +188,7 @@ class native_tcp_acceptor : public tcp_acceptor
 public:
     /** Construct a native acceptor from an execution context.
 
-        @param ctx The execution context that will own this acceptor.
+        @param ctx The execution context that owns this acceptor.
     */
     explicit native_tcp_acceptor(capy::execution_context& ctx)
         : tcp_acceptor(create_handle<service_type>(ctx))
@@ -197,7 +197,7 @@ public:
 
     /** Construct a native acceptor from an executor.
 
-        @param ex The executor whose context will own the acceptor.
+        @param ex The executor whose context owns the acceptor.
     */
     template<class Ex>
         requires(!std::same_as<std::remove_cvref_t<Ex>, native_tcp_acceptor>) &&
@@ -262,7 +262,7 @@ public:
 
         A closed acceptor reports `errc::bad_file_descriptor`.
 
-        @throws std::logic_error If the acceptor has been moved from.
+        @throws std::logic_error If the acceptor is moved-from.
 
         This acceptor must outlive the returned awaitable.
     */

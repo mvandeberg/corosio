@@ -161,7 +161,7 @@ public:
     /** Stage data for reads.
 
         Appends the given string to this mocket's provide buffer.
-        When `read_some` is called, it will receive this data first
+        When `read_some` is called, it receives this data first
         before reading from the underlying socket.
 
         @param s The data to provide.

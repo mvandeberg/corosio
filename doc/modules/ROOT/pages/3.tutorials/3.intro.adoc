@@ -29,7 +29,7 @@ protocols where message framing and request-response semantics matter.
 Security appears naturally as you add TLS to protect data in transit, covering
 certificate management and encrypted streams.
 
-Throughout the tutorials you will see how Corosio's coroutine-based model
+Throughout the tutorials you see how Corosio's coroutine-based model
 keeps asynchronous code readable. Operations that would require callbacks
 or state machines in traditional networking code read as sequential steps
 in a coroutine body. Error handling follows consistent patterns whether

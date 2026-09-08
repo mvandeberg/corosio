@@ -222,7 +222,7 @@ public:
 
     /** Construct a socket from an execution context.
 
-        @param ctx The execution context that will own this socket.
+        @param ctx The execution context that owns this socket.
     */
     explicit tcp_socket(capy::execution_context& ctx);
 
@@ -230,7 +230,7 @@ public:
 
         The socket is associated with the executor's context.
 
-        @param ex The executor whose context will own the socket.
+        @param ex The executor whose context owns the socket.
     */
     template<class Ex>
         requires(!std::same_as<std::remove_cvref_t<Ex>, tcp_socket>) &&
@@ -451,7 +451,7 @@ public:
         ownership of `fd`.
 
         @param fd The native socket to adopt. On success the object
-            owns it and will close it.
+            owns it and closes it.
 
         @return The error code, empty on success. Validation and
             registration failures are normal runtime conditions when
@@ -488,7 +488,7 @@ public:
 
         @li @ref shutdown_receive disables reading on the socket. This
             does NOT send anything to the peer - they are not informed
-            and may continue sending data. Subsequent reads will fail
+            and may continue sending data. Subsequent reads fail
             or return end-of-file. Incoming data may be discarded or
             buffered depending on the operating system.
 
@@ -496,7 +496,7 @@ public:
             disables reading.
 
         When the peer shuts down their send direction (sends a FIN),
-        subsequent read operations will complete with `capy::cond::eof`.
+        subsequent read operations complete with `capy::cond::eof`.
         Use the portable condition test rather than comparing error
         codes directly:
 
@@ -507,7 +507,7 @@ public:
         returned error code. A closed socket reports
         `errc::bad_file_descriptor`.
 
-        @param what Determines what operations will no longer be allowed.
+        @param what Determines which operations are no longer allowed.
 
         @return The error code, empty on success.
     */

@@ -51,7 +51,7 @@ Subnet masks also let a single organization divide its address space into smalle
 
 Several address ranges have reserved meanings:
 
-`127.0.0.1` (loopback):: Traffic sent here never leaves the machine. It goes down through the protocol stack, turns around, and comes back up. This is how your program talks to a server running on the same computer. The entire `127.0.0.0/8` range is reserved for loopback, but `127.0.0.1` is the one you will see in practice.
+`127.0.0.1` (loopback):: Traffic sent here never leaves the machine. It goes down through the protocol stack, turns around, and comes back up. This is how your program talks to a server running on the same computer. The entire `127.0.0.0/8` range is reserved for loopback, but `127.0.0.1` is the one you see in practice.
 
 `0.0.0.0`:: When used as a source address, it means "this machine, but I don't know my address yet." When used to bind a socket, it means "listen on every available network interface."
 

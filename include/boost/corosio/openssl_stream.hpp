@@ -72,7 +72,7 @@ public:
     /** Construct an OpenSSL stream (owning mode).
 
         Takes ownership of the underlying stream by moving it into
-        internal storage. The stream will be destroyed when this
+        internal storage. The stream is destroyed when this
         openssl_stream is destroyed.
 
         @param stream The stream to take ownership of. Must satisfy

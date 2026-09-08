@@ -147,13 +147,13 @@ class native_resolver : public resolver
 public:
     /** Construct a native resolver from an execution context.
 
-        @param ctx The execution context that will own this resolver.
+        @param ctx The execution context that owns this resolver.
     */
     explicit native_resolver(capy::execution_context& ctx) : resolver(ctx) {}
 
     /** Construct a native resolver from an executor.
 
-        @param ex The executor whose context will own the resolver.
+        @param ex The executor whose context owns the resolver.
     */
     template<class Ex>
         requires(!std::same_as<std::remove_cvref_t<Ex>, native_resolver>) &&

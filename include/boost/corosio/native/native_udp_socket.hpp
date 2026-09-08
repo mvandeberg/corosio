@@ -333,7 +333,7 @@ class native_udp_socket : public udp_socket
 public:
     /** Construct a native UDP socket from an execution context.
 
-        @param ctx The execution context that will own this socket.
+        @param ctx The execution context that owns this socket.
     */
     explicit native_udp_socket(capy::execution_context& ctx)
         : udp_socket(create_handle<service_type>(ctx))
@@ -342,7 +342,7 @@ public:
 
     /** Construct a native UDP socket from an executor.
 
-        @param ex The executor whose context will own the socket.
+        @param ex The executor whose context owns the socket.
     */
     template<class Ex>
         requires(!std::same_as<std::remove_cvref_t<Ex>, native_udp_socket>) &&
@@ -397,7 +397,7 @@ public:
         dispatch. Otherwise identical to @ref udp_socket::recv_from.
 
         @param buffers The buffer sequence to receive data into.
-        @param source Reference to an endpoint that will be set to
+        @param source Reference to an endpoint that receives
             the sender's address on successful completion.
         @param flags Message flags (e.g. message_flags::peek).
 

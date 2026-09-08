@@ -144,7 +144,7 @@ queued but won't be processed.
 
 === stopped()
 
-Check if the context has been stopped:
+Check whether the context stopped:
 
 [source,cpp]
 ----

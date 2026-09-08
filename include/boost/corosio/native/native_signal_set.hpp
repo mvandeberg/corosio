@@ -93,7 +93,7 @@ class native_signal_set : public signal_set
 public:
     /** Construct a native signal set from an execution context.
 
-        @param ctx The execution context that will own this signal set.
+        @param ctx The execution context that owns this signal set.
     */
     explicit native_signal_set(capy::execution_context& ctx) : signal_set(ctx)
     {
@@ -101,7 +101,7 @@ public:
 
     /** Construct a native signal set with initial signals.
 
-        @param ctx The execution context that will own this signal set.
+        @param ctx The execution context that owns this signal set.
         @param signal First signal number to add.
         @param signals Additional signal numbers to add.
 

@@ -72,7 +72,7 @@ public:
     /** Construct a WolfSSL stream (owning mode).
 
         Takes ownership of the underlying stream by moving it into
-        internal storage. The stream will be destroyed when this
+        internal storage. The stream is destroyed when this
         wolfssl_stream is destroyed.
 
         @param stream The stream to take ownership of. Must satisfy
@@ -237,7 +237,7 @@ BOOST_COROSIO_DECL std::error_category const& wolfssl_category() noexcept;
     This function lets callers detect that situation up front.
 
     @return `true` if verify callbacks are fully supported by this build,
-        `false` if installing one will cause the handshake to fail.
+        `false` if installing one causes the handshake to fail.
 
     @see tls_context::set_verify_callback
 */
@@ -251,7 +251,7 @@ BOOST_COROSIO_DECL bool wolfssl_supports_verify_callback() noexcept;
     silently negotiating nothing.
 
     @return `true` if ALPN is supported by this build, `false` if
-        offering protocols will cause the handshake to fail.
+        offering protocols causes the handshake to fail.
 
     @see tls_context::set_alpn, tls_stream::alpn_protocol
 */

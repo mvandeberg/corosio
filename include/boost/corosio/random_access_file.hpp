@@ -231,13 +231,13 @@ public:
 
     /** Construct from an execution context.
 
-        @param ctx The execution context that will own this file.
+        @param ctx The execution context that owns this file.
     */
     explicit random_access_file(capy::execution_context& ctx);
 
     /** Construct from an executor.
 
-        @param ex The executor whose context will own this file.
+        @param ex The executor whose context owns this file.
     */
     template<class Ex>
         requires(!std::same_as<std::remove_cvref_t<Ex>, random_access_file>) &&

@@ -78,7 +78,7 @@ public:
     /** Construct with a concurrency hint.
 
         @param concurrency_hint Hint for the number of threads that
-            will call `run()`.
+            calls `run()`.
     */
     explicit native_io_context(unsigned concurrency_hint)
         : io_context(Backend, concurrency_hint)
@@ -90,7 +90,7 @@ public:
         @param opts Runtime options controlling scheduler and
             service behavior.
         @param concurrency_hint Hint for the number of threads that
-            will call `run()`.
+            calls `run()`.
     */
     explicit native_io_context(
         io_context_options const& opts,
@@ -109,7 +109,7 @@ public:
         sched().stop();
     }
 
-    /// Return whether the context has been stopped.
+    /// Return whether the context stopped.
     bool stopped() const noexcept
     {
         return const_cast<native_io_context*>(this)->sched().stopped();

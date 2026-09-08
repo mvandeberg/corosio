@@ -157,7 +157,7 @@ class native_stream_file : public stream_file
 public:
     /** Construct a native stream file from an execution context.
 
-        @param ctx The execution context that will own this file.
+        @param ctx The execution context that owns this file.
     */
     explicit native_stream_file(capy::execution_context& ctx)
         : io_object(create_handle<service_type>(ctx))
@@ -166,7 +166,7 @@ public:
 
     /** Construct a native stream file from an executor.
 
-        @param ex The executor whose context will own this file.
+        @param ex The executor whose context owns this file.
     */
     template<class Ex>
         requires(!std::same_as<std::remove_cvref_t<Ex>, native_stream_file>) &&

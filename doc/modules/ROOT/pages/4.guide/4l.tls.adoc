@@ -428,7 +428,7 @@ before the next `handshake()`; `handshake()` also performs this implicitly.
 == Plain and Encrypted Connections
 
 A cpp:tls_stream[] is *not* an cpp:io_stream[], so a function taking `io_stream&`
-will not accept a TLS stream. Provide a separate overload taking
+does not accept a TLS stream. Provide a separate overload taking
 `tls_stream&` for the encrypted case. The bodies are identical because
 `capy::read` and `capy::write` accept either stream:
 

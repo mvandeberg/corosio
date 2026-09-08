@@ -167,7 +167,7 @@ class native_random_access_file : public random_access_file
 public:
     /** Construct a native random-access file from an execution context.
 
-        @param ctx The execution context that will own this file.
+        @param ctx The execution context that owns this file.
     */
     explicit native_random_access_file(capy::execution_context& ctx)
         : random_access_file(create_handle<service_type>(ctx))
@@ -176,7 +176,7 @@ public:
 
     /** Construct a native random-access file from an executor.
 
-        @param ex The executor whose context will own this file.
+        @param ex The executor whose context owns this file.
     */
     template<class Ex>
         requires(!std::same_as<

@@ -217,7 +217,7 @@ tls_context_data const& get_tls_context_data(tls_context const&) noexcept;
 
     @par Modification After Stream Creation
 
-    Modifying a context after a TLS stream has been created from it
+    Modifying a context after creating a TLS stream from it
     results in undefined behavior. The context's configuration is
     captured when the first stream is constructed, and subsequent
     modifications are not reflected in existing or new streams
@@ -601,7 +601,7 @@ public:
 
     /** Set the minimum TLS protocol version.
 
-        Connections will reject protocol versions older than this.
+        Connections reject protocol versions older than this.
         The default allows TLS 1.2 and newer.
 
         @param v The minimum protocol version to accept.
@@ -618,7 +618,7 @@ public:
 
     /** Set the maximum TLS protocol version.
 
-        Connections will not negotiate protocol versions newer than this.
+        Connections do not negotiate protocol versions newer than this.
         The default allows the newest supported version.
 
         @param v The maximum protocol version to accept.

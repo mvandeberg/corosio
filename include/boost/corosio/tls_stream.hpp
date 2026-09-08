@@ -77,7 +77,7 @@ public:
     /** Initiate an asynchronous read operation.
 
         Reads decrypted data into the provided buffer sequence. The
-        operation completes when at least one byte has been read,
+        operation completes when it reads at least one byte,
         or an error occurs.
 
         This non-virtual template wrapper satisfies the `capy::Stream`
@@ -102,7 +102,7 @@ public:
     /** Initiate an asynchronous write operation.
 
         Encrypts and writes data from the provided buffer sequence.
-        The operation completes when at least one byte has been
+        The operation completes when it reads at least one byte
         written, or an error occurs.
 
         This non-virtual template wrapper satisfies the `capy::Stream`
@@ -184,7 +184,7 @@ public:
         operations are in progress on this stream.
 
         @note If called mid-session before `shutdown()`, pending
-            TLS data is discarded and the peer will observe a
+            TLS data is discarded and the peer observes a
             truncated stream.
     */
     virtual void reset() = 0;

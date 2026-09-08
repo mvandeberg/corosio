@@ -191,13 +191,13 @@ public:
 
     /** Construct an empty signal set.
 
-        @param ctx The execution context that will own this signal set.
+        @param ctx The execution context that owns this signal set.
     */
     explicit signal_set(capy::execution_context& ctx);
 
     /** Construct a signal set with initial signals.
 
-        @param ctx The execution context that will own this signal set.
+        @param ctx The execution context that owns this signal set.
         @param signal First signal number to add.
         @param signals Additional signal numbers to add.
 
@@ -222,7 +222,7 @@ public:
 
         The signal set is associated with the executor's context.
 
-        @param ex The executor whose context will own this signal set.
+        @param ex The executor whose context owns this signal set.
     */
     template<class Ex>
         requires(!std::same_as<std::remove_cvref_t<Ex>, signal_set>) &&
@@ -235,7 +235,7 @@ public:
 
         The signal set is associated with the executor's context.
 
-        @param ex The executor whose context will own this signal set.
+        @param ex The executor whose context owns this signal set.
         @param signal First signal number to add.
         @param signals Additional signal numbers to add.
 

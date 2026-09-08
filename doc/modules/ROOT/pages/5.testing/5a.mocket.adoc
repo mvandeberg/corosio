@@ -53,7 +53,7 @@ first element is the mocket (test-instrumented). The second is the peer
 
 == Staging Data for Reads
 
-Use `provide()` to stage bytes that the mocket itself will hand back from
+Use `provide()` to stage bytes that the mocket itself hands back from
 `read_some`:
 
 [source,cpp]
@@ -85,7 +85,7 @@ at `max_write_size`), not the length of the matched prefix.
 == Chunked I/O
 
 `make_mocket_pair` accepts `max_read_size` and `max_write_size` to cap
-the bytes a single `read_some` / `write_some` will deliver. This is the
+the bytes a single `read_some` / `write_some` delivers. This is the
 right tool for forcing your code's read/write loops to handle short
 transfers:
 

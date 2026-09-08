@@ -369,7 +369,7 @@ struct iocp_t
 
         @param ctx The execution context that owns the scheduler.
         @param concurrency_hint Hint for the number of threads that
-            will call `run()`; a performance tuning knob. The
+            calls `run()`; a performance tuning knob. The
             thread-safety contract is set separately by
             @ref io_context_options::locking.
 

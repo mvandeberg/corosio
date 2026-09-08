@@ -100,7 +100,7 @@ connect(Socket& s, Iter begin, Iter end, ConnectCondition cond);
 
     @param s The socket to connect. Must have a `connect(endpoint)`
         member returning an awaitable, plus `close()` and `is_open()`.
-        If the socket is already open, it will be closed before the
+        If the socket is already open, it is closed before the
         first attempt.
     @param endpoints A range of candidate endpoints. Taken by value
         so temporaries (e.g. `resolver_results` returned from

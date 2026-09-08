@@ -35,8 +35,7 @@ include::example$snippets/4r_wait.cpp[tag=wait_type_enum,indent=0]
 ----
 
 The awaitable yields an `error_code` with no `bytes_transferred`. On
-success the socket is observed to be ready; no data has been consumed
-from it.
+success the socket is ready; the wait consumes no data from it.
 
 [source,cpp]
 ----
@@ -55,7 +54,7 @@ me when the fd is ready" without stealing bytes from the stream, and
 socket's pending error, so the library's next `PQconsumeInput` (or
 equivalent) sees everything the kernel has delivered. Adoption
 provides the second, with one rule to follow: `assign()` takes
-ownership and will close the descriptor, so adopt a `dup()` of the
+ownership and closes the descriptor, so adopt a `dup()` of the
 library's fd rather than the fd itself. Readiness lives on the open
 file description, which both descriptors share — the duplicate
 reports exactly the library's readiness, and closing it can never
@@ -80,7 +79,7 @@ exclusive ownership again, or create a true duplicate with
 
 cpp:tcp_acceptor[] and cpp:local_stream_acceptor[] expose the same `wait()`.
 For `wait_type::read`, completion signals that a connection is pending
-on the listen socket. A subsequent `accept()` will succeed without
+on the listen socket. A subsequent `accept()` succeeds without
 blocking:
 
 [source,cpp]

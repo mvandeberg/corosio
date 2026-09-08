@@ -25,7 +25,7 @@ enum class wait_type
     /// Wait until the descriptor is ready for a non-blocking write.
     write,
 
-    /// Wait until an error condition has been reported by the kernel
+    /// Wait until the kernel reports an error condition
     /// (e.g. SO_ERROR is non-zero or an exceptional event is pending).
     /// Error events are not buffered across operations: an error that
     /// fires before wait(error) is registered may be lost. Kernel

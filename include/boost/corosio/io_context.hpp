@@ -271,7 +271,7 @@ public:
     /** Construct with a concurrency hint and platform backend.
 
         @param concurrency_hint Hint for the number of threads
-            that will call `run()`.
+            that calls `run()`.
 
         @throws std::system_error If the backend's infrastructure
             could not be created.
@@ -283,7 +283,7 @@ public:
         @param opts Runtime options controlling scheduler and
             service behavior.
         @param concurrency_hint Hint for the number of threads
-            that will call `run()`.
+            that calls `run()`.
 
         @throws std::invalid_argument If `opts.thread_pool_size` is
             less than 1 (POSIX).
@@ -300,7 +300,7 @@ public:
         @param backend The backend tag value selecting the I/O
             multiplexer (e.g. `corosio::epoll`).
         @param concurrency_hint Hint for the number of threads
-            that will call `run()`.
+            that calls `run()`.
 
         @throws std::system_error If the backend's infrastructure
             could not be created.
@@ -326,7 +326,7 @@ public:
         @param opts Runtime options controlling scheduler and
             service behavior.
         @param concurrency_hint Hint for the number of threads
-            that will call `run()`.
+            that calls `run()`.
 
         @throws std::invalid_argument If `opts.thread_pool_size` is
             less than 1 (POSIX).
@@ -375,10 +375,10 @@ public:
         sched_->stop();
     }
 
-    /** Return whether the context has been stopped.
+    /** Return whether the context stopped.
 
-        @return `true` if `stop()` has been called and `restart()`
-            has not been called since.
+        @return `true` after a call to `stop()` with no later
+            call to `restart()`.
     */
     bool stopped() const noexcept
     {
@@ -388,7 +388,7 @@ public:
     /** Restart the context after being stopped.
 
         This function must be called before `run()` can be called
-        again after `stop()` has been called.
+        again after a call to `stop()`.
     */
     void restart()
     {
@@ -413,7 +413,7 @@ public:
 
     /** Process at most one pending work item.
 
-        This function blocks until one work item has been executed
+        This function blocks until it executes one work item
         or `stop()` is called. The context is stopped when there
         is no more outstanding work.
 
@@ -472,7 +472,7 @@ public:
 
     /** Process at most one work item for the specified duration.
 
-        This function blocks until one work item has been executed,
+        This function blocks until it executes one work item,
         the specified duration has elapsed, or `stop()` is called.
         The context is stopped when there is no more outstanding work.
 
@@ -491,7 +491,7 @@ public:
 
     /** Process at most one work item until the specified time.
 
-        This function blocks until one work item has been executed,
+        This function blocks until it executes one work item,
         the specified time is reached, or `stop()` is called.
         The context is stopped when there is no more outstanding work.
 

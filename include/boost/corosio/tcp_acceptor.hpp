@@ -174,7 +174,7 @@ public:
 
     /** Construct an acceptor from an execution context.
 
-        @param ctx The execution context that will own this acceptor.
+        @param ctx The execution context that owns this acceptor.
     */
     explicit tcp_acceptor(capy::execution_context& ctx);
 
@@ -193,7 +193,7 @@ public:
         endpoint therefore throws `errc::address_in_use` on every
         platform.
 
-        @param ctx The execution context that will own this acceptor.
+        @param ctx The execution context that owns this acceptor.
         @param ep The local endpoint to bind to.
         @param backlog The maximum pending connection queue length.
 
@@ -206,7 +206,7 @@ public:
 
         The acceptor is associated with the executor's context.
 
-        @param ex The executor whose context will own the acceptor.
+        @param ex The executor whose context owns the acceptor.
     */
     template<class Ex>
         requires(!std::same_as<std::remove_cvref_t<Ex>, tcp_acceptor>) &&
@@ -217,7 +217,7 @@ public:
 
     /** Convenience constructor from an executor.
 
-        @param ex The executor whose context will own the acceptor.
+        @param ex The executor whose context owns the acceptor.
         @param ep The local endpoint to bind to.
         @param backlog The maximum pending connection queue length.
 
@@ -357,7 +357,7 @@ public:
         `errc::operation_canceled`.
 
         @param peer The socket to receive the accepted connection. Any
-            existing connection on this socket will be closed.
+            existing connection on this socket is closed.
 
         @return An awaitable that completes with `io_result<>`.
             Returns success on successful accept, or an error code on
@@ -430,7 +430,7 @@ public:
         Suspends until the listen socket is ready in the
         requested direction, or an error condition is reported.
         For `wait_type::read`, completion signals that a
-        subsequent @ref accept will succeed without blocking; a
+        subsequent @ref accept succeeds without blocking; a
         connection already queued when the wait begins completes
         it immediately. No connection is consumed.
 
@@ -499,7 +499,7 @@ public:
         ownership of `fd`.
 
         @param fd The native socket to adopt. On success the object
-            owns it and will close it.
+            owns it and closes it.
 
         @return The error code, empty on success. Validation and
             registration failures are normal runtime conditions when

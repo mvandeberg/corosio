@@ -61,7 +61,7 @@ namespace boost::corosio {
 
     @note Not available on Windows. Windows does not support
         AF_UNIX datagram sockets (SOCK_DGRAM). Attempting to
-        open this socket on Windows will fail.
+        open this socket on Windows fails.
 
     @par Cancellation
     All asynchronous operations support cancellation through
@@ -452,7 +452,7 @@ public:
 
     /** Construct a socket from an execution context.
 
-        @param ctx The execution context that will own this socket.
+        @param ctx The execution context that owns this socket.
     */
     explicit local_datagram_socket(capy::execution_context& ctx);
 
@@ -460,7 +460,7 @@ public:
 
         The socket is associated with the executor's context.
 
-        @param ex The executor whose context will own the socket.
+        @param ex The executor whose context owns the socket.
     */
     template<class Ex>
         requires(!std::
@@ -602,7 +602,7 @@ public:
 
     /** Send a datagram to the specified destination.
 
-        Completes when the entire datagram has been accepted
+        Completes when the transport accepts the entire datagram
         by the kernel. The bytes_transferred value equals the
         datagram size on success.
 
@@ -638,14 +638,14 @@ public:
 
     /** Receive a datagram and capture the sender's endpoint.
 
-        Completes when one datagram has been received. The
+        Completes when one datagram arrives. The
         bytes_transferred value is the number of bytes copied
         into the buffer. If the buffer is smaller than the
         datagram, excess bytes are discarded (datagram
         semantics).
 
         @param buf The buffer to receive data into.
-        @param source Reference to an endpoint that will be set to
+        @param source Reference to an endpoint that receives
             the sender's address on successful completion.
         @param flags Message flags (e.g. message_flags::peek).
 
@@ -679,7 +679,7 @@ public:
 
     /** Send a datagram to the connected peer.
 
-        @pre connect() has been called successfully.
+        @pre connect() succeeded.
 
         @param buf The buffer containing data to send.
         @param flags Message flags.
@@ -710,7 +710,7 @@ public:
 
     /** Receive a datagram from the connected peer.
 
-        @pre connect() has been called successfully.
+        @pre connect() succeeded.
 
         @param buf The buffer to receive data into.
         @param flags Message flags (e.g. message_flags::peek).
@@ -860,7 +860,7 @@ public:
         ownership of `fd`.
 
         @param fd The native socket to adopt. On success the object
-            owns it and will close it.
+            owns it and closes it.
 
         @return The error code, empty on success. Validation and
             registration failures are normal runtime conditions when

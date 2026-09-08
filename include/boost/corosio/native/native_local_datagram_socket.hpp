@@ -337,7 +337,7 @@ class native_local_datagram_socket : public local_datagram_socket
 public:
     /** Construct a native socket from an execution context.
 
-        @param ctx The execution context that will own this socket.
+        @param ctx The execution context that owns this socket.
     */
     explicit native_local_datagram_socket(capy::execution_context& ctx)
         : local_datagram_socket(create_handle<service_type>(ctx))
@@ -346,7 +346,7 @@ public:
 
     /** Construct a native socket from an executor.
 
-        @param ex The executor whose context will own the socket.
+        @param ex The executor whose context owns the socket.
     */
     template<class Ex>
         requires(!std::same_as<

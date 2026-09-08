@@ -155,7 +155,7 @@ public:
     /** Get the IPv4 address.
 
         @return The IPv4 address. The value is valid even if
-        the endpoint is using IPv6 (it will be the default any address).
+        the endpoint is using IPv6 (it is the default any address).
     */
     ipv4_address v4_address() const noexcept
     {
@@ -165,7 +165,7 @@ public:
     /** Get the IPv6 address.
 
         @return The IPv6 address. The value is valid even if
-        the endpoint is using IPv4 (it will be the default any address).
+        the endpoint is using IPv4 (it is the default any address).
     */
     ipv6_address v6_address() const noexcept
     {

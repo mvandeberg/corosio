@@ -53,7 +53,7 @@ If the receiver's application is reading data quickly, the buffer stays mostly e
 
 If the receiver's application falls behind -- maybe it is busy processing a previous request -- the buffer fills up and the advertised window shrinks. The sender slows down in response. If the window reaches zero, the sender stops entirely and waits for the receiver to free up space.
 
-This feedback loop prevents a fast sender from flooding a slow receiver. It operates automatically, requiring no action from your application code. But it has a practical consequence: if your server reads from the socket slowly, the client's send calls will eventually stall. TCP is applying backpressure through the window mechanism.
+This feedback loop prevents a fast sender from flooding a slow receiver. It operates automatically, requiring no action from your application code. But it has a practical consequence: if your server reads from the socket slowly, the client's send calls eventually stall. TCP is applying backpressure through the window mechanism.
 
 == Delayed Acknowledgments
 

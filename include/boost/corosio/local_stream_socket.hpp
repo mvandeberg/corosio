@@ -226,7 +226,7 @@ public:
 
     /** Construct a socket from an execution context.
 
-        @param ctx The execution context that will own this socket.
+        @param ctx The execution context that owns this socket.
     */
     explicit local_stream_socket(capy::execution_context& ctx);
 
@@ -234,7 +234,7 @@ public:
 
         The socket is associated with the executor's context.
 
-        @param ex The executor whose context will own the socket.
+        @param ex The executor whose context owns the socket.
     */
     template<class Ex>
         requires(!std::same_as<std::remove_cvref_t<Ex>, local_stream_socket>) &&
@@ -412,7 +412,7 @@ public:
         returned error code. A closed socket reports
         `errc::bad_file_descriptor`.
 
-        @param what Determines what operations will no longer
+        @param what Determines which operations are no longer
             be allowed.
 
         @return The error code, empty on success.
@@ -490,7 +490,7 @@ public:
         ownership of `fd`.
 
         @param fd The native socket to adopt. On success the object
-            owns it and will close it.
+            owns it and closes it.
 
         @return The error code, empty on success. Validation and
             registration failures are normal runtime conditions when

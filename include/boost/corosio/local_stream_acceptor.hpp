@@ -181,7 +181,7 @@ public:
 
     /** Construct an acceptor from an execution context.
 
-        @param ctx The execution context that will own this acceptor.
+        @param ctx The execution context that owns this acceptor.
     */
     explicit local_stream_acceptor(capy::execution_context& ctx);
 
@@ -191,7 +191,7 @@ public:
         expression, throwing the codes the piecewise `open()` +
         `bind()` + `listen()` path returns.
 
-        @param ctx The execution context that will own this acceptor.
+        @param ctx The execution context that owns this acceptor.
         @param ep The local endpoint to bind to.
         @param backlog The maximum pending connection queue length.
 
@@ -206,7 +206,7 @@ public:
 
         The acceptor is associated with the executor's context.
 
-        @param ex The executor whose context will own the acceptor.
+        @param ex The executor whose context owns the acceptor.
 
         @tparam Ex A type satisfying @ref capy::Executor. Must not
             be `local_stream_acceptor` itself (disables implicit
@@ -223,7 +223,7 @@ public:
 
     /** Convenience constructor from an executor.
 
-        @param ex The executor whose context will own the acceptor.
+        @param ex The executor whose context owns the acceptor.
         @param ep The local endpoint to bind to.
         @param backlog The maximum pending connection queue length.
 
@@ -362,7 +362,7 @@ public:
 
         Suspends until the listen socket is ready in the
         requested direction. For `wait_type::read`, completion
-        signals that a subsequent @ref accept will succeed
+        signals that a subsequent @ref accept succeeds
         without blocking; a connection already queued when the
         wait begins completes it immediately. No connection is
         consumed.
@@ -470,7 +470,7 @@ public:
         ownership of `fd`.
 
         @param fd The native socket to adopt. On success the object
-            owns it and will close it.
+            owns it and closes it.
 
         @return The error code, empty on success. Validation and
             registration failures are normal runtime conditions when

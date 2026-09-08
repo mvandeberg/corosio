@@ -10,7 +10,7 @@
 = Opening and Closing TCP Connections
 :page-mode: explanation
 
-A TCP connection is not a physical wire. It is an agreement between two machines to track a shared conversation. That agreement begins with a handshake, ends with a teardown, and passes through a series of well-defined states in between. Knowing these states explains errors you will encounter in every networked application you write.
+A TCP connection is not a physical wire. It is an agreement between two machines to track a shared conversation. That agreement begins with a handshake, ends with a teardown, and passes through a series of well-defined states in between. Knowing these states explains errors you encounter in every networked application you write.
 
 == The Three-Way Handshake
 
@@ -93,7 +93,7 @@ ESTABLISHED:: The handshake is complete. Both sides can send and receive data. T
 
 FIN_WAIT_1:: This side has sent a FIN and is waiting for an acknowledgment.
 
-FIN_WAIT_2:: The FIN has been acknowledged, but the other side has not yet sent its own FIN. This side is waiting for the remote FIN.
+FIN_WAIT_2:: The other side acknowledged the FIN, but has not yet sent its own FIN. This side is waiting for the remote FIN.
 
 CLOSE_WAIT:: This side has received a FIN from the remote end but has not yet sent its own FIN. If your server has many connections in CLOSE_WAIT, it means the application is not closing sockets promptly after the remote end has disconnected.
 
@@ -107,7 +107,7 @@ After both sides have exchanged FINs and ACKs, you might expect the connection t
 
 TIME_WAIT exists for two reasons:
 
-. *Reliable termination*: If the final ACK is lost, the remote side will retransmit its FIN. The TIME_WAIT state ensures that the local side is still around to re-acknowledge it.
+. *Reliable termination*: If the final ACK is lost, the remote side retransmits its FIN. The TIME_WAIT state ensures that the local side is still around to re-acknowledge it.
 . *Preventing stale segments*: If a new connection is established on the same four-tuple immediately after closing, delayed segments from the old connection might arrive and be misinterpreted as belonging to the new one. TIME_WAIT ensures that enough time passes for any lingering segments to expire.
 
 The practical consequence is the dreaded "address already in use" error. If your server shuts down and immediately restarts, it cannot bind to the same port because the old connections are still in TIME_WAIT. The standard solution is to set the `SO_REUSEADDR` socket option before binding, which tells the OS to allow binding to a port that has connections in TIME_WAIT.
@@ -144,7 +144,7 @@ A server handling multiple clients simultaneously needs a strategy for managing 
 
 == Why This Matters to You
 
-The TCP connection lifecycle is not academic trivia. It is the explanation behind errors you will see regularly:
+The TCP connection lifecycle is not academic trivia. It is the explanation behind errors you see regularly:
 
 * "Connection refused" means RST came back immediately -- nothing is listening on the port.
 * "Connection timed out" means no response to the SYN -- the host is unreachable or firewalled.

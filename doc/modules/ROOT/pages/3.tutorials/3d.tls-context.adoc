@@ -138,7 +138,7 @@ loading. See <<Password Handling>> for details.
 == Trust Anchors
 
 Trust anchors are root CA certificates used to verify peer certificates.
-Without trust anchors, certificate verification will fail.
+Without trust anchors, certificate verification fails.
 
 === Using System Trust Store
 
