@@ -86,53 +86,59 @@ nothing. Measured on this corpus; see the bite-test log below.
 workflow, never locally: a local run differs from a CI run and would grandfather hundreds of
 local-vs-CI drift fingerprints.
 
-> **The committed `baseline.json` is a LOCAL seed and must be reseeded in CI before the gate
-> is trusted.** It had to be: the gate cannot run at all without a baseline, and the
-> bite-tests below needed one to compare against. It was generated on a developer machine, so
-> it carries local-vs-CI drift — a different MrDocs develop build hash and a different
-> file-processing order at minimum. Run the Documentation workflow via `workflow_dispatch`,
-> read the `baseline-diff.txt` report, and commit the candidate. Until that happens, treat a
-> clean gate as evidence about the *toolkit*, not about the corpus.
+> `baseline.json` is **CI-authored** (`workflow_dispatch`, 2026-09-08T22:18Z) and is the
+> reference point the strict gate compares against. Counts at the original local seed and in
+> that reseed:
 >
-> The baseline is also **stale-high**: it was seeded before the remediation phases ran, so it
-> grandfathers well over a thousand findings that no longer exist. Nothing can be gated on
-> those having stayed fixed until it is reseeded. Counts at the seed, and as measured after
-> phase 9, for diffing against the first CI candidate:
->
-> | Check | Seeded | Now |
+> | Check | Local seed | CI baseline |
 > |---|---|---|
-> | `vale_adoc` | 466 | 132 |
-> | `vale_docstrings` | 785 | 427 |
+> | `vale_adoc` | 466 | 66 |
+> | `vale_docstrings` | 785 | 420 |
 > | `sentence_length` | 204 | 71 (hard 1, advisory 70) |
 > | `doc_lint` | 93 | 3 (all D2, the documented carve-out) |
-> | `mrdocs_warnings` | 460 | 460 |
+> | `mrdocs_warnings` | 460 | 352 |
+>
+> The reseed retired 1096 fingerprints and grandfathered none. `doc_lint` and
+> `sentence_length` measured **identically** in both environments (3 and 71), which is what
+> makes them safe to gate; every other difference above is environment drift.
 
-### Corosio's posture: the gate is split in two
+### Corosio's posture: everything blocks except the reference surface
 
 `selftest.mjs` is **blocking**. It has no baseline and no environment dependence, so a red
 run there means a linter regressed.
 
-The gate itself runs as two steps, and the split is about baseline trust rather than which
-rules matter:
+The gate runs as two steps:
 
 | Step | Checks | Posture |
 |---|---|---|
-| `Lint: gate (structural + C2, BLOCKING)` | `doc_lint` (A1/A6/B2/D2/ANCHOR), `sentence_length` (C2) | **`--strict`** |
-| `Lint: gate (wording + reference, reporting)` | `vale_adoc`, `vale_docstrings`, `mrdocs_warnings` | reports, does not fail |
+| `Lint: gate (BLOCKING)` | `doc_lint` (A1/A6/B2/D2/ANCHOR), `sentence_length` (C2), and the C4/C9/C10/A7 wording rules on both corpora | **`--strict`** |
+| `Lint: gate (reference surface, reporting)` | `mrdocs_warnings` | reports, does not fail |
 
-`doc_lint` and `sentence_length` are pure file parsing with Node built-ins: no external tool,
-no version input, identical fingerprints in any environment. They are safe to gate against a
-locally-seeded baseline, so they are strict now.
+`baseline.json` is now authored by the Documentation job itself, so a strict comparison is
+CI-against-CI and carries no environment drift. The wording rules additionally have an
+**empty gated subset** — zero baselined C4/C9/C10/A7 fingerprints on either corpus — so
+any match at all is a real regression.
 
-The other three are not. `vale_adoc`/`vale_docstrings` depend on the asciidoctor build Vale
-shells out to, and `mrdocs_warnings` on the MrDocs develop build hash. Compared against a
-local baseline, environment drift in those reads as a NEW violation and would fail the job for
-a reason unrelated to the documentation. **They become strict once the first
-`workflow_dispatch` reseed replaces the local baseline with a CI-authored one** — at which
-point the change is moving their specs into the strict step.
+`mrdocs_warnings` stays reporting on purpose. Its `.*` spec gates all 352 warnings, and
+MrDocs is a rolling `develop-release` build whose output demonstrably moves: the same asset
+reported **460** warnings under `0.8.0` and **352** under `2026.9.5`, days apart, on an
+unchanged tree. Gating `.*` against a tool that rewrites its own output would fail the job
+for upstream reasons unrelated to Corosio's documentation — the same mistake as the version
+pin that skipped this check on the first reseed. Promote it only alongside a pinned MrDocs.
 
-The cost, stated plainly: until that reseed, a new wording or reference-surface violation is
-reported but lands, and stays until a reseed grandfathers it.
+> **A local `--strict` run of the full gate will fail, and that is expected.** The baseline
+> is CI-authored; a developer machine produces different `vale_*` and `mrdocs_warnings`
+> fingerprints (measured: `vale_adoc` 132 locally against 66 in CI, from the Ruby-vs-JS
+> asciidoctor Vale shells out to; `mrdocs_warnings` 460 against 352). None of that drift
+> touches a gated rule, so the **gated** slice does pass locally:
+>
+> ```sh
+> node lint/check-no-new-violations.mjs --strict \
+>   --gate 'doc_lint:^(A1|A6|B2|D2|ANCHOR):' --gate 'sentence_length:^C2:' \
+>   --gate 'vale_adoc:Corosio\.PartHeadings$' \
+>   --gate 'vale_adoc:(Corosio\.SimpleTense|Corosio\.NoFluff|Corosio\.Terminology)$' \
+>   --gate 'vale_docstrings:(Corosio\.SimpleTense|Corosio\.NoFluff|Corosio\.Terminology)$'
+> ```
 
 ## Corosio-specific configuration
 
@@ -183,6 +189,9 @@ exact rule and confirming the failure, at the port commit.
 | gate, report-only | the same plant, no `--strict` | **exit 0** — confirms the current posture reports without failing, and that the phase-9 flip is the only change needed |
 | fail-closed | `extract-docstrings.mjs` made to exit 3 | **exit 1**: `vale_docstrings` and `sentence_length` marked SKIPPED and, being gated, fail the gate. Zero findings did not read as success |
 | tail-anchor trap | `--gate 'vale_adoc:^Corosio\.PartHeadings$'` against a planted A7 | **exit 0 while gating nothing** — the trap is real on this corpus. The correct tail-only spec exits 1 on the same input |
+| strict gate, C4/C9/C10 on pages | "The acceptor will simply spawn a coroutine." | **exit 1**, naming `Corosio.SimpleTense`, `Corosio.NoFluff` and `Corosio.Terminology` |
+| strict gate, C4/C9/C10 on docstrings | the same sentence spliced into `tcp_socket`'s brief | **exit 1**, naming all three on `vale_docstrings` |
+| strict gate, A7 | a `== Part 9:` heading | **exit 1**, naming `Corosio.PartHeadings` |
 | strict gate, B2 | a bare `----` listing holding code, against the strict step's real spec | **exit 1** |
 | strict gate, C2 | a 28-word sentence on a hard-slice page | **exit 1** |
 | strict gate, clean | the same spec against an unmodified tree | exit 0, before and after both plants |

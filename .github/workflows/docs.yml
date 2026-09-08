@@ -328,48 +328,48 @@ jobs:
       # Do NOT reseed baseline.json locally — a local run grandfathers local-vs-CI
       # drift as if it were the real backlog. Reseed via the workflow_dispatch steps
       # below, per doc/lint/README.md.
-      # THE GATE IS SPLIT IN TWO, and the split is about baseline trust, not about
-      # which rules matter.
+      # THE GATE IS SPLIT IN TWO. Everything blocks EXCEPT the MrDocs
+      # reference-surface check, and that exception is evidence-based.
       #
-      # doc/lint/baseline.json was seeded on a developer machine (doc/lint/README.md
-      # says so). A `--strict` run compares a CI scan against it, so any fingerprint
-      # that differs between the two environments reads as a NEW violation and would
-      # fail the job for a reason that has nothing to do with the documentation.
-      # That drift is not spread evenly:
+      # A1/A6/B2/D2/ANCHOR, C2, and the C4/C9/C10/A7 wording rules are all STRICT.
+      # baseline.json is now authored by this job (workflow_dispatch reseed), so a
+      # strict comparison is CI-against-CI and carries no environment drift. The
+      # wording rules additionally have an EMPTY gated subset — zero baselined
+      # C4/C9/C10/A7 fingerprints on either corpus — so any match at all is a real
+      # regression, which is why they were safe to promote even from a local run.
       #
-      #   * doc_lint and sentence_length are pure file parsing — Node built-ins, no
-      #     external tool, no version input. Their fingerprints are identical in both
-      #     environments, so they are STRICT now.
-      #   * vale_adoc / vale_docstrings depend on the asciidoctor build that Vale
-      #     shells out to, and mrdocs_warnings on the MrDocs develop build hash.
-      #     Those stay REPORTING until the first workflow_dispatch reseed replaces
-      #     the local baseline with a CI-authored one. Flipping them is then a
-      #     one-line change: move the specs into the strict step above.
+      # mrdocs_warnings deliberately stays REPORTING. Its `.*` spec gates every one
+      # of the 352 warnings, and MrDocs itself is a rolling `develop-release` build
+      # whose output demonstrably moves: the same asset reported 460 warnings under
+      # 0.8.0 and 352 under 2026.9.5, days apart, on an unchanged tree. Gating `.*`
+      # on a tool that rewrites its own output would fail this job for upstream
+      # reasons that have nothing to do with Corosio's documentation — the same
+      # mistake as the version pin that skipped this check on the first reseed
+      # (doc/lint/mrdocs-warnings.mjs). Promote it only alongside a pinned MrDocs.
       #
       # Do NOT "fix" a strict-step failure by reseeding locally. Reseed via the
       # workflow_dispatch steps below, per doc/lint/README.md.
-      - name: "Lint: gate (structural + C2, BLOCKING)"
+      - name: "Lint: gate (BLOCKING)"
         if: always()
         continue-on-error: false
         working-directory: boost-root/libs/corosio/doc
         run: |
           node lint/check-no-new-violations.mjs --strict \
             --gate 'doc_lint:^(A1|A6|B2|D2|ANCHOR):' \
-            --gate 'sentence_length:^C2:'
+            --gate 'sentence_length:^C2:' \
+            --gate 'vale_adoc:Corosio\.PartHeadings$' \
+            --gate 'vale_adoc:(Corosio\.SimpleTense|Corosio\.NoFluff|Corosio\.Terminology)$' \
+            --gate 'vale_docstrings:(Corosio\.SimpleTense|Corosio\.NoFluff|Corosio\.Terminology)$'
 
-      - name: "Lint: gate (wording + reference, reporting)"
+      - name: "Lint: gate (reference surface, reporting)"
         if: always()
         continue-on-error: false
         working-directory: boost-root/libs/corosio/doc
         run: |
-          # Reports and annotates; does NOT fail the job (no --strict), because the
-          # committed baseline is a local seed and these three checks carry
-          # environment drift. See the comment above the strict step.
+          # Reports and annotates; does NOT fail the job (no --strict). See the
+          # rolling-build reasoning above the blocking step.
           node lint/check-no-new-violations.mjs \
-            --gate 'vale_adoc:Corosio\.PartHeadings$' \
-            --gate 'mrdocs_warnings:.*' \
-            --gate 'vale_adoc:(Corosio\.SimpleTense|Corosio\.NoFluff|Corosio\.Terminology)$' \
-            --gate 'vale_docstrings:(Corosio\.SimpleTense|Corosio\.NoFluff|Corosio\.Terminology)$'
+            --gate 'mrdocs_warnings:.*'
 
       # --- Baseline reseed (workflow_dispatch only) ---------------------------
       # doc/lint/baseline.json is the gate's reference point: anything in it is

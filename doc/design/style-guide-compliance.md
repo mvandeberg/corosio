@@ -29,26 +29,24 @@ as follow-ups with no owner in this plan.
 | 6 — C4 present simple | **done** — both rules at zero on both corpora |
 | 7 — C2 sentence length | **done** — hard 131 → 1, and that one is the `@n` artifact |
 | 8 — B4 briefs | **done** — 40 class briefs rewritten; scope noted at the phase |
-| 9 — close the gate | **partly done** — selftest blocking, structural+C2 strict; the wording and reference gates need the first CI reseed |
+| 9 — close the gate | **done** — CI baseline installed; selftest and every gated rule strict except `mrdocs_warnings` (see below) |
 
 Measured after phase 9, both corpora: Vale over `doc/modules` 466 → 132;
 `Vale.Spelling` 284 → 36; Vale over `lint/.docstrings` 785 → 427; `doc_lint`
 A1/A6/B2/ANCHOR all 0, D2 3 (the documented carve-out); C9/C10 0/0; C4 0/0;
 `sentence_length` hard 131 → 1, advisory 70.
 
-**What phase 9 still needs.** `doc/lint/baseline.json` is a local seed and is now
-stale-high. The wording and reference-surface gates (`vale_adoc`, `vale_docstrings`,
-`mrdocs_warnings`) cannot go strict against it: those three depend on the asciidoctor and
-MrDocs builds, and their environment drift would read as new violations. Run the
-Documentation workflow via `workflow_dispatch`, review the candidate, commit it, then move
-those three specs into the strict step.
+**How phase 9 closed.** The `workflow_dispatch` reseed replaced the local seed with a
+CI-authored baseline: 1096 fingerprints retired, none grandfathered, none gated.
+`doc_lint` and `sentence_length` measured identically in both environments (3 and 71),
+confirming the split-gate reasoning; `vale_adoc` differed 132 local against 66 in CI, and
+`mrdocs_warnings` 460 against 352.
 
-The first reseed attempt was **refused** by `baseline-diff.mjs`: `mrdocs_warnings` came
-back SKIPPED because of the version pin described in 4.3. That pin is fixed, so the
-reseed needs re-running. Note also that CI and local Vale counts genuinely differ
-(`vale_adoc` 66 in CI against 132 locally, from the Ruby-vs-JS asciidoctor Vale shells
-out to) — which is the drift that keeps the wording gates non-strict until the reseed
-lands.
+Every gated rule is now strict except `mrdocs_warnings`. That one keeps reporting because
+its `.*` spec gates all 352 warnings while MrDocs is a rolling `develop-release` build whose
+output moved by 108 warnings on an unchanged tree between two runs days apart. Gating a tool
+that rewrites its own output is the same mistake as the version pin in 4.3. Promote it only
+alongside a pinned MrDocs.
 
 **Note for phase 7.** `sentence-length.mjs` does not treat Doxygen's `@n` as a
 sentence boundary, so `io_context`'s boost-wide thread-safety idiom
