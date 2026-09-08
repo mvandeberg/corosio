@@ -37,7 +37,7 @@
 
 namespace boost::corosio {
 
-/** An asynchronous Unix stream socket for coroutine I/O.
+/** Reads and writes a Unix domain stream, from a coroutine.
 
     This class provides asynchronous Unix domain stream socket
     operations that return awaitable types. Each operation

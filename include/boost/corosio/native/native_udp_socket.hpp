@@ -38,7 +38,7 @@
 
 namespace boost::corosio {
 
-/** An asynchronous UDP socket with devirtualized I/O operations.
+/** Sends and receives UDP datagrams, calling the backend directly.
 
     This class template inherits from @ref udp_socket. It shadows the
     async operations (`send_to`, `recv_from`, `connect`, `send`, `recv`)

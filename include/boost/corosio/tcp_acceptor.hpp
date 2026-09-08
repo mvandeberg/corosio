@@ -37,7 +37,7 @@
 
 namespace boost::corosio {
 
-/** An asynchronous TCP acceptor for coroutine I/O.
+/** Accepts inbound TCP connections, from a coroutine.
 
     This class provides asynchronous TCP accept operations that return
     awaitable types. The acceptor binds to a local endpoint and listens

@@ -25,7 +25,7 @@
 
 namespace boost::corosio {
 
-/** An IP endpoint (address + port) supporting both IPv4 and IPv6.
+/** Pairs an IP address with a port, for either IPv4 or IPv6.
 
     This class represents an endpoint for IP communication,
     consisting of either an IPv4 or IPv6 address and a port number.

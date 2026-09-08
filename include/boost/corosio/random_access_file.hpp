@@ -35,7 +35,7 @@
 
 namespace boost::corosio {
 
-/** An asynchronous random-access file for coroutine I/O.
+/** Reads and writes a file at arbitrary offsets, from a coroutine.
 
     Provides asynchronous read and write operations at explicit
     byte offsets, without maintaining an implicit file position.

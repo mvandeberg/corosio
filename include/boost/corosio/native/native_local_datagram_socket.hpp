@@ -38,7 +38,7 @@
 
 namespace boost::corosio {
 
-/** An asynchronous Unix datagram socket with devirtualized I/O.
+/** Sends and receives Unix domain datagrams, calling the backend directly.
 
     This class template inherits from @ref local_datagram_socket. It
     shadows the async operations (`send_to`, `recv_from`, `connect`,

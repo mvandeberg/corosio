@@ -39,7 +39,7 @@
 
 namespace boost::corosio {
 
-/** An asynchronous TCP socket for coroutine I/O.
+/** Connects, reads, and writes over TCP, from a coroutine.
 
     This class provides asynchronous TCP socket operations that return
     awaitable types. Each operation participates in the affine awaitable

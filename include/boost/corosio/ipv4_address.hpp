@@ -24,7 +24,7 @@
 
 namespace boost::corosio {
 
-/** An IP version 4 style address.
+/** Stores and parses an IP version 4 address.
 
     Objects of this type are used to construct,
     parse, and manipulate IP version 4 addresses.

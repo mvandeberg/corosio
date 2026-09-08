@@ -39,7 +39,7 @@
 
 namespace boost::corosio {
 
-/** An asynchronous UDP socket for coroutine I/O.
+/** Sends and receives datagrams over UDP, from a coroutine.
 
     This class provides asynchronous UDP datagram operations that
     return awaitable types. Each operation participates in the affine

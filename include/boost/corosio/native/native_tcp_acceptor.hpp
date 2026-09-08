@@ -37,7 +37,7 @@
 
 namespace boost::corosio {
 
-/** An asynchronous TCP acceptor with devirtualized accept operations.
+/** Accepts TCP connections, calling the backend directly.
 
     This class template inherits from @ref tcp_acceptor. It shadows the
     `accept` operation with a version that calls the backend

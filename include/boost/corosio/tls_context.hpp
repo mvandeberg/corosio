@@ -115,7 +115,7 @@ enum class tls_password_purpose
 
 class tls_context;
 
-/** A non-owning view of certificate verification state.
+/** Exposes the certificate and error state to a verification callback.
 
     An instance is passed to the callback installed via
     tls_context::set_verify_callback during the TLS handshake. It
@@ -199,7 +199,7 @@ tls_context_data const& get_tls_context_data(tls_context const&) noexcept;
 #pragma warning(disable : 4251) // shared_ptr needs dll-interface
 #endif
 
-/** A portable TLS context for certificate and settings storage.
+/** Configures the certificates, keys, and protocol settings a TLS stream uses.
 
     The `tls_context` class provides a backend-agnostic interface for
     configuring TLS connections. It stores credentials (certificates and

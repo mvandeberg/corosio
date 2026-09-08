@@ -47,7 +47,7 @@ enum class bind_option
     unlink_existing
 };
 
-/** An asynchronous Unix domain stream acceptor for coroutine I/O.
+/** Accepts inbound Unix domain stream connections, from a coroutine.
 
     This class provides asynchronous Unix domain stream accept
     operations that return awaitable types. The acceptor binds

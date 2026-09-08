@@ -38,7 +38,7 @@
 
 namespace boost::corosio {
 
-/** An asynchronous Unix stream acceptor with devirtualized accept.
+/** Accepts Unix domain stream connections, calling the backend directly.
 
     This class template inherits from @ref local_stream_acceptor. It
     shadows both `accept` overloads (the peer-reference form and the

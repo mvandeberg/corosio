@@ -25,7 +25,7 @@
 
 namespace boost::corosio {
 
-/** A TLS stream using OpenSSL.
+/** Encrypts and decrypts a stream using OpenSSL.
 
     This class wraps an underlying stream satisfying `capy::Stream`
     and provides TLS encryption using the OpenSSL library.

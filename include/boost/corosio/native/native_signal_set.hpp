@@ -26,7 +26,7 @@
 
 namespace boost::corosio {
 
-/** An asynchronous signal set with devirtualized wait operations.
+/** Waits for a registered signal, calling the backend directly.
 
     This class template inherits from @ref signal_set. It shadows the
     `wait` operation with a version that calls the backend

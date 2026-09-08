@@ -25,7 +25,7 @@ namespace boost::corosio {
 
 class ipv4_address;
 
-/** An IP version 6 style address.
+/** Stores and parses an IP version 6 address.
 
     Objects of this type are used to construct,
     parse, and manipulate IP version 6 addresses.

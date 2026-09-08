@@ -27,7 +27,7 @@
 
 namespace boost::corosio {
 
-/** An asynchronous sequential file for coroutine I/O.
+/** Reads and writes a file sequentially, from a coroutine.
 
     Provides asynchronous read and write operations on a regular
     file with an implicit position that advances after each

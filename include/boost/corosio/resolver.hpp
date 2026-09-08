@@ -155,7 +155,7 @@ operator&=(reverse_flags& a, reverse_flags b) noexcept
     return a;
 }
 
-/** An asynchronous DNS resolver for coroutine I/O.
+/** Resolves host names and services to endpoints, from a coroutine.
 
     This class provides asynchronous DNS resolution operations that return
     awaitable types. Each operation participates in the affine awaitable

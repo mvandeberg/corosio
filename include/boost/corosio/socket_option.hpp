@@ -455,7 +455,7 @@ public:
     static int name() noexcept;
 };
 
-/** The SO_LINGER socket option.
+/** Controls how long `close()` blocks while unsent data drains.
 
     Controls behavior when closing a socket with unsent data.
     When enabled, `close()` blocks until pending data is sent

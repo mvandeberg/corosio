@@ -25,7 +25,7 @@
 
 namespace boost::corosio {
 
-/** A TLS stream using WolfSSL.
+/** Encrypts and decrypts a stream using WolfSSL.
 
     This class wraps an underlying stream satisfying `capy::Stream`
     and provides TLS encryption using the WolfSSL library.

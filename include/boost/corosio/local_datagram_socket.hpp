@@ -41,7 +41,7 @@
 
 namespace boost::corosio {
 
-/** An asynchronous Unix datagram socket for coroutine I/O.
+/** Sends and receives datagrams over a Unix domain socket, from a coroutine.
 
     This class provides asynchronous Unix domain datagram socket
     operations that return awaitable types. Each operation

@@ -38,7 +38,7 @@
 
 namespace boost::corosio {
 
-/** An asynchronous Unix stream socket with devirtualized I/O operations.
+/** Reads and writes a Unix domain stream, calling the backend directly.
 
     This class template inherits from @ref local_stream_socket. It
     shadows the async operations (`read_some`, `write_some`, `connect`)

@@ -31,7 +31,7 @@
 
 namespace boost::corosio {
 
-/** A sequential file with devirtualized async I/O operations.
+/** Reads and writes a file sequentially, calling the backend directly.
 
     This class template inherits from @ref stream_file. It shadows
     `read_some` / `write_some` with versions that call the backend

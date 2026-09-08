@@ -23,7 +23,7 @@
 
 namespace boost::corosio {
 
-/** A Unix domain socket endpoint (filesystem path).
+/** Holds the filesystem path that names a Unix domain socket.
 
     Stores the path in a fixed-size buffer, avoiding heap
     allocation. The object is trivially copyable.

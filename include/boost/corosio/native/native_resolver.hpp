@@ -27,7 +27,7 @@
 
 namespace boost::corosio {
 
-/** An asynchronous DNS resolver with devirtualized operations.
+/** Resolves host names to endpoints, calling the backend directly.
 
     This class template inherits from @ref resolver. It shadows the
     `resolve` operations with versions that call the backend

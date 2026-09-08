@@ -31,7 +31,7 @@
 
 namespace boost::corosio {
 
-/** A random-access file with devirtualized async I/O operations.
+/** Reads and writes a file at arbitrary offsets, calling the backend directly.
 
     This class template inherits from @ref random_access_file. It
     shadows `read_some_at` / `write_some_at` with versions that call the

@@ -38,7 +38,7 @@
 
 namespace boost::corosio {
 
-/** An I/O context with devirtualized event loop methods.
+/** Runs asynchronous operations, calling the backend event loop directly.
 
     This class template inherits from @ref io_context and shadows
     all public methods with versions that call the concrete

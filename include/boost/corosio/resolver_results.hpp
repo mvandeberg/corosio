@@ -20,7 +20,7 @@
 
 namespace boost::corosio {
 
-/** A single entry produced by a resolver.
+/** Carries one endpoint a resolver produced, with its host and service names.
 
     This class represents one resolved endpoint along with
     the host and service names used in the query.
@@ -95,7 +95,7 @@ public:
 */
 using resolver_results = std::vector<resolver_entry>;
 
-/** The result of a reverse DNS resolution.
+/** Carries the host and service names a reverse resolution produced.
 
     This class holds the result of resolving an endpoint
     into a hostname and service name.

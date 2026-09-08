@@ -51,7 +51,7 @@
 
 namespace boost::corosio {
 
-/** An asynchronous signal set for coroutine I/O.
+/** Waits from a coroutine for one of a registered set of signals.
 
     This class provides the ability to perform an asynchronous wait
     for one or more signals to occur. The signal set registers for

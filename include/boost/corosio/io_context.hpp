@@ -183,7 +183,7 @@ effective_concurrency_hint(
 }
 } // namespace detail
 
-/** An I/O context for running asynchronous operations.
+/** Runs asynchronous operations and owns the I/O backend that drives them.
 
     The io_context provides an execution environment for async
     operations. It maintains a queue of pending work items and
@@ -564,7 +564,7 @@ public:
     }
 };
 
-/** An executor for dispatching work to an I/O context.
+/** Dispatches and posts work to an I/O context.
 
     The executor provides the interface for posting work items and
     dispatching coroutines to the associated context. It satisfies

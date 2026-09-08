@@ -55,7 +55,7 @@
 
 namespace boost::corosio::native_socket_option {
 
-/** A socket option with a boolean value.
+/** Carries a boolean value to and from `setsockopt` and `getsockopt`.
 
     Models socket options whose underlying representation is an `int`
     where 0 means disabled and non-zero means enabled. The option's
@@ -154,7 +154,7 @@ public:
     }
 };
 
-/** A socket option with an integer value.
+/** Carries an integer value to and from `setsockopt` and `getsockopt`.
 
     Models socket options whose underlying representation is a
     plain `int`. The option's protocol level and name are encoded
@@ -240,7 +240,7 @@ public:
     }
 };
 
-/** A boolean socket option with single-byte storage.
+/** Carries a boolean value in one byte, as some BSD kernels require.
 
     Some BSD-derived kernels, among them macOS and FreeBSD, require certain
     IPv4 multicast options such as `IP_MULTICAST_LOOP` to be set with a
@@ -305,7 +305,7 @@ public:
     void resize(std::size_t) noexcept {}
 };
 
-/** An integer socket option with single-byte storage.
+/** Carries an integer value in one byte, as some BSD kernels require.
 
     Same rationale as `byte_boolean`: BSD-derived kernels require
     `IP_MULTICAST_TTL` to be set with a one-byte value. Linux accepts
@@ -364,7 +364,7 @@ public:
     void resize(std::size_t) noexcept {}
 };
 
-/** The SO_LINGER socket option (native variant).
+/** Controls how long `close()` blocks while unsent data drains, without virtual dispatch.
 
     Controls behavior when closing a socket with unsent data.
     When enabled, `close()` blocks until pending data is sent
