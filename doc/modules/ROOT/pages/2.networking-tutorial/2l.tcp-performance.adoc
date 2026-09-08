@@ -34,6 +34,7 @@ The maximum throughput of a TCP connection is limited by how much data can be in
 
 Consider a 100 Mbps link with a 50-millisecond RTT. The bandwidth-delay product is:
 
+[role=figure]
 ----
 100,000,000 bits/sec × 0.050 sec = 5,000,000 bits = 625,000 bytes
 ----

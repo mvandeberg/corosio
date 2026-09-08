@@ -165,7 +165,7 @@ returns.
 
 Start an echo server on one terminal:
 
-[source,bash]
+[role=output]
 ----
 $ ./echo_server 8080 10
 Echo server listening on port 8080 with 10 workers
@@ -173,7 +173,7 @@ Echo server listening on port 8080 with 10 workers
 
 Run the reconnect client on another:
 
-[source,bash]
+[role=output]
 ----
 $ ./reconnect 127.0.0.1 8080
 Connected on attempt 1
@@ -181,7 +181,7 @@ Connected on attempt 1
 
 Stop the server and watch the client retry:
 
-[source,bash]
+[role=output]
 ----
 Attempt 1 failed: Connection refused
 Retrying in 500ms
@@ -195,7 +195,7 @@ Restart the server, and the client reconnects on the next attempt.
 
 To test the no-server case, point the client at a port with nothing listening:
 
-[source,bash]
+[role=output]
 ----
 $ ./reconnect 127.0.0.1 19999
 Attempt 1 failed: Connection refused

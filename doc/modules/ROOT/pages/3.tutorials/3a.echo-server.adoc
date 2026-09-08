@@ -145,7 +145,7 @@ include::example$snippets/3a_echo_server.cpp[tag=exceptions_eof,indent=0]
 
 Start the server:
 
-[source,bash]
+[role=output]
 ----
 $ ./echo_server 8080 10
 Echo server listening on port 8080 with 10 workers
@@ -153,7 +153,7 @@ Echo server listening on port 8080 with 10 workers
 
 Connect with netcat:
 
-[source,bash]
+[role=output]
 ----
 $ nc localhost 8080
 Hello

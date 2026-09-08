@@ -301,6 +301,7 @@ happens automatically—you don't need explicit dispatch calls.
 A _strand_ guarantees that handlers posted to it don't run concurrently. Even
 with multiple threads, strand operations execute one at a time.
 
+[role=figure]
 ----
         ┌───────────────┐
 Thread A│               │

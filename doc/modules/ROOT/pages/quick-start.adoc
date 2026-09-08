@@ -78,7 +78,7 @@ include::example$programs/quick_start_echo.cpp[tag=main]
 
 Start the server, then use netcat or telnet to test:
 
-[source,bash]
+[role=output]
 ----
 $ telnet localhost 8080
 Trying 127.0.0.1...

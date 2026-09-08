@@ -20,6 +20,7 @@ Before any data flows, TCP establishes the connection with three segments:
 . *SYN-ACK*: The server responds with both the SYN and ACK flags set. It acknowledges the client's ISN (by setting the acknowledgment number to the client's ISN + 1) and provides its own ISN. This says "I accept, I acknowledge your starting number, and my byte numbering starts here."
 . *ACK*: The client sends a final acknowledgment of the server's ISN. At this point both sides have agreed on initial sequence numbers, and the connection is established.
 
+[role=figure]
 ----
 Client                              Server
   |                                    |
@@ -53,6 +54,7 @@ Closing a TCP connection takes four segments because each direction of the strea
 . *FIN*: The other side sends its own FIN when it, too, has finished sending.
 . *ACK*: The first side acknowledges the second FIN.
 
+[role=figure]
 ----
 Client                              Server
   |                                    |

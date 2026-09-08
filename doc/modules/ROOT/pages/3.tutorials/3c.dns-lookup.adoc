@@ -112,7 +112,7 @@ include::example$snippets/3c_dns_lookup.cpp[tag=connect_to_host]
 
 == Running the Lookup Tool
 
-[source,bash]
+[role=output]
 ----
 $ ./nslookup www.google.com https
 Results for www.google.com:https
@@ -122,7 +122,7 @@ Results for www.google.com:https
 Total: 2 addresses
 ----
 
-[source,bash]
+[role=output]
 ----
 $ ./nslookup localhost 8080
 Results for localhost:8080

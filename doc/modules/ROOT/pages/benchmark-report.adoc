@@ -279,7 +279,7 @@ Multiple threads running handlers concurrently.
 
 ==== Scaling Analysis
 
-[source]
+[role=output]
 ----
 Throughput vs Thread Count:
 
@@ -841,7 +841,7 @@ The handler dispatch results tell a nuanced story across the three implementatio
 
 The most telling result is multi-threaded scaling. Every implementation loses throughput as threads increase due to coordination overhead, but Corosio degrades the least:
 
-[source]
+[role=output]
 ----
 Throughput retained at 8 threads (vs 1 thread):
 
@@ -952,7 +952,7 @@ For coroutine-based async programming on Windows (IOCP), *Corosio provides equiv
 
 === Corosio Results
 
-[source]
+[role=output]
 ----
 Backend: iocp
 Duration: 3 s per benchmark
@@ -1037,7 +1037,7 @@ Duration: 3 s per benchmark
 
 === Asio Coroutines Results
 
-[source]
+[role=output]
 ----
 === Single-threaded Handler Post (Asio Coroutines) ===
   Handlers:    4712000
@@ -1115,7 +1115,7 @@ Duration: 3 s per benchmark
 
 === Asio Callbacks Results
 
-[source]
+[role=output]
 ----
 === Single-threaded Handler Post (Asio Callbacks) ===
   Handlers:    7764000

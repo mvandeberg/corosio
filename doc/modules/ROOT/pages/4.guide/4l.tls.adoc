@@ -523,7 +523,7 @@ strand.
 
 === WolfSSL
 
-[source,cmake]
+[source,cmake,role=external]
 ----
 find_package(WolfSSL REQUIRED)
 target_link_libraries(my_target PRIVATE WolfSSL::WolfSSL)
@@ -531,7 +531,7 @@ target_link_libraries(my_target PRIVATE WolfSSL::WolfSSL)
 
 === OpenSSL
 
-[source,cmake]
+[source,cmake,role=external]
 ----
 find_package(OpenSSL REQUIRED)
 target_link_libraries(my_target PRIVATE OpenSSL::SSL OpenSSL::Crypto)

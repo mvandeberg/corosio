@@ -46,6 +46,7 @@ If segment 4 is lost and segments 5, 6, and 7 arrive, the receiver sends three d
 
 TCP treats the arrival of three duplicate ACKs as strong evidence that a specific segment was lost. Rather than waiting for the retransmission timeout, it immediately retransmits the missing segment. This is *fast retransmit*, and it recovers from loss in roughly one round trip instead of waiting for the full RTO.
 
+[role=figure]
 ----
 Sender                              Receiver
   |                                    |

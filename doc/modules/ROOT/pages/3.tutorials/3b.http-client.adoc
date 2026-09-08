@@ -129,7 +129,7 @@ bindings when errors are expected (like EOF during reading).
 
 First, find an IP address for a website:
 
-[source,bash]
+[role=output]
 ----
 $ nslookup www.example.com
 ...
@@ -138,7 +138,7 @@ Address: 93.184.215.14
 
 Then run the client:
 
-[source,bash]
+[role=output]
 ----
 $ ./http_client 93.184.215.14 80
 HTTP/1.1 200 OK

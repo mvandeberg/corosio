@@ -16,6 +16,7 @@ A URL packs everything your program needs to reach a resource into a single stri
 
 Consider this URL:
 
+[role=figure]
 ----
 https://api.weather.co:443/v2/forecast?city=tokyo&days=5#summary
 ----
@@ -40,6 +41,7 @@ The host and optional port together form the *authority* of the URL. In the exam
 
 When the host is a domain name, your program resolves it through DNS (as described in the previous section) to obtain an IP address. When the host is a literal IPv6 address, it must be enclosed in square brackets to avoid ambiguity with the colons:
 
+[role=figure]
 ----
 http://[2001:db8::1]:8080/status
 ----
@@ -91,6 +93,7 @@ In practice, nearly every URI you encounter is a URL. The terms are used interch
 
 Not every URL contains all six components. A *relative URL* omits the scheme and authority and is interpreted relative to some base URL. If you are already connected to `https://api.weather.co`, the relative URL `/v2/forecast?city=london` resolves to:
 
+[role=figure]
 ----
 https://api.weather.co/v2/forecast?city=london
 ----

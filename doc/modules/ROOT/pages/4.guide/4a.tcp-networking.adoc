@@ -149,6 +149,7 @@ abstractions.
 
 When you send data, each layer wraps it with its own header:
 
+[role=figure]
 ----
 Application Data: "Hello"
          ↓
@@ -303,6 +304,7 @@ contrasts with UDP, which just sends packets without setup.
 
 TCP connections begin with a three-way handshake:
 
+[role=figure]
 ----
 Client                     Server
   |                          |
@@ -358,6 +360,7 @@ multiple times before giving up.
 
 TCP connections close with a four-way handshake:
 
+[role=figure]
 ----
 Client                     Server
   |                          |

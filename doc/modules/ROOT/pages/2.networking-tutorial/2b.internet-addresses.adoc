@@ -16,6 +16,7 @@ Every packet traveling the internet carries two addresses: where it came from an
 
 An IPv4 address is a 32-bit number, written as four decimal values separated by dots. Each value represents one byte, so it ranges from 0 to 255:
 
+[role=figure]
 ----
 192.168.1.42
 ----
@@ -34,6 +35,7 @@ This division is what makes routing scalable. The internet has billions of devic
 
 The *subnet mask* tells you where the network portion ends and the host portion begins. It is a 32-bit value where all the network bits are set to 1 and all the host bits are set to 0:
 
+[role=figure]
 ----
 Address:     192.168.1.42
 Subnet mask: 255.255.255.0
@@ -66,12 +68,14 @@ Broadcast:: The address `255.255.255.255` sends a packet to every machine on the
 
 IPv6 replaces the 32-bit address with a 128-bit one, written as eight groups of four hexadecimal digits separated by colons:
 
+[role=figure]
 ----
 2001:0db8:85a3:0000:0000:8a2e:0370:7334
 ----
 
 Leading zeros within a group can be dropped, and a single run of consecutive all-zero groups can be replaced with `::`:
 
+[role=figure]
 ----
 2001:db8:85a3::8a2e:370:7334
 ----

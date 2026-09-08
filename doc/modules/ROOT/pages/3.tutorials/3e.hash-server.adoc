@@ -158,7 +158,7 @@ a session coroutine.
 
 Start the server:
 
-[source,bash]
+[role=output]
 ----
 $ ./hash_server 8080
 Hash server listening on port 8080
@@ -166,7 +166,7 @@ Hash server listening on port 8080
 
 Send data with netcat:
 
-[source,bash]
+[role=output]
 ----
 $ echo "hello world" | nc -q1 localhost 8080
 782e1488cd5a68b7
