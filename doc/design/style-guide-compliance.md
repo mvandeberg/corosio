@@ -16,6 +16,48 @@ toolkit into Corosio so compliance is machine-checked rather than asserted.
 **Non-goal**: changing Capy. Capy's own enforcement gaps are recorded in section 7
 as follow-ups with no owner in this plan.
 
+## 1a. Status
+
+| Phase | State |
+|---|---|
+| 0 — infrastructure | **done** — toolkit ported, bite-tested, CI wired, baseline seeded |
+| 1 — A1/E2/A6/ANCHOR/B5 | **done** — all four checks at zero |
+| 2 — B2/B3 retagging | **done** — B2 at zero, SHAPE clean and proven live |
+| 3 — B1 `cpp:` conversion | **done** — 186 backtick spans + 30 bare names; residual recorded under phase 3 |
+| 4 — C11 `@pre` | **done** — no `@par Preconditions` remains |
+| 5 — C9/C10 | **done** — both rules at zero on both corpora |
+| 6 — C4 present simple | not started — 253 findings |
+| 7 — C2 sentence length | not started — 132 hard findings |
+| 8 — B4 briefs | not started — ~30 briefs, review tier |
+| 9 — close the gate | not started — `--strict` + blocking selftest |
+
+Measured after phase 5, both corpora: Vale over `doc/modules` 466 → 200;
+`Vale.Spelling` 284 → 36; `doc_lint` A1/A6/B2/ANCHOR all 0, D2 3 (the documented
+carve-out); C9/C10 0/0. `sentence_length` and C4 are untouched by design — they are
+phases 6 and 7.
+
+### Corrections to this document
+
+Three claims below were wrong when written and are corrected in place. They are
+listed here because the plan was approved on their strength.
+
+1. **A1 mode mapping.** Section 6 phase 1 assigned `2.networking-tutorial/*` the
+   `tutorial` mode. That chapter has no `include::example$` anywhere, no imperative
+   steps, and purely expository headings, so `explanation` is the accurate Diátaxis
+   mode. Declaring it a tutorial would be a false declaration under A1 and would
+   contradict the D2 and C2 carve-outs, which both rest on the chapter being
+   background material.
+2. **B1 and `Vale.Spelling`.** Section 3 said phase 3 "retires the Corosio-symbol
+   share" of the 284 spelling alerts, and phase 3's exit criterion said the count
+   would fall "by the corresponding amount". Both are false: a backtick span and a
+   `cpp:` macro are both in `TokenIgnores`, so Vale never saw either. The 284 were a
+   different B1 shape — identifiers with no code span at all — and needed their own
+   work, done as a follow-on and recorded under phase 3.
+3. **Per-phase gate promotion.** Section 6 said each phase should "promote that rule
+   in the gate spec", which contradicts D-5. The gate spec carries every rule from
+   phase 0 onward; what is deferred to phase 9 is only the `--strict` flag. There is
+   no per-phase gate edit to make.
+
 ## 2. Decisions
 
 These were settled before the plan was written. Each shapes the phasing.
@@ -244,7 +286,7 @@ confirmed failing its own check; `README.md` records the results.
 
 | Item | Count | Detail |
 |---|---|---|
-| A1 | 48 | add `:page-mode:` to all 48 pages — none has one today. Modes: `2.networking-tutorial/*` and `3.tutorials/*` → `tutorial`; `4.guide/*` and `5.testing/*` → `how-to`; `*.intro.adoc`, `index.adoc`, `benchmark-report.adoc` → `explanation`; `glossary.adoc` → `reference`; `quick-start.adoc` → `tutorial`. Values must be one of the four Diátaxis modes — A1 checks the value, not just presence. |
+| A1 | 48 | add `:page-mode:` to all 48 pages — none has one today. Modes: `2.networking-tutorial/*` → `explanation` (see the correction in 1a); `3.tutorials/*` → `tutorial`; `4.guide/*` and `5.testing/*` → `how-to`; `*.intro.adoc`, `index.adoc`, `benchmark-report.adoc` → `explanation`; `glossary.adoc` → `reference`; `quick-start.adoc` → `tutorial`. Values must be one of the four Diátaxis modes — A1 checks the value, not just presence. |
 | E2 | 1 | add `page-toc: ''` and `toclevels: 2` to `doc/antora.yml`'s `asciidoc.attributes`, matching Capy's |
 | A6 | 1 | move `quick-start.adoc` to the 2nd top-level `nav.adoc` entry, directly after `index.adoc` |
 | ANCHOR | 2 | `4.guide/4e.tcp-acceptor.adoc:75`, `4.guide/4m.error-handling.adoc:23` → passthrough `` `+[[...]]+` `` |
@@ -297,10 +339,21 @@ plain English verbs in the networking tutorial rather than as symbol references.
 Convert the unambiguous class and free-function names mechanically; take the
 member names page by page.
 
-**Exit**: every span naming a Corosio public entity is a `cpp:` macro; the
-`Vale.Spelling` count falls by the corresponding amount; `accept.txt` absorbs the
-genuine prose words the conversion leaves behind. Verify no macro renders as a
-dead link in the built site.
+**Exit** (as delivered): every backticked span naming a Corosio public entity is a
+`cpp:` macro (186), plus 30 bare names that were unambiguous — 28 bold type names in
+feature lists and 2 in a thread-safety table. `accept.txt` absorbs the genuine prose
+words. Verified against the built site: zero unresolved-reference warnings, zero
+literal `cpp:` strings in the HTML.
+
+**Residual, deliberate.** About 26 bare type names stay unlinked. Most are the concept
+used as an English noun — "binds to a local endpoint", "the resolver may return
+multiple endpoints", "both sides read and write" — where a reference link would be
+wrong rather than merely noisy. The rest sit in headings, and Capy keeps `cpp:` macros
+out of headings: a linked heading changes the ToC text and the anchor. A further 7 are
+possessives of acronyms (`IP's`, `UDP's`, `URL's`) and one is a variable name (`ec`)
+that wants a code span. `Vale.Spelling` is not a gated check, so all of these are
+reported without blocking. Do not silence them by adding symbol names to `accept.txt`
+— that file's own rule forbids it, and it would hide genuine defects elsewhere.
 
 ### Phase 4 — C11 docstring commands
 
