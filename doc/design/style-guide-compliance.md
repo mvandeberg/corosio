@@ -26,15 +26,21 @@ as follow-ups with no owner in this plan.
 | 3 — B1 `cpp:` conversion | **done** — 186 backtick spans + 30 bare names; residual recorded under phase 3 |
 | 4 — C11 `@pre` | **done** — no `@par Preconditions` remains |
 | 5 — C9/C10 | **done** — both rules at zero on both corpora |
-| 6 — C4 present simple | not started — 253 findings |
-| 7 — C2 sentence length | not started — 132 hard findings |
+| 6 — C4 present simple | **done** — both rules at zero on both corpora |
+| 7 — C2 sentence length | not started — 131 hard findings (61 docstrings, 70 pages) |
 | 8 — B4 briefs | not started — ~30 briefs, review tier |
 | 9 — close the gate | not started — `--strict` + blocking selftest |
 
-Measured after phase 5, both corpora: Vale over `doc/modules` 466 → 200;
-`Vale.Spelling` 284 → 36; `doc_lint` A1/A6/B2/ANCHOR all 0, D2 3 (the documented
-carve-out); C9/C10 0/0. `sentence_length` and C4 are untouched by design — they are
-phases 6 and 7.
+Measured after phase 6, both corpora: Vale over `doc/modules` 466 → 200;
+`Vale.Spelling` 284 → 36; Vale over `lint/.docstrings` 785 → 438; `doc_lint`
+A1/A6/B2/ANCHOR all 0, D2 3 (the documented carve-out); C9/C10 0/0; C4 0/0.
+`sentence_length` is untouched by design — it is phase 7.
+
+**Note for phase 7.** `sentence-length.mjs` does not treat Doxygen's `@n` as a
+sentence boundary, so `io_context`'s boost-wide thread-safety idiom
+("Distinct objects: Safe.@n Shared objects: Safe, unless ...") is measured as one
+29-word sentence rather than two short ones. That finding is an artifact, not a long
+sentence; do not "fix" the docstring for it.
 
 ### Corrections to this document
 
