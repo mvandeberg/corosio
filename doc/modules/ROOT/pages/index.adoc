@@ -8,6 +8,7 @@
 //
 
 = Boost.Corosio
+:page-mode: explanation
 
 Boost.Corosio is a coroutine-first I/O library for C++20 that provides
 asynchronous networking primitives with automatic executor affinity propagation.

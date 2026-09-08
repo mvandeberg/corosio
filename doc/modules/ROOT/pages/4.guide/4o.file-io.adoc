@@ -8,6 +8,7 @@
 //
 
 = File I/O
+:page-mode: how-to
 
 Corosio provides two classes for asynchronous file operations:
 `stream_file` for sequential access and `random_access_file` for

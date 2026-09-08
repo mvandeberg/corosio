@@ -8,6 +8,7 @@
 //
 
 = Sockets
+:page-mode: how-to
 
 The `tcp_socket` class provides asynchronous TCP networking. It supports
 connecting to servers, reading and writing data, and graceful connection

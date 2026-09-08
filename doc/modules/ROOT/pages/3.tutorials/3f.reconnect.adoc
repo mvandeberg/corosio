@@ -8,6 +8,7 @@
 //
 
 = Reconnect with Exponential Backoff
+:page-mode: tutorial
 
 This tutorial builds a TCP client that connects to a server and automatically
 reconnects with exponential backoff when the connection fails. You'll learn

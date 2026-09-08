@@ -9,6 +9,7 @@
 //
 
 = Delays and Timeouts
+:page-mode: how-to
 
 Corosio schedules delays and deadlines through two free functions,
 `delay()` and `timeout()`. Neither one names an I/O object: there is

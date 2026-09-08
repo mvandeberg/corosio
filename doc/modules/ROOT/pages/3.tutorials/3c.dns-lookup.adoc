@@ -8,6 +8,7 @@
 //
 
 = DNS Lookup Tutorial
+:page-mode: tutorial
 
 This tutorial builds a command-line DNS lookup tool similar to `nslookup`.
 You'll learn to use the asynchronous resolver to convert hostnames to IP

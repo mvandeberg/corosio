@@ -8,6 +8,7 @@
 //
 
 = Clients, Servers, and Ports
+:page-mode: explanation
 
 Every network conversation has two sides. One side initiates the connection -- that is the *client*. The other side waits for someone to connect -- that is the *server*. This asymmetry shapes how you write networked code, and port numbers are the mechanism that keeps it all organized.
 

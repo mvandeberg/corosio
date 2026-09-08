@@ -8,6 +8,7 @@
 //
 
 = Socket Pairs
+:page-mode: how-to
 
 `make_socket_pair` creates two `tcp_socket` objects connected via
 loopback TCP. Use it when a test needs real socket semantics — TLS

@@ -8,6 +8,7 @@
 //
 
 = Endpoints
+:page-mode: how-to
 
 The `endpoint` class represents a network endpoint: an IP address (IPv4 or
 IPv6) combined with a port number. Endpoints are used for connecting sockets

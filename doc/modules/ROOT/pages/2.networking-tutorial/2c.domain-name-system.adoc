@@ -8,6 +8,7 @@
 //
 
 = Turning Names into Addresses
+:page-mode: explanation
 
 Nobody memorizes `93.184.215.14`. People remember `www.example.com`. But the network stack operates on IP addresses, not names. Something has to translate between the two, and that something is the Domain Name System -- a distributed database spread across thousands of servers worldwide, answering billions of queries a day.
 

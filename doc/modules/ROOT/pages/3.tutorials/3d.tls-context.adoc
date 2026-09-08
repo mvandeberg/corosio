@@ -9,6 +9,7 @@
 //
 
 = TLS Context Configuration
+:page-mode: tutorial
 
 This tutorial covers how to configure TLS contexts for secure connections.
 A `tls_context` stores certificates, keys, and settings that define how

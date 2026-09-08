@@ -8,6 +8,7 @@
 //
 
 = Name Resolution
+:page-mode: how-to
 
 The `resolver` class performs asynchronous DNS lookups, converting hostnames
 to IP addresses. It wraps the system's `getaddrinfo()` function with an

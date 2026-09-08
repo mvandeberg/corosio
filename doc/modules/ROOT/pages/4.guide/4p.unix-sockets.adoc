@@ -8,6 +8,7 @@
 //
 
 = Unix Domain Sockets
+:page-mode: how-to
 
 Unix domain sockets provide inter-process communication (IPC) on the same
 machine without going through the TCP/IP network stack. They use filesystem

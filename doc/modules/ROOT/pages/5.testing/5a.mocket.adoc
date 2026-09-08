@@ -9,6 +9,7 @@
 //
 
 = Mock Sockets
+:page-mode: how-to
 
 The `mocket` class is a testable wrapper around a `tcp_socket` that lets
 you stage bytes for reads and assert on bytes written, without giving up

@@ -8,6 +8,7 @@
 //
 
 = Echo Server Tutorial
+:page-mode: tutorial
 
 This tutorial builds a production-quality echo server using the `tcp_server`
 framework. We'll explore worker pools, connection lifecycle, and the launcher

@@ -8,6 +8,7 @@
 //
 
 = Making TCP Fast
+:page-mode: explanation
 
 TCP was designed when networks ran at kilobits per second and the entire internet fit on a single backbone. The core protocol -- sequence numbers, acknowledgments, sliding windows -- scales remarkably well, but some of its original parameters do not. A 16-bit window field caps the amount of data in flight at 65,535 bytes. Sequence numbers wrap around on fast links. RTT measurements lose precision when segments fly faster than the clock ticks.
 

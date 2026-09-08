@@ -8,6 +8,7 @@
 //
 
 = When Packets Go Missing
+:page-mode: explanation
 
 TCP promises reliable delivery, but the network underneath makes no such promise. Routers drop packets when their queues overflow. Links fail mid-transmission. Interference corrupts data. TCP's job is to detect these failures and recover from them -- transparently, without your application ever knowing a packet was lost.
 

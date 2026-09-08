@@ -8,6 +8,7 @@
 //
 
 = Acceptors
+:page-mode: how-to
 
 The `tcp_acceptor` class listens for incoming TCP connections and accepts them
 into socket objects. It's the foundation for building TCP servers.
@@ -72,7 +73,7 @@ listener on an occupied endpoint throws `errc::address_in_use`.
 === bind() and listen()
 
 For explicit error handling, construct the acceptor, then bind and listen as
-separate steps. Both return a `std::error_code` and are marked `[[nodiscard]]`
+separate steps. Both return a `std::error_code` and are marked `+[[nodiscard]]+`
 to prevent accidentally ignoring errors:
 
 [source,cpp]

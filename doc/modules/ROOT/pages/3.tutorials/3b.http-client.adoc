@@ -8,6 +8,7 @@
 //
 
 = HTTP Client Tutorial
+:page-mode: tutorial
 
 This tutorial builds a simple HTTP client that connects to a server, sends
 a GET request, and reads the response. You'll learn socket connection,

@@ -10,6 +10,7 @@
 //
 
 = TLS Encryption
+:page-mode: how-to
 
 Corosio provides TLS encryption through the `tls_context` configuration class
 and stream wrappers that add encryption to existing connections. This chapter

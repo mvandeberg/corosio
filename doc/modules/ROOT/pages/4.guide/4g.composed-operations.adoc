@@ -8,6 +8,7 @@
 //
 
 = Composed Operations
+:page-mode: how-to
 
 Corosio provides composed operations that build on the primitive `read_some()`
 and `write_some()` functions to provide higher-level guarantees.

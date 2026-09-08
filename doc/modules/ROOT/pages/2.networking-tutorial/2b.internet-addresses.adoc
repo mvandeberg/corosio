@@ -8,6 +8,7 @@
 //
 
 = Addressing Machines on the Internet
+:page-mode: explanation
 
 Every packet traveling the internet carries two addresses: where it came from and where it is going. These addresses are not arbitrary labels. They have internal structure that routers use to make forwarding decisions, and understanding that structure explains why networks behave the way they do.
 

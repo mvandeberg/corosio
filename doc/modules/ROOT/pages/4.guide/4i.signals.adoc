@@ -8,6 +8,7 @@
 //
 
 = Signal Handling
+:page-mode: how-to
 
 The `signal_set` class provides asynchronous signal handling. It allows
 coroutines to wait for operating system signals like SIGINT (Ctrl+C) or

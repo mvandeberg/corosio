@@ -8,6 +8,7 @@
 //
 
 = Opening and Closing TCP Connections
+:page-mode: explanation
 
 A TCP connection is not a physical wire. It is an agreement between two machines to track a shared conversation. That agreement begins with a handshake, ends with a teardown, and passes through a series of well-defined states in between. Knowing these states explains errors you will encounter in every networked application you write.
 

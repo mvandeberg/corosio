@@ -1,4 +1,5 @@
 = Configuration
+:page-mode: how-to
 :navtitle: Configuration
 
 The `io_context_options` struct provides runtime tuning knobs for the

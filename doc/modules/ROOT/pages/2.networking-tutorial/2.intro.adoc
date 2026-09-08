@@ -8,6 +8,7 @@
 //
 
 = Networking Tutorial
+:page-mode: explanation
 
 Every network application starts with a conversation between two programs. One program asks a question, the other answers, and useful work happens across the wire. This section walks you through that conversation from the ground up, building your understanding of networked programming with Corosio one concept at a time.
 

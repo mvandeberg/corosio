@@ -8,6 +8,7 @@
 //
 
 = Testing Patterns
+:page-mode: how-to
 
 This page collects recipes that combine xref:5.testing/5a.mocket.adoc[`mocket`]
 and xref:5.testing/5b.socket-pair.adoc[`make_socket_pair`] in realistic test

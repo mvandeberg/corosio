@@ -8,6 +8,7 @@
 //
 
 = I/O Context
+:page-mode: how-to
 
 The `io_context` class is the heart of Corosio. It's an event loop that
 processes asynchronous I/O operations, manages timers, and coordinates

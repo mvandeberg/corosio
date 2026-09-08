@@ -8,6 +8,7 @@
 //
 
 = URLs and Resource Identification
+:page-mode: explanation
 
 A URL packs everything your program needs to reach a resource into a single string: which protocol to speak, which machine to contact, and what to ask for once connected. You see URLs constantly -- in browser address bars, configuration files, API documentation, and log messages. Understanding their structure turns an opaque string into a set of actionable instructions.
 

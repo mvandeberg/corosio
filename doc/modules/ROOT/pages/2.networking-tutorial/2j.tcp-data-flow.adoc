@@ -8,6 +8,7 @@
 //
 
 = How TCP Moves Your Data
+:page-mode: explanation
 
 A naive approach to reliable delivery would be: send one segment, wait for the acknowledgment, send the next. That works, but it is painfully slow. If the round trip between your machine and the server takes 50 milliseconds, you can only send 20 segments per second -- regardless of how much bandwidth the network has. Most of the time is spent waiting.
 

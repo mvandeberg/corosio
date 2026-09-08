@@ -8,6 +8,7 @@
 //
 
 = Glossary
+:page-mode: reference
 
 This glossary defines terms used throughout the Corosio documentation.
 

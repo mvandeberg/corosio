@@ -8,6 +8,7 @@
 //
 
 = UDP: Fast, Simple, Unreliable
+:page-mode: explanation
 
 UDP is the simplest transport protocol you will encounter. It takes your data, slaps on a small header with source and destination port numbers, and hands it to IP. No connection setup. No acknowledgment. No retransmission. No ordering guarantees. If you want any of those things, you build them yourself.
 

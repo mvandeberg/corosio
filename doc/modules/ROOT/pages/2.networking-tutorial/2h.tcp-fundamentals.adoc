@@ -8,6 +8,7 @@
 //
 
 = TCP: Reliable Byte Streams
+:page-mode: explanation
 
 TCP is the protocol that makes the internet useful for most applications. It takes the unreliable, unordered packet delivery that IP provides and builds something much more powerful on top: a reliable, ordered stream of bytes that flows in both directions between two machines. Your program writes bytes into one end, and they come out at the other end in exactly the same order, even if the underlying packets were lost, duplicated, reordered, or delayed.
 

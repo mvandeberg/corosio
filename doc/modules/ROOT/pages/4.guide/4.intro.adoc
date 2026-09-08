@@ -8,6 +8,7 @@
 //
 
 = Guide
+:page-mode: explanation
 
 This guide provides a comprehensive reference for Corosio's components and the
 concepts behind them. By the time you finish, you will have a deep understanding

@@ -8,6 +8,7 @@
 //
 
 = TCP Server
+:page-mode: how-to
 
 The `tcp_server` class provides a framework for building TCP servers with
 connection pooling. It manages acceptors, worker pools, and connection

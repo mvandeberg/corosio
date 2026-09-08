@@ -8,6 +8,7 @@
 //
 
 = IP: Moving Packets Across Networks
+:page-mode: explanation
 
 IP is the workhorse of the internet. Every piece of data your program sends -- whether over TCP or UDP -- travels inside an IP packet. IP's job is limited but essential: take a packet, figure out where it needs to go, and forward it one hop closer to its destination. It makes no promises about whether the packet arrives, whether it arrives once or twice, or whether it arrives before or after the packet sent before it. That deliberate minimalism is what makes the internet scalable.
 

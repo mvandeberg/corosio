@@ -8,6 +8,7 @@
 //
 
 = Error Handling
+:page-mode: how-to
 
 Corosio reports I/O errors through the `io_result` type, which carries an
 error code alongside any values produced by the operation.
@@ -20,7 +21,7 @@ Every fallible operation reports through exactly one channel:
   operations return `std::error_code` (or `io_result<T>` when a
   payload rides along — `seek()`, the `make_*` factories), and
   asynchronous operations complete with `io_result<...>`. Every
-  error-returning function is `[[nodiscard]]`.
+  error-returning function is `+[[nodiscard]]+`.
 * *Misuse of a documented precondition throws* `std::system_error` —
   for example `release()`, `set_option()`, or `get_option()` on a
   closed object.

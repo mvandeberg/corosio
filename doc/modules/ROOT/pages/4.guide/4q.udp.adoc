@@ -8,6 +8,7 @@
 //
 
 = UDP Sockets
+:page-mode: how-to
 
 UDP is a connectionless, message-oriented transport. Each `send` produces
 exactly one datagram, and each `recv` consumes exactly one datagram. There

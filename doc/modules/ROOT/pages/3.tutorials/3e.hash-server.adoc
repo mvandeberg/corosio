@@ -8,6 +8,7 @@
 //
 
 = Hash Server Tutorial
+:page-mode: tutorial
 
 This tutorial builds a TCP server that reads data from clients, computes a
 hash on a thread pool, and sends the result back. You'll learn how to combine

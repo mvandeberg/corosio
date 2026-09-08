@@ -8,6 +8,7 @@
 //
 
 = Readiness Wait
+:page-mode: how-to
 
 The `wait()` method on every socket and acceptor suspends until the
 underlying file descriptor becomes ready in a chosen direction, without

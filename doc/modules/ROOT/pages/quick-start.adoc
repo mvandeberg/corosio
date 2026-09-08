@@ -8,6 +8,7 @@
 //
 
 = Quick Start
+:page-mode: tutorial
 
 This guide walks you through building your first network application with
 Corosio: a simple echo server that accepts connections and echoes back
