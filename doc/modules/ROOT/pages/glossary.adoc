@@ -64,7 +64,7 @@ An operation built from multiple primitive operations. For example,
 `capy::read()` repeatedly calls `read_some()` until the buffer is full.
 
 Concurrency Hint::
-A value passed to `io_context` indicating how many threads may call `run()`.
+A value passed to cpp:io_context[] indicating how many threads may call `run()`.
 Affects internal synchronization strategy.
 
 Continuation::
@@ -226,7 +226,7 @@ Strand::
 A serialization mechanism that ensures handlers don't run concurrently, so
 operations execute one at a time, eliminating data races without mutexes.
 Corosio does not provide a strand type; the equivalent is executor affinity
-or a single-threaded `io_context`.
+or a single-threaded cpp:io_context[].
 See xref:4.guide/4b.concurrent-programming.adoc[Concurrent Programming].
 
 Stream::
@@ -271,7 +271,7 @@ polymorphism without templates.
 Unix Domain Socket::
 A socket that communicates between processes on the same machine using
 filesystem paths instead of IP addresses and ports. Available as stream
-(`local_stream_socket`) and datagram (`local_datagram_socket`) variants.
+(cpp:local_stream_socket[]) and datagram (cpp:local_datagram_socket[]) variants.
 See xref:4.guide/4p.unix-sockets.adoc[Unix Domain Sockets].
 
 == W

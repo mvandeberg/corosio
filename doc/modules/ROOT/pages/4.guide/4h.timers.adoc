@@ -151,7 +151,7 @@ include::example$snippets/4h_timers.cpp[tag=timeout_vs_cancel,indent=0]
 
 Both `delay()` and `timeout()` need a clock service to arm, which
 they obtain from the awaiting coroutine's executor. That executor
-must belong to an `io_context`; awaiting either one from any other
+must belong to an cpp:io_context[]; awaiting either one from any other
 kind of execution context terminates the program, since silently
 skipping the requested delay would be worse than a hard failure.
 

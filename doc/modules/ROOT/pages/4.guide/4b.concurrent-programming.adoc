@@ -373,7 +373,7 @@ sequential `co_await`s naturally serialize:
 include::example$snippets/4b_concurrent_programming.cpp[tag=strand_session]
 ----
 
-With a single-threaded `io_context`, coroutines sharing that executor can
+With a single-threaded cpp:io_context[], coroutines sharing that executor can
 safely access shared state without locks.
 
 == Scaling Strategies
@@ -460,7 +460,7 @@ include::example$snippets/4b_concurrent_programming.cpp[tag=worker_pool]
 include::example$snippets/4b_concurrent_programming.cpp[tag=worker_pool_use,indent=0]
 ----
 
-Corosio's `tcp_server` class implements this pattern—see
+Corosio's cpp:tcp_server[] class implements this pattern—see
 xref:4.guide/4k.tcp-server.adoc[TCP Server] for details.
 
 === Pipelines

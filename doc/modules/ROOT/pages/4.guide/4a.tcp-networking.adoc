@@ -620,7 +620,7 @@ database.
 DNS responses often include multiple addresses (for load balancing or
 redundancy). Your application should try each address until one succeeds.
 
-Corosio provides the `resolver` class for asynchronous DNS lookups:
+Corosio provides the cpp:resolver[] class for asynchronous DNS lookups:
 
 [source,cpp]
 ----
@@ -691,7 +691,7 @@ This is essential for servers that restart—without it, the restart fails with
 The flag means something different on Windows: there it grants a socket the
 right to bind over an address another socket actively holds, silently
 splitting incoming connections between the two. Windows servers that want
-the POSIX contract set `SO_EXCLUSIVEADDRUSE` instead — the `tcp_acceptor`
+the POSIX contract set `SO_EXCLUSIVEADDRUSE` instead — the cpp:tcp_acceptor[]
 convenience constructor does this automatically, so a second listener fails
 with `errc::address_in_use` on every platform.
 

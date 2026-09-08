@@ -10,7 +10,7 @@
 = TCP Server
 :page-mode: how-to
 
-The `tcp_server` class provides a framework for building TCP servers with
+The cpp:tcp_server[] class provides a framework for building TCP servers with
 connection pooling. It manages acceptors, worker pools, and connection
 lifecycle automatically.
 
@@ -25,7 +25,7 @@ include::example$snippets/4k_tcp_server.cpp[tag=assume]
 
 == Overview
 
-`tcp_server` is a base class designed for inheritance. You derive from it,
+cpp:tcp_server[] is a base class designed for inheritance. You derive from it,
 define your worker type, and implement the connection handling logic. The
 framework handles:
 
@@ -46,7 +46,7 @@ a socket and any state needed for a session.
 
 === worker_base
 
-The `worker_base` class is the foundation. It declares a constructor and a
+The cpp:tcp_server::worker_base[worker_base] class is the foundation. It declares a constructor and a
 virtual destructor, holds private intrusive-list bookkeeping used by the
 server's idle and active pools, and exposes two pure virtuals you must
 override:
@@ -56,7 +56,7 @@ override:
 include::example$snippets/4k_tcp_server.cpp[tag=worker_base]
 ----
 
-Your worker inherits from `worker_base`, owns its socket, and implements the
+Your worker inherits from cpp:tcp_server::worker_base[worker_base], owns its socket, and implements the
 required methods:
 
 [source,cpp]
@@ -88,8 +88,8 @@ polymorphically, allowing different worker types in the same pool if needed.
 
 == The Launcher
 
-When a connection is accepted, `tcp_server` calls your worker's `run()`
-method with a `launcher` object. The launcher manages the coroutine lifecycle:
+When a connection is accepted, cpp:tcp_server[] calls your worker's `run()`
+method with a cpp:tcp_server::launcher[launcher] object. The launcher manages the coroutine lifecycle:
 
 [source,cpp]
 ----
@@ -191,7 +191,7 @@ include::example$snippets/4k_tcp_server.cpp[tag=worker_reuse,indent=0]
 
 === Multiple Ports
 
-`tcp_server` can listen on multiple ports simultaneously. All ports share
+cpp:tcp_server[] can listen on multiple ports simultaneously. All ports share
 the same worker pool:
 
 [source,cpp]
@@ -210,8 +210,8 @@ connection limits at a higher layer.
 
 == Thread Safety
 
-The `tcp_server` class is not thread-safe. All operations on the server
-must occur from coroutines running on its `io_context`. Workers may not be
+The cpp:tcp_server[] class is not thread-safe. All operations on the server
+must occur from coroutines running on its cpp:io_context[]. Workers may not be
 accessed concurrently.
 
 For multi-threaded operation, create one server per thread, or use external

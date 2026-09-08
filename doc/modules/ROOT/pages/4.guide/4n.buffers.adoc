@@ -141,7 +141,7 @@ its `data()`.
 
 == buffer_param
 
-The `buffer_param` class type-erases buffer sequences:
+The cpp:buffer_param[] class type-erases buffer sequences:
 
 [source,cpp]
 ----

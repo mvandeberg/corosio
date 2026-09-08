@@ -10,7 +10,7 @@
 = Name Resolution
 :page-mode: how-to
 
-The `resolver` class performs asynchronous DNS lookups, converting hostnames
+The cpp:resolver[] class performs asynchronous DNS lookups, converting hostnames
 to IP addresses. It wraps the system's `getaddrinfo()` function with an
 asynchronous interface.
 
@@ -111,7 +111,7 @@ include::example$snippets/4j_resolver.cpp[tag=combined_flags,indent=0]
 
 == Working with Results
 
-`resolver_results` is an alias for `std::vector<resolver_entry>`, so it
+cpp:resolver_results[] is an alias for `std::vector<resolver_entry>`, so it
 supports the full `std::vector` interface (iteration, `size()`, `empty()`,
 indexing, and so on):
 

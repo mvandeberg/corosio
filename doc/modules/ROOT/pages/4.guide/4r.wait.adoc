@@ -27,7 +27,7 @@ include::example$snippets/4r_wait.cpp[tag=assume]
 
 == Overview
 
-Three directions are exposed via the `wait_type` enum:
+Three directions are exposed via the cpp:wait_type[] enum:
 
 [source,cpp]
 ----
@@ -78,7 +78,7 @@ exclusive ownership again, or create a true duplicate with
 
 == Acceptors
 
-`tcp_acceptor` and `local_stream_acceptor` expose the same `wait()`.
+cpp:tcp_acceptor[] and cpp:local_stream_acceptor[] expose the same `wait()`.
 For `wait_type::read`, completion signals that a connection is pending
 on the listen socket. A subsequent `accept()` will succeed without
 blocking:

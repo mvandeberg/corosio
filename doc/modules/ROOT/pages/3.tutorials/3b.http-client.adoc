@@ -152,8 +152,8 @@ Content-Type: text/html; charset=UTF-8
 
 == Adding TLS Support
 
-To make HTTPS requests, wrap the connected socket in a `wolfssl_stream`.
-A `wolfssl_stream` is not an `io_stream`, so it needs its own
+To make HTTPS requests, wrap the connected socket in a cpp:wolfssl_stream[].
+A cpp:wolfssl_stream[] is not an cpp:io_stream[], so it needs its own
 `do_request` overload taking `corosio::tls_stream&`:
 
 [source,cpp]
@@ -164,7 +164,7 @@ include::example$https-client/https_client.cpp[tag=tls_client]
 ----
 
 The TLS overload mirrors the plain one: `capy::read` and `capy::write`
-work with `tls_stream` exactly as they do with `io_stream`. Only the
+work with cpp:tls_stream[] exactly as they do with cpp:io_stream[]. Only the
 parameter type and the surrounding handshake/shutdown differ.
 
 == Next Steps

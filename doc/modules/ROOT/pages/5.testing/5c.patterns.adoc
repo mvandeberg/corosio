@@ -57,7 +57,7 @@ The same applies to `max_write_size` for write-loop testing.
 
 == Layering Streams on a Mocket
 
-`m.socket()` returns the underlying `tcp_socket`. You can stack any stream
+`m.socket()` returns the underlying cpp:tcp_socket[]. You can stack any stream
 that wraps a TCP socket on top of it, but be aware that doing so *bypasses*
 the mocket's `provide()` / `expect()` scripting: those stages run only
 inside the mocket's own `read_some` / `write_some`. A stream built on

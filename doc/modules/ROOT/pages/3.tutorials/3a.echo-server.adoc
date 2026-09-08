@@ -10,7 +10,7 @@
 = Echo Server Tutorial
 :page-mode: tutorial
 
-This tutorial builds a production-quality echo server using the `tcp_server`
+This tutorial builds a production-quality echo server using the cpp:tcp_server[]
 framework. We'll explore worker pools, connection lifecycle, and the launcher
 pattern.
 
@@ -28,16 +28,16 @@ include::example$echo-server/echo_server.cpp[tag=assume]
 An echo server accepts TCP connections and sends back whatever data clients
 send. While simple, this pattern demonstrates core concepts:
 
-* Using `tcp_server` for connection management
-* Implementing workers with `worker_base`
-* Starting session coroutines with `launcher`
+* Using cpp:tcp_server[] for connection management
+* Implementing workers with cpp:tcp_server::worker_base[worker_base]
+* Starting session coroutines with cpp:tcp_server::launcher[launcher]
 * Reading and writing data with sockets
 
 == Architecture
 
-The `tcp_server` framework uses a worker pool pattern:
+The cpp:tcp_server[] framework uses a worker pool pattern:
 
-1. Derive from `tcp_server` and define your worker type
+1. Derive from cpp:tcp_server[] and define your worker type
 2. Preallocate workers during construction
 3. The framework accepts connections and dispatches them to idle workers
 4. Workers run session coroutines and return to the pool when done
@@ -55,7 +55,7 @@ include::example$echo-server/echo_server.cpp[tag=worker_class]
 
 Each worker:
 
-* Stores a reference to the `io_context` for executor access
+* Stores a reference to the cpp:io_context[] for executor access
 * Owns its socket (returned via `socket()`)
 * Owns any per-connection state (like the buffer)
 * Implements `run()` to start the session coroutine
@@ -101,7 +101,7 @@ include::example$echo-server/echo_server.cpp[tag=main]
 
 === Why tcp_server?
 
-The `tcp_server` framework provides:
+The cpp:tcp_server[] framework provides:
 
 * **Automatic pool management**: Workers cycle between idle and active states
 * **Safe lifecycle**: The launcher ensures workers return to the pool

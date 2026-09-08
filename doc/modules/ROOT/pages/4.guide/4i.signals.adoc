@@ -10,7 +10,7 @@
 = Signal Handling
 :page-mode: how-to
 
-The `signal_set` class provides asynchronous signal handling. It allows
+The cpp:signal_set[] class provides asynchronous signal handling. It allows
 coroutines to wait for operating system signals like SIGINT (Ctrl+C) or
 SIGTERM.
 
@@ -135,7 +135,7 @@ systems, `no_child_wait` may not be available. Using unsupported flags returns
 
 ==== Flag Compatibility
 
-When multiple `signal_set` objects register for the same signal, they must use
+When multiple cpp:signal_set[] objects register for the same signal, they must use
 compatible flags:
 
 [source,cpp]
@@ -290,7 +290,7 @@ to an internal self-pipe (a `write()`, saving and restoring `errno`). It never
 locks a mutex, allocates memory, or dispatches handlers. The event loop drains
 the pipe and completes waiting `wait()` operations in normal context. As a
 result it is safe for a signal to arrive at any time, including while another
-thread is modifying a `signal_set`.
+thread is modifying a cpp:signal_set[].
 
 == Next Steps
 

@@ -12,7 +12,7 @@
 :page-mode: tutorial
 
 This tutorial covers how to configure TLS contexts for secure connections.
-A `tls_context` stores certificates, keys, and settings that define how
+A cpp:tls_context[] stores certificates, keys, and settings that define how
 TLS connections are established and verified.
 
 [NOTE]
@@ -26,7 +26,7 @@ include::example$snippets/3d_tls_context.cpp[tag=assume]
 
 == Introduction
 
-The `tls_context` class is a portable abstraction for TLS configuration that
+The cpp:tls_context[] class is a portable abstraction for TLS configuration that
 works across multiple TLS backends (WolfSSL, OpenSSL, mbedTLS, etc.). It
 handles:
 
@@ -36,7 +36,7 @@ handles:
 * Configuring certificate verification behavior
 * Managing revocation checking (CRLs)
 
-Use `tls_context` to configure TLS settings once, then pass it to TLS streams
+Use cpp:tls_context[] to configure TLS settings once, then pass it to TLS streams
 for establishing secure connections.
 
 [NOTE]
@@ -51,7 +51,7 @@ enabled by `--enable-opensslextra`.
 
 == Construction
 
-A `tls_context` is a shared handle to an opaque implementation. Copies share
+A cpp:tls_context[] is a shared handle to an opaque implementation. Copies share
 the same underlying state, making it easy to pass contexts by value and share
 them across multiple TLS streams.
 

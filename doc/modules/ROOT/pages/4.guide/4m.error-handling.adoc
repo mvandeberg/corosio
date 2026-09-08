@@ -47,7 +47,7 @@ uses the piecewise path never sees the throw:
 | `tcp_acceptor(ctx, ep, backlog)` +
   `local_stream_acceptor(ctx, ep, backlog)`
 | default-construct, then `open()` + `bind()` + `listen()`
-  ( `tcp_acceptor` also configures address reuse via `set_option()`
+  ( cpp:tcp_acceptor[] also configures address reuse via `set_option()`
   between open and bind: `SO_REUSEADDR` on POSIX,
   `SO_EXCLUSIVEADDRUSE` on Windows ) — the constructor throws exactly
   the codes this path reports
@@ -74,7 +74,7 @@ uses the piecewise path never sees the throw:
 |===
 
 What cannot be spelled exception-free: root construction and the run
-loop. `io_context` itself throws if backend setup fails (there is no
+loop. cpp:io_context[] itself throws if backend setup fails (there is no
 code-returning way to construct it), any constructor can throw
 `std::bad_alloc`, and `run()`/`stop()` throw `std::system_error` if
 the OS demultiplexer itself fails — a process-fatal condition with no
@@ -229,7 +229,7 @@ platform and backend:
   truncated hostname from `host_name()`
 
 | `filename_too_long`
-| A `local_endpoint` path over `max_path_length`
+| A cpp:local_endpoint[] path over cpp:local_endpoint::max_path_length[max_path_length]
 |===
 
 === Cancellation

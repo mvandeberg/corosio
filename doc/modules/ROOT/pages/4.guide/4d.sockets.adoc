@@ -10,7 +10,7 @@
 = Sockets
 :page-mode: how-to
 
-The `tcp_socket` class provides asynchronous TCP networking. It supports
+The cpp:tcp_socket[] class provides asynchronous TCP networking. It supports
 connecting to servers, reading and writing data, and graceful connection
 management.
 
@@ -277,7 +277,7 @@ NOTE: After a move, the destination uses the source's execution context.
 
 == The io_stream Interface
 
-`tcp_socket` inherits from `io_stream`, which provides:
+cpp:tcp_socket[] inherits from cpp:io_stream[], which provides:
 
 [source,cpp,role=pseudocode]
 ----

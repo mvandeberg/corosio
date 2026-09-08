@@ -10,7 +10,7 @@
 = Socket Pairs
 :page-mode: how-to
 
-`make_socket_pair` creates two `tcp_socket` objects connected via
+`make_socket_pair` creates two cpp:tcp_socket[] objects connected via
 loopback TCP. Use it when a test needs real socket semantics — TLS
 handshakes, `set_option`, `shutdown` ordering, true EOF — that the
 byte-level staging in xref:5.testing/5a.mocket.adoc[`mocket`] cannot reproduce.

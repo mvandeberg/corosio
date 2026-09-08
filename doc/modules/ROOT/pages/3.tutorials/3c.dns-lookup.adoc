@@ -26,7 +26,7 @@ include::example$nslookup/nslookup.cpp[tag=assume]
 == Overview
 
 DNS resolution converts a hostname like `www.example.com` to one or more IP
-addresses. The `resolver` class performs this asynchronously:
+addresses. The cpp:resolver[] class performs this asynchronously:
 
 [source,cpp]
 ----
@@ -45,15 +45,15 @@ include::example$nslookup/nslookup.cpp[tag=lookup]
 
 == Understanding Results
 
-The resolver returns a `resolver_results` — an alias for
-`std::vector<resolver_entry>` — containing one `resolver_entry` per resolved
+The resolver returns a cpp:resolver_results[] — an alias for
+`std::vector<resolver_entry>` — containing one cpp:resolver_entry[] per resolved
 endpoint. Each entry provides:
 
 * `get_endpoint()` — The resolved endpoint (address + port)
 * `host_name()` — The queried hostname
 * `service_name()` — The queried service
 
-The `endpoint` class supports both IPv4 and IPv6:
+The cpp:endpoint[] class supports both IPv4 and IPv6:
 
 [source,cpp]
 ----

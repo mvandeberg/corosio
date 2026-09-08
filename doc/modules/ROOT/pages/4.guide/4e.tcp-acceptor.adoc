@@ -10,7 +10,7 @@
 = Acceptors
 :page-mode: how-to
 
-The `tcp_acceptor` class listens for incoming TCP connections and accepts them
+The cpp:tcp_acceptor[] class listens for incoming TCP connections and accepts them
 into socket objects. It's the foundation for building TCP servers.
 
 [NOTE]
@@ -137,7 +137,7 @@ include::example$snippets/4e_tcp_acceptor.cpp[tag=accept_returning,indent=0]
 ----
 
 Prefer the returning overload for the common case: it is simpler and guarantees
-the acceptor and socket use the same `io_context`. Use the 
+the acceptor and socket use the same cpp:io_context[]. Use the 
 `accept(tcp_socket&)` form when you pre-allocate or recycle sockets and want to
 manage their lifetime yourself.
 
@@ -280,7 +280,7 @@ provides:
 * Multi-port support
 * Automatic coroutine lifecycle
 
-The `tcp_acceptor` class is the lower-level primitive that `tcp_server` builds
+The cpp:tcp_acceptor[] class is the lower-level primitive that cpp:tcp_server[] builds
 upon.
 
 == Next Steps
