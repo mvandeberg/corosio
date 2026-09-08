@@ -105,9 +105,9 @@ connect(Socket& s, Iter begin, Iter end, ConnectCondition cond);
     @param endpoints A range of candidate endpoints. Taken by value
         so temporaries (e.g. `resolver_results` returned from
         `resolver::resolve`) remain alive for the coroutine's lifetime.
-        Because the range is owned by the coroutine, passing an lvalue
-        copies it; since `resolver_results` is a
-        `std::vector<resolver_entry>`, that is a deep copy of every entry.
+        The coroutine owns the range, so passing an lvalue copies it. A
+        `resolver_results` is a `std::vector<resolver_entry>`, so that
+        copy is a deep copy of every entry.
         Pass an rvalue (`std::move(results)`) or use the iterator overload
         (`connect(s, results.begin(), results.end())`) to avoid the copy.
 

@@ -84,10 +84,10 @@ public:
     full `std::vector` interface (iteration, `size()`, `empty()`, etc.).
 
     @note Copying a `resolver_results` deep-copies every entry, and each
-    entry owns two `std::string`s (the host and service names). When you
-    want to hand a result to a sink that takes the range by value — such
-    as `corosio::connect` — pass an rvalue (`std::move(results)`) or use
-    the iterator-based `connect` overloads to avoid the copy.
+    entry owns two `std::string`s (the host and service names). Some
+    sinks take the range by value, such as `corosio::connect`. To avoid
+    the copy, pass an rvalue (`std::move(results)`) or use the
+    iterator-based `connect` overloads.
 
     @par Thread Safety
     Distinct objects: Safe.@n

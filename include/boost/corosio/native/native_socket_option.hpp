@@ -242,9 +242,10 @@ public:
 
 /** A boolean socket option with single-byte storage.
 
-    Some BSD-derived kernels (macOS, FreeBSD) require certain IPv4 multicast
-    options (`IP_MULTICAST_LOOP`) to be set with a one-byte value and return
-    `EINVAL` for the four-byte form that Linux accepts. This template
+    Some BSD-derived kernels, among them macOS and FreeBSD, require certain
+    IPv4 multicast options such as `IP_MULTICAST_LOOP` to be set with a
+    one-byte value. They return `EINVAL` for the four-byte form that Linux
+    accepts. This template
     provides `unsigned char` storage so the option works on every platform.
 
     @tparam Level The protocol level.

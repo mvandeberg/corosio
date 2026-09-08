@@ -40,11 +40,11 @@ namespace boost::corosio {
 
 /** An asynchronous Unix datagram socket with devirtualized I/O.
 
-    This class template inherits from @ref local_datagram_socket
-    and shadows the async operations (`send_to`, `recv_from`,
-    `connect`, `send`, `recv`) with versions that call the backend
-    implementation directly, allowing the compiler to inline
-    through the entire call chain.
+    This class template inherits from @ref local_datagram_socket. It
+    shadows the async operations (`send_to`, `recv_from`, `connect`,
+    `send`, `recv`) with versions that call the backend implementation
+    directly. The compiler can then inline through the entire call
+    chain.
 
     Non-async operations (`open`, `close`, `cancel`, `bind`,
     socket options) remain unchanged and dispatch through the

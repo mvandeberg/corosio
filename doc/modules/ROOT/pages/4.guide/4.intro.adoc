@@ -11,9 +11,9 @@
 :page-mode: explanation
 
 This guide provides a comprehensive reference for Corosio's components and the
-concepts behind them. By the time you finish, you have a deep understanding
-of how each piece works, when to use it, and how the pieces fit together to
-build robust networked applications.
+concepts behind them. By the time you finish, you understand how each piece
+works and when to use it. You also understand how the pieces fit together
+to build robust networked applications.
 
 The guide begins with the foundations of event-driven I/O. You learn how
 operating systems handle asynchronous operations, how the event loop processes
@@ -38,6 +38,6 @@ to be read independently. If you already understand a particular area, you can
 skip ahead to the topics that interest you most.
 
 The guide complements the tutorials with thorough API coverage and in-depth
-design explanations. Where the tutorials focus on building complete working
-programs, the guide provides the detailed understanding you need to adapt those
-patterns to your own applications and troubleshoot issues when they arise.
+design explanations. The tutorials focus on building complete working programs.
+The guide provides the detailed understanding you need to adapt those patterns
+to your own applications, and to troubleshoot issues when they arise.

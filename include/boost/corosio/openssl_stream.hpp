@@ -49,10 +49,10 @@ namespace boost::corosio {
     Distinct objects: Safe.@n
     Shared objects: Unsafe, with one exception: one read operation and
     one write operation may be in flight simultaneously. `shutdown()`
-    may overlap a pending read. When the execution context runs on
-    multiple threads, all operations on one stream must be performed
-    within the same `capy::strand` (or otherwise never run
-    concurrently); a single-threaded context needs no strand.
+    may overlap a pending read. On a multi-threaded execution context,
+    all operations on one stream must run within the same
+    `capy::strand`, or must otherwise never run concurrently. A
+    single-threaded context needs no strand.
 
     @par Example
     @par !example openssl_stream
@@ -219,8 +219,8 @@ private:
     Errors reported by @ref openssl_stream that originate from the OpenSSL
     error queue (`ERR_get_error`) are assigned this category. Its
     `message()` decodes the packed OpenSSL error code using OpenSSL's own
-    diagnostic strings, so printing such an `error_code` yields a readable
-    description (for example, "certificate verify failed").
+    diagnostic strings. Printing such an `error_code` therefore yields a
+    readable description, for example "certificate verify failed".
 
     OpenSSL errors whose library is `ERR_LIB_SYS` are reported with
     `std::system_category()` instead, since their reason code is a genuine

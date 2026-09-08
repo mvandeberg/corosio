@@ -315,9 +315,8 @@ private:
 
 /** Create an IPv6 address from a string.
 
-    This function attempts to parse the string
-    as an IPv6 address and returns an error code
-    if the string does not contain a valid IPv6 address.
+    This function attempts to parse the string as an IPv6 address. It
+    returns an error code if the string holds no valid IPv6 address.
 
     @par Exception Safety
     Throws nothing.

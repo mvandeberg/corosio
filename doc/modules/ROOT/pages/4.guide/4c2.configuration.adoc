@@ -12,9 +12,9 @@ freshly default-constructed cpp:io_context_options[].
 The inline budget defaults in the table are *not* what a
 default-constructed `io_context` runs with on a multi-core machine.
 When `concurrency_hint > 1` and the inline budgets are still at their
-struct defaults, the constructor overrides them to `(0, 0, 0)`,
-disabling the inline fast path (see the note under
-<<inline-completion-budget>>).  Pass an explicit
+struct defaults, the constructor overrides them to `(0, 0, 0)`. That
+disables the inline fast path; see the note under
+<<inline-completion-budget>>. Pass an explicit
 `io_context_options` with non-default budgets to keep the fast path
 enabled in multi-threaded mode.
 ====
@@ -114,17 +114,18 @@ a re-queue through the scheduler.
 * *Single-threaded contexts*:
   cpp:io_context_options::unassisted_budget[unassisted_budget] caps the budget when only one thread is
   running the event loop, preserving fairness.
-* *Disable the fast path entirely*: set all three options to 0 to
-  force a re-queue on every completion (useful as a baseline or
-  when a workload is dominated by cross-thread work-stealing).
+* *Disable the fast path entirely*: set all three options to 0 to force
+  a re-queue on every completion. This is useful as a baseline, or when
+  a workload is dominated by cross-thread work-stealing.
 
 [NOTE]
 ====
-When `io_context` is constructed with `concurrency_hint > 1` and all
-three budget fields are at their struct defaults `(2, 16, 4)` — which
-is the case for a default-constructed context on a multi-core machine
-— the constructor overrides them to `(0, 0, 0)`, disabling the inline
-fast path.  Multi-thread workloads benefit from cross-thread
+The struct defaults are `(2, 16, 4)`, which is what a
+default-constructed context on a multi-core machine carries.
+Constructing an `io_context` with `concurrency_hint > 1` while all three
+budget fields still hold those defaults overrides them to `(0, 0, 0)`.
+That disables the inline fast path. Multi-thread workloads benefit from
+cross-thread
 work-stealing, which "post-everything" mode enables.  Setting any
 budget field to a non-default value disables the override.
 ====
@@ -135,10 +136,10 @@ On POSIX platforms, file I/O (cpp:stream_file[], cpp:random_access_file[])
 and DNS resolution use a shared thread pool.
 
 * *Concurrent file operations*: increase to match expected
-  parallelism (e.g. 4 for four concurrent file reads).  The whole set
-  starts at once, on the first file or resolver call, so a larger pool
-  makes that one call more expensive and no other.
-* *No file I/O*: leave at 1; the pool is created with the context, but
+  parallelism (e.g. 4 for four concurrent file reads). The whole set
+  starts at once, on the first file or resolver call. A larger pool
+  therefore makes that one call more expensive and no other.
+* *No file I/O*: leave at 1. The pool is created with the context, but
   its workers start on the first file or resolver operation, so a pool
   nothing uses costs nothing.
 
@@ -205,7 +206,7 @@ from the `concurrency_hint`.
 ==== Concurrency hint and locking tier
 
 The `concurrency_hint` is a performance tuning value indicating how many
-threads are expected to call `run()`; it tunes the reactor inline-completion
-budget defaults and, on IOCP, the completion-port concurrency.  A lockless
+threads are expected to call `run()`. It tunes the reactor inline-completion
+budget defaults and, on IOCP, the completion-port concurrency. A lockless
 tier is single-threaded, so its effective hint for that tuning is `1`
 regardless of the value passed.

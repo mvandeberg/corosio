@@ -40,10 +40,10 @@ namespace boost::corosio {
 
 /** An asynchronous TCP socket with devirtualized I/O operations.
 
-    This class template inherits from @ref tcp_socket and shadows
-    the async operations (`read_some`, `write_some`, `connect`) with
-    versions that call the backend implementation directly, allowing
-    the compiler to inline through the entire call chain.
+    This class template inherits from @ref tcp_socket. It shadows the
+    async operations (`read_some`, `write_some`, `connect`) with
+    versions that call the backend implementation directly. The compiler
+    can then inline through the entire call chain.
 
     Non-async operations (`open`, `close`, `cancel`, socket options)
     remain unchanged and dispatch through the compiled library.

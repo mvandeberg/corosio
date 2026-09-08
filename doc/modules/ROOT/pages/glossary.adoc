@@ -18,10 +18,9 @@ Acceptor::
 An I/O object that listens for and accepts incoming TCP connections. See
 `corosio::tcp_acceptor` and xref:4.guide/4e.tcp-acceptor.adoc[Acceptors Guide].
 
-Affine Awaitable::
-An awaitable type that implements the affine protocol, receiving an
-`io_env const*` in `await_suspend` (carrying the executor, stop token, and
-frame allocator) to ensure correct executor affinity.
+Affine Awaitable:: An awaitable type that implements the affine protocol.
+It receives an `io_env const*` in `await_suspend`, carrying the executor,
+stop token, and frame allocator, to ensure correct executor affinity.
 
 Affinity::
 The binding of a coroutine to a specific executor. A coroutine with affinity

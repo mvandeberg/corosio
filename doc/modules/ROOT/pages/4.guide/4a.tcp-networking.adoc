@@ -16,9 +16,9 @@ client-server model, you can skip to xref:4.guide/4c.io-context.adoc[I/O Context
 
 == What is a Network?
 
-A network is computers talking to each other. Your laptop sending a
-request to a web server, two game consoles playing together, a phone streaming
-video—all involve computers exchanging data over a network.
+A network is computers talking to each other. Consider a laptop sending a
+request to a web server, two game consoles playing together, or a phone
+streaming video. All involve computers exchanging data over a network.
 
 === Local vs Remote Communication
 
@@ -206,7 +206,7 @@ Networks are divided into subnets using a _netmask_. The netmask defines which
 bits of the address identify the network versus the host.
 
 CIDR (Classless Inter-Domain Routing) notation combines the address and prefix
-length: `192.168.1.0/24` means the first 24 bits identify the network, leaving
+length. `192.168.1.0/24` means the first 24 bits identify the network, leaving
 8 bits (256 addresses) for hosts.
 
 Common prefix lengths:
@@ -688,10 +688,10 @@ When a socket closes, its address may remain in TIME_WAIT state for minutes.
 This is essential for servers that restart—without it, the restart fails with
 "address already in use" until TIME_WAIT expires.
 
-The flag means something different on Windows: there it grants a socket the
+The flag means something different on Windows. There it grants a socket the
 right to bind over an address another socket actively holds, silently
-splitting incoming connections between the two. Windows servers that want
-the POSIX contract set `SO_EXCLUSIVEADDRUSE` instead — the cpp:tcp_acceptor[]
+splitting incoming connections between the two. Windows servers that want the
+POSIX contract set `SO_EXCLUSIVEADDRUSE` instead. The cpp:tcp_acceptor[]
 convenience constructor does this automatically, so a second listener fails
 with `errc::address_in_use` on every platform.
 

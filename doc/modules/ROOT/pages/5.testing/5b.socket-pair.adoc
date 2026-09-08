@@ -41,9 +41,10 @@ The function:
 Both sockets come back `is_open()` and ready to use.
 
 If open, bind, listen, accept, or connect fails, `make_socket_pair`
-throws `std::runtime_error` naming the failing step; the underlying
+throws `std::runtime_error` naming the failing step. The underlying
 `error_code::message()` appears in the exception text for open, bind,
-and listen failures, and on `stderr` for accept and connect failures.
+and listen failures. It appears on `stderr` for accept and connect
+failures.
 
 == Round Trip
 
@@ -57,8 +58,8 @@ include::example$snippets/5b_socket_pair.cpp[tag=round_trip,indent=0]
 When `Linger` is `true` (the default), `make_socket_pair` sets
 `SO_LINGER(true, 0)` on both ends after the connection is established.
 This makes `close()` send `RST` instead of going through the normal
-`FIN`/`ACK` shutdown, so test sockets release immediately and stress
-runs don't accumulate `TIME_WAIT` entries.
+`FIN`/`ACK` shutdown. Test sockets therefore release immediately, and
+stress runs do not accumulate `TIME_WAIT` entries.
 
 Set `Linger` to `false` only when a test specifically exercises graceful
 shutdown:

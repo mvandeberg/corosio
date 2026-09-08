@@ -44,10 +44,10 @@ enum class locking_mode
     safe,
 
     /** Disable only the per-descriptor I/O locks; keep scheduler locking.
-        Equivalent to Boost.Asio's `UNSAFE_IO`. The context must be run
-        and driven by a single thread, but resolver and POSIX file
-        services remain available (they rely on scheduler locking, which
-        stays on). */
+        Equivalent to Boost.Asio's `UNSAFE_IO`. A single thread must run
+        and drive the context. Resolver and POSIX file services remain
+        available, because they rely on scheduler locking, which stays
+        on. */
     unsafe_io,
 
     /** Disable all locking (fully lockless). Equivalent to Boost.Asio's
@@ -94,10 +94,10 @@ struct io_context_options
         re-queue. Applies to reactor backends only.
 
         @note Constructing an `io_context` with `concurrency_hint > 1`
-            and all three budget fields at their defaults overrides
-            them to disable inline completion (post-everything mode),
-            since multi-thread workloads benefit from cross-thread
-            work-stealing. Setting any budget field to a non-default
+        and all three budget fields at their defaults overrides them to
+        disable inline completion, giving post-everything mode.
+        Multi-thread workloads benefit from cross-thread work-stealing.
+        Setting any budget field to a non-default
             value disables the override.
     */
     unsigned inline_budget_initial = 2;
@@ -134,8 +134,8 @@ struct io_context_options
     /** Enable IORING_SETUP_SQPOLL on the io_uring backend.
 
         With SQPOLL, the kernel forks a thread that busy-polls the
-        submission ring; submission becomes a userspace-only memory
-        store, eliminating the io_uring_enter syscall on the submit
+        submission ring. Submission becomes a userspace-only memory
+        store, which eliminates the io_uring_enter syscall on the submit
         path. Most useful for sustained traffic. Idle thread parks
         after `sq_thread_idle_ms` of no activity.
 
@@ -203,22 +203,22 @@ effective_concurrency_hint(
     @par !example construct
 
     @pre The context must outlive every operation posted or dispatched
-        through its executor, and no thread may be executing a run
-        variant when the context is destroyed. Posting to the context
+    through its executor. No thread may be executing a run variant when
+    the context is destroyed. Posting to the context
         concurrently with, or after, its destruction is undefined
-        behavior. The safe teardown pattern is to stop submitting new
-        work, let every `run()` call return (each returns once no
-        outstanding work remains), and join the threads that ran the
-        loop before destroying the context. Work started with
+        behavior. For a safe teardown, first stop submitting new work.
+        Then let every `run()` call return; each returns once no
+        outstanding work remains. Finally join the threads that ran the
+        loop, and only then destroy the context. Work started with
         `capy::run` / `capy::run_async` is work-tracked, so a normal
         `run()` completion already waits for it.
 
     @par Exception Safety
-    A context that constructs is usable. The infrastructure its
-    backend needs — the completion port, the ring, the reactor's
-    wakeup channel — is created during construction, so a system that
-    refuses it throws from the constructor rather than from the first
-    operation, and the failed construction leaves nothing open.
+    A context that constructs is usable. The infrastructure its backend
+    needs — the completion port, the ring, the reactor's wakeup channel
+    — is created during construction. A system that refuses it therefore
+    throws from the constructor rather than from the first operation.
+    The failed construction leaves nothing open.
 
     @par Thread Safety
     Distinct objects: Safe.@n
@@ -235,7 +235,7 @@ class BOOST_COROSIO_DECL io_context : public capy::execution_context
 
     /** Create the blocking-I/O thread pool, apply runtime tuning to the
         scheduler and finish bringing the backend up. The tail of every
-        options constructor: the backend infrastructure whose setup reads
+        options constructor. The backend infrastructure whose setup reads
         these options is created here, so a failure to create it throws
         from the constructor. */
     void apply_options_post_(
@@ -243,8 +243,8 @@ class BOOST_COROSIO_DECL io_context : public capy::execution_context
 
     /** Create the blocking-I/O thread pool and apply only the decomposed
         threading configuration (locking tiers), then finish bringing the
-        backend up. The tail of every plain constructor, which — unlike
-        the options constructors — deliberately leaves the reactor budget
+        backend up. The tail of every plain constructor. Unlike the
+        options constructors, it deliberately leaves the reactor budget
         at its defaults rather than engaging the multi-thread
         post-everything heuristic. */
     void apply_threading_(io_context_options const& opts);

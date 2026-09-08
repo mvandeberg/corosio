@@ -33,10 +33,10 @@ namespace boost::corosio {
 
 /** A random-access file with devirtualized async I/O operations.
 
-    This class template inherits from @ref random_access_file and
-    shadows `read_some_at` / `write_some_at` with versions that
-    call the backend implementation directly, allowing the compiler
-    to inline through the entire call chain.
+    This class template inherits from @ref random_access_file. It
+    shadows `read_some_at` / `write_some_at` with versions that call the
+    backend implementation directly. The compiler can then inline
+    through the entire call chain.
 
     Non-async operations (`open`, `close`, `size`, `resize`,
     `sync_data`, `sync_all`) remain unchanged and dispatch through
@@ -46,9 +46,9 @@ namespace boost::corosio {
     can be passed to any function expecting `random_access_file&`,
     in which case virtual dispatch is used transparently.
 
-    @note On POSIX platforms, file I/O is dispatched to a thread
-    pool regardless of the chosen reactor backend, so all three
-    reactor tags (`epoll`, `select`, `kqueue`) resolve to the same
+    @note On POSIX platforms, file I/O is dispatched to a thread pool
+    regardless of the chosen reactor backend. All three reactor tags
+    (`epoll`, `select`, `kqueue`) therefore resolve to the same
     underlying implementation. The `Backend` template parameter
     exists for API symmetry with @ref native_tcp_socket and friends.
     The vtable savings are smaller relative to the thread-pool /

@@ -97,12 +97,11 @@ emplace_delay_timer(std::optional<timer>& t, capy::execution_context& ctx)
     If stop is already requested before suspension, the coroutine
     resumes immediately with `error::canceled`. If stop is
     requested while suspended, the pending wait is cancelled and
-    the coroutine resumes with `error::canceled`. Requesting stop
-    from another thread while the io_context runs in
-    single_threaded mode (auto-enabled at concurrency_hint == 1)
-    is not permitted by io_context's threading rules;
-    cross-thread cancellation requires a multi-threaded-capable
-    context.
+    the coroutine resumes with `error::canceled`. Requesting stop from
+    another thread while the io_context runs in single_threaded mode is
+    not permitted by io_context's threading rules. That mode is
+    auto-enabled at concurrency_hint == 1. Cross-thread cancellation
+    requires a multi-threaded-capable context.
 
     @see delay
 */
@@ -189,12 +188,11 @@ public:
 /** IoAwaitable returned by the clock overloads of @ref delay.
 
     Suspends the calling coroutine until `Clock::now()` reaches the
-    deadline or the environment's stop token is activated. The wait
-    is a sequence of steady-clock timer waits: after each expiry the
-    clock is re-read and, if the deadline is unreached, the same
-    frame-embedded waiter is re-published for the next
-    `Traits::to_wait_duration` cap — without resuming the coroutine
-    and without allocating.
+    deadline or the environment's stop token is activated. The wait is a
+    sequence of steady-clock timer waits. After each expiry the clock is
+    re-read; if the deadline is unreached, the same frame-embedded
+    waiter is re-published for the next `Traits::to_wait_duration` cap.
+    That re-publish neither resumes the coroutine nor allocates.
 
     Not intended to be named directly; use the @ref delay factory
     overloads instead.
@@ -354,10 +352,10 @@ delay(std::chrono::steady_clock::time_point tp) noexcept
     observation of `Clock::now() >= tp`, or earlier if the
     environment's stop token is activated. The wait is one or more
     bounded steady-clock waits, re-reading `Clock::now()` after
-    each; `Traits::to_wait_duration` bounds each one. With the
-    default @ref wait_traits a single full-length wait is used, so
-    an adjustment of `Clock` mid-wait is observed only at natural
-    wakeup; supply capping traits to bound that latency. Time
+    each; `Traits::to_wait_duration` bounds each one. With the default
+    @ref wait_traits a single full-length wait is used. An adjustment of
+    `Clock` mid-wait is therefore observed only at natural wakeup;
+    supply capping traits to bound that latency. Time
     points already reached complete synchronously.
 
     @note `Clock::now()` and `Traits::to_wait_duration` are invoked

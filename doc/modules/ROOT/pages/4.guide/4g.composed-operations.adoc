@@ -118,9 +118,9 @@ include::example$snippets/4g_composed_operations.cpp[tag=slice_interface]
 ----
 
 The returned `slice_type` models the same buffer-sequence concept as
-`seq` (mutable when `seq` is a mutable buffer sequence): slicing a
-single buffer yields an adjusted buffer of the same kind, while any
-other sequence yields a borrowed view. `offset` is clamped to the total
+`seq`, and is mutable when `seq` is a mutable buffer sequence. Slicing a
+single buffer yields an adjusted buffer of the same kind. Any other
+sequence yields a borrowed view. `offset` is clamped to the total
 size, and `length` defaults to the end of the sequence.
 
 NOTE: Except for the single-buffer case, the result borrows `seq`: it

@@ -185,11 +185,11 @@ public:
         `set_option()` + `bind()` + `listen()` path reports. The
         address family is deduced from @p ep.
 
-        Before binding, the constructor configures address reuse so
-        a server can rebind its port immediately after a restart:
-        `SO_REUSEADDR` on POSIX, `SO_EXCLUSIVEADDRUSE` on Windows
-        ( where `SO_REUSEADDR` instead grants other sockets
-        bind-over rights ). A second listener on an occupied
+        Before binding, the constructor configures address reuse so a
+        server can rebind its port immediately after a restart. It sets
+        `SO_REUSEADDR` on POSIX and `SO_EXCLUSIVEADDRUSE` on Windows,
+        where `SO_REUSEADDR` instead grants other sockets bind-over
+        rights. A second listener on an occupied
         endpoint therefore throws `errc::address_in_use` on every
         platform.
 

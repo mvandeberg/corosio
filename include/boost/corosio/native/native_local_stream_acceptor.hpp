@@ -40,11 +40,11 @@ namespace boost::corosio {
 
 /** An asynchronous Unix stream acceptor with devirtualized accept.
 
-    This class template inherits from @ref local_stream_acceptor
-    and shadows both `accept` overloads (the peer-reference form
-    and the move-return form) with versions that call the backend
-    implementation directly, allowing the compiler to inline
-    through the entire call chain. The move-return form yields a
+    This class template inherits from @ref local_stream_acceptor. It
+    shadows both `accept` overloads (the peer-reference form and the
+    move-return form) with versions that call the backend implementation
+    directly. The compiler can then inline through the entire call
+    chain. The move-return form yields a
     @ref native_local_stream_socket so subsequent I/O on the peer
     is also devirtualized.
 

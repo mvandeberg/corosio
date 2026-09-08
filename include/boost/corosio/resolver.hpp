@@ -310,9 +310,9 @@ public:
         @return An awaitable that completes with `io_result<resolver_results>`.
 
         @note `resolver_results` is an alias for `std::vector<resolver_entry>`.
-            Copying it deep-copies every entry (each owns two `std::string`s);
-            move it (`std::move(results)`) or pass iterators when handing it to
-            a by-value sink such as @ref connect.
+            Copying it deep-copies every entry, and each entry owns two
+            `std::string`s. Move it (`std::move(results)`) or pass iterators
+            when handing it to a by-value sink such as @ref connect.
 
         @par Example
         @par !example forward_resolve

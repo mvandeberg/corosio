@@ -35,8 +35,8 @@ response, another client's request is being sent.
 
 Concurrency increases throughput. A single-threaded server handling one
 connection at a time might manage 100 requests per second. The same server with
-concurrency might handle 10,000—not because any single request is faster, but
-because the server overlaps waiting time with useful work.
+concurrency might handle 10,000. No single request is faster; the server
+overlaps waiting time with useful work.
 
 === Concurrency vs Parallelism
 

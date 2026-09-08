@@ -59,8 +59,8 @@ With an initial delay of 500ms and a 30s cap, calling `next()` produces:
 500, 1000, 2000, 4000, 8000, 16000, 30000, 30000, ...
 
 Keeping the policy separate from the `delay()` call means it can be reused
-in any context (synchronous retries, tests, or logging) without pulling in
-async machinery.
+in any context. Synchronous retries, tests, and logging all work without
+pulling in async machinery.
 
 == Session Coroutine
 

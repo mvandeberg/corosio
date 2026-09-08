@@ -47,9 +47,8 @@ a socket and any state needed for a session.
 === worker_base
 
 The cpp:tcp_server::worker_base[worker_base] class is the foundation. It declares a constructor and a
-virtual destructor, holds private intrusive-list bookkeeping used by the
-server's idle and active pools, and exposes two pure virtuals you must
-override:
+virtual destructor, and holds private intrusive-list bookkeeping used by the server's idle and active
+pools. It exposes two pure virtuals you must override:
 
 [source,cpp]
 ----

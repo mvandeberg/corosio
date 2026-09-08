@@ -285,9 +285,9 @@ public:
 
         Creates a TCP socket and associates it with the platform
         reactor (IOCP on Windows). Calling @ref connect on a closed
-        socket opens it automatically with the endpoint's address family,
-        so explicit `open()` is only needed when socket options must be
-        set before connecting.
+        socket opens it automatically with the endpoint's address family.
+        An explicit `open()` is therefore needed only when socket options
+        must be set before connecting.
 
         Failures such as descriptor exhaustion are normal runtime
         conditions and are reported through the returned error code.
@@ -384,10 +384,10 @@ public:
     /** Wait for the socket to become ready in a given direction.
 
         Suspends until the socket is ready for the requested
-        direction, or an error condition is reported. No bytes
-        are transferred — useful for integrating with C libraries
-        that own the I/O on a nonblocking fd and only need
-        readiness notification (e.g. libpq async, libssh).
+        direction, or an error condition is reported. No bytes are
+        transferred. This suits C libraries that own the I/O on a
+        nonblocking fd and need only readiness notification, such as
+        libpq async and libssh.
 
         The operation supports cancellation via `std::stop_token`
         through the affine awaitable protocol. If the associated

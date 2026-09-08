@@ -46,10 +46,9 @@ namespace boost::corosio {
 
     @par Thread Safety
     Distinct objects: Safe.@n
-    Shared objects: Unsafe. Multiple concurrent reads and writes
-    are supported from coroutines sharing the same file object,
-    but external synchronization is required for non-async
-    operations (open, close, size, resize, etc.).
+    Shared objects: Unsafe. Coroutines sharing the same file object may
+    run multiple concurrent reads and writes. Non-async operations such
+    as open, close, size and resize require external synchronization.
 
     @par Example
     @par !example random_access_file

@@ -36,9 +36,9 @@ channel: the operation returns, throws, or completes with
 
 == Avoiding Exceptions
 
-Every throwing convenience is sugar over an exception-free spelling,
-or is guarded by a public pre-check — code that performs the check or
-uses the piecewise path never sees the throw:
+Every throwing convenience is sugar over an exception-free spelling, or
+is guarded by a public pre-check. Code that performs the check, or uses
+the piecewise path, never sees the throw:
 
 [cols="1,1"]
 |===
@@ -46,11 +46,10 @@ uses the piecewise path never sees the throw:
 
 | `tcp_acceptor(ctx, ep, backlog)` +
   `local_stream_acceptor(ctx, ep, backlog)`
-| default-construct, then `open()` + `bind()` + `listen()`
-  ( cpp:tcp_acceptor[] also configures address reuse via `set_option()`
-  between open and bind: `SO_REUSEADDR` on POSIX,
-  `SO_EXCLUSIVEADDRUSE` on Windows ) — the constructor throws exactly
-  the codes this path reports
+| default-construct, then `open()` + `bind()` + `listen()`.
+cpp:tcp_acceptor[] also configures address reuse via `set_option()`
+between open and bind: `SO_REUSEADDR` on POSIX, `SO_EXCLUSIVEADDRUSE` on
+Windows. The constructor throws exactly the codes this path reports
 
 | `endpoint("host:port")`
 | `make_endpoint(s)`
@@ -74,16 +73,16 @@ uses the piecewise path never sees the throw:
 |===
 
 What cannot be spelled exception-free: root construction and the run
-loop. cpp:io_context[] itself throws if backend setup fails (there is no
-code-returning way to construct it), any constructor can throw
-`std::bad_alloc`, and `run()`/`stop()` throw `std::system_error` if
+loop. cpp:io_context[] itself throws if backend setup fails, because
+there is no code-returning way to construct it. Any constructor can
+throw `std::bad_alloc`. `run()`/`stop()` throw `std::system_error` if
 the OS demultiplexer itself fails — a process-fatal condition with no
-per-operation channel to carry it. One environmental caveat on the
-last table row: `set_option()`/`get_option()` also throw when the
-platform rejects the option itself (an unsupported option on that
-protocol or OS), so an open check removes the closed-object throw but
-not that environmental arm — probe an option once at startup if it
-must not throw later.
+per-operation channel to carry it. One environmental caveat applies to
+the last table row. `set_option()`/`get_option()` also throw when the
+platform rejects the option itself, such as an unsupported option on
+that protocol or OS. An open check therefore removes the closed-object
+throw but not that environmental arm. Probe an option once at startup if
+it must not throw later.
 Startup construction failing by exception is the intended shape.
 
 [NOTE]
@@ -239,9 +238,10 @@ value per trigger. Depending on the path, a cancelled operation may
 surface as `capy::error::canceled` (capy's category) or as
 `std::errc::operation_canceled` (the generic category). For example, a
 stop token that is already requested when the operation is awaited tends
-to produce `std::errc::operation_canceled`, while `cancel()`, an
-in-flight stop-token cancel, and a syscall reporting `ECANCELED` tend to
-produce `capy::error::canceled`. Do not rely on the specific category or
+to produce `std::errc::operation_canceled`. Three other sources tend to
+produce `capy::error::canceled`: `cancel()`, an in-flight stop-token
+cancel, and a syscall reporting `ECANCELED`. Do not rely on the specific
+category or
 value.
 
 Always test cancellation portably with the `capy::cond::canceled`
@@ -256,8 +256,8 @@ include::example$snippets/4m_error_handling.cpp[tag=canceled_condition,indent=0]
 
 `corosio::timeout()` races an operation against a deadline and keeps
 these two outcomes distinct. A deadline that elapses first produces
-`capy::cond::timeout`; a stop token that fires first (the coroutine's
-own cancellation, independent of the deadline) produces
+`capy::cond::timeout`. A stop token that fires first — the coroutine's
+own cancellation, independent of the deadline — produces
 `capy::cond::canceled`, exactly as an unguarded operation would:
 
 [source,cpp]

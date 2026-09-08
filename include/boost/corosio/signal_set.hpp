@@ -287,14 +287,13 @@ public:
         specified flags. It has no effect if the signal is already
         in the set with the same flags.
 
-        If the signal is already registered globally (by another
-        signal_set) and the flags differ, an error is returned
-        unless one of them has the `dont_care` flag.
+        Another signal_set may already have registered the signal
+        globally. If the flags then differ, an error is returned unless
+        one of them has the `dont_care` flag.
 
-        The first signal registration on an execution context
-        installs the process signal-delivery pipe; if that
-        installation fails the error is returned, and the next
-        call retries it.
+        The first signal registration on an execution context installs
+        the process signal-delivery pipe. If that installation fails,
+        the error is returned and the next call retries it.
 
         @param signal_number The signal to be added to the set.
         @param flags The flags to apply when registering the signal.

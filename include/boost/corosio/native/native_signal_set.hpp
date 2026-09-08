@@ -28,10 +28,10 @@ namespace boost::corosio {
 
 /** An asynchronous signal set with devirtualized wait operations.
 
-    This class template inherits from @ref signal_set and shadows
-    the `wait` operation with a version that calls the backend
-    implementation directly, allowing the compiler to inline
-    through the entire call chain.
+    This class template inherits from @ref signal_set. It shadows the
+    `wait` operation with a version that calls the backend
+    implementation directly. The compiler can then inline through the
+    entire call chain.
 
     Non-async operations (`add`, `remove`, `clear`, `cancel`)
     remain unchanged and dispatch through the compiled library.

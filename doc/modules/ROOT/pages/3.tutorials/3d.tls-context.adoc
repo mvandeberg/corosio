@@ -41,11 +41,11 @@ for establishing secure connections.
 
 [NOTE]
 ====
-Two implemented features depend on how WolfSSL was built:
+Two implemented features depend on how WolfSSL was built.
 `set_default_verify_paths()` needs `WOLFSSL_SYS_CA_CERTS` to load the system
-store, and `set_verify_callback()` needs `WOLFSSL_ALWAYS_VERIFY_CB`
-(otherwise installing a callback fails the handshake with
-`std::errc::function_not_supported` rather than failing open). Both are
+store. `set_verify_callback()` needs `WOLFSSL_ALWAYS_VERIFY_CB`; without it,
+installing a callback fails the handshake with
+`std::errc::function_not_supported` rather than failing open. Both are
 enabled by `--enable-opensslextra`.
 ====
 
@@ -222,8 +222,8 @@ include::example$snippets/3d_tls_context.cpp[tag=version_bounds,indent=0]
 ----
 
 NOTE: On WolfSSL the ceiling is enforced by selecting a version-specific
-method (no native set-max call exists); a window whose minimum exceeds its
-maximum yields a context that fails the handshake.
+method, because no native set-max call exists. A window whose minimum
+exceeds its maximum yields a context that fails the handshake.
 
 === Cipher Suites
 
@@ -323,9 +323,9 @@ include::example$snippets/3d_tls_context.cpp[tag=verify_callback,indent=0]
 ====
 Which certificates the callback sees depends on the backend:
 
-* OpenSSL — invoked for every certificate, including ones that passed, so
-  it can both relax verification (accept a rejected cert) and tighten it
-  (reject an otherwise-valid cert, e.g. pinning).
+* OpenSSL — invoked for every certificate, including ones that passed. It
+  can therefore both relax verification (accept a rejected cert) and
+  tighten it (reject an otherwise-valid cert, as pinning does).
 * WolfSSL with `WOLFSSL_ALWAYS_VERIFY_CB` (via `--enable-opensslextra`) —
   same as OpenSSL.
 * WolfSSL without it — the library invokes the callback only on failure,

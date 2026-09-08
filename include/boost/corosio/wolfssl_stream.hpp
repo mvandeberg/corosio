@@ -49,10 +49,10 @@ namespace boost::corosio {
     Distinct objects: Safe.@n
     Shared objects: Unsafe, with one exception: one read operation and
     one write operation may be in flight simultaneously. `shutdown()`
-    may overlap a pending read. When the execution context runs on
-    multiple threads, all operations on one stream must be performed
-    within the same `capy::strand` (or otherwise never run
-    concurrently); a single-threaded context needs no strand.
+    may overlap a pending read. On a multi-threaded execution context,
+    all operations on one stream must run within the same
+    `capy::strand`, or must otherwise never run concurrently. A
+    single-threaded context needs no strand.
 
     @par Example
     @par !example wolfssl_stream
@@ -215,8 +215,8 @@ private:
     Errors reported by @ref wolfssl_stream that originate from
     `wolfSSL_get_error` are assigned this category. Its `message()`
     decodes the WolfSSL error code using WolfSSL's own diagnostic
-    strings, so printing such an `error_code` yields a readable
-    description (for example, "ASN no signer error to confirm failure").
+    strings. Printing such an `error_code` therefore yields a readable
+    description, for example "ASN no signer error to confirm failure".
 
     @return A reference to a static category object with name
         `"corosio.wolfssl"`.
@@ -230,7 +230,7 @@ BOOST_COROSIO_DECL std::error_category const& wolfssl_category() noexcept;
     was built with `WOLFSSL_ALWAYS_VERIFY_CB` (implied by
     `--enable-opensslextra`). On a build without it, WolfSSL invokes the
     callback only on verification failure, so a callback that tightens
-    verification would silently fail open; the @ref wolfssl_stream backend
+    verification would silently fail open. The @ref wolfssl_stream backend
     instead fails the handshake with `std::errc::function_not_supported`
     when a callback is present.
 
@@ -273,14 +273,14 @@ BOOST_COROSIO_DECL bool wolfssl_supports_crl() noexcept;
 /** Report whether this WolfSSL build can verify IP-literal hostnames.
 
     Matching an IP literal against a certificate's iPAddress entries
-    requires a WolfSSL built with both `OPENSSL_EXTRA` (routes the
-    address into the verify parameters the certificate check consults)
-    and `WOLFSSL_IP_ALT_NAME` (records iPAddress entries during
-    parsing). On a build lacking either, `wolfSSL_check_ip_address`
-    reports success but verification silently checks nothing, so a
-    handshake with an IP literal set via @ref tls_stream::set_hostname
-    fails with `std::errc::function_not_supported` rather than proceed
-    unverified.
+    requires a WolfSSL built with both `OPENSSL_EXTRA` and
+    `WOLFSSL_IP_ALT_NAME`. The first routes the address into the verify
+    parameters the certificate check consults; the second records
+    iPAddress entries during parsing. On a build lacking either,
+    `wolfSSL_check_ip_address` reports success but verification silently
+    checks nothing. A handshake with an IP literal set via @ref
+    tls_stream::set_hostname therefore fails with
+    `std::errc::function_not_supported` rather than proceed unverified.
 
     @return `true` if IP-literal verification is supported by this build.
 

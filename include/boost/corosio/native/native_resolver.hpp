@@ -29,10 +29,10 @@ namespace boost::corosio {
 
 /** An asynchronous DNS resolver with devirtualized operations.
 
-    This class template inherits from @ref resolver and shadows
-    the `resolve` operations with versions that call the backend
-    implementation directly, allowing the compiler to inline
-    through the entire call chain.
+    This class template inherits from @ref resolver. It shadows the
+    `resolve` operations with versions that call the backend
+    implementation directly. The compiler can then inline through the
+    entire call chain.
 
     Non-async operations (`cancel`) remain unchanged and dispatch
     through the compiled library.

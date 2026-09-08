@@ -224,14 +224,14 @@ Don't access the same socket from multiple threads without synchronization.
 == Lifetime and Teardown
 
 The cpp:io_context[] must outlive every operation posted or dispatched through its
-executor, and no thread may still be inside a `run()` call when the context is
+executor. No thread may still be inside a `run()` call when the context is
 destroyed. Posting to the context — from a thread it does not track —
 concurrently with, or after, its destruction is undefined behavior.
 
 Work started with `capy::run` / `capy::run_async` is work-tracked, so a normal
 `run()` completion already waits for it to finish. The safe teardown pattern is
-therefore: stop submitting new work, let every `run()` return, join the threads
-that ran the loop, and only then destroy the context.
+therefore to stop submitting new work and let every `run()` return. Join the
+threads that ran the loop, and only then destroy the context.
 
 [source,cpp]
 ----

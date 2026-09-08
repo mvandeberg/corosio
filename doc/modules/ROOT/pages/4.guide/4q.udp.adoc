@@ -44,9 +44,9 @@ open — see xref:#connected-mode[Connected Mode] below.
 
 == Opening and Binding
 
-Receiving datagrams requires an open socket bound to a local endpoint
-(`connect()` opens the socket automatically; the other initiators
-complete with `errc::bad_file_descriptor` on a closed socket):
+Receiving datagrams requires an open socket bound to a local endpoint.
+`connect()` opens the socket automatically; the other initiators
+complete with `errc::bad_file_descriptor` on a closed socket:
 
 [source,cpp]
 ----
@@ -125,9 +125,9 @@ Connected mode is useful for two reasons:
 
 * **Filtering** — the kernel drops stray datagrams from unrelated senders
   before your code sees them, which simplifies request/response clients.
-* **ICMP error reporting** — when a peer is unreachable, the kernel surfaces
-  the resulting ICMP error on a subsequent cpp:udp_socket::send[send] or cpp:udp_socket::recv[recv] instead of
-  silently discarding it.
+* **ICMP error reporting** — when a peer is unreachable, the kernel surfaces the resulting ICMP error rather
+  than silently discarding it. It appears on a subsequent cpp:udp_socket::send[send] or
+  cpp:udp_socket::recv[recv].
 
 == Message Flags
 
@@ -251,8 +251,8 @@ xref:4.guide/4m.error-handling.adoc[Error Handling].
 A cpp:udp_socket[] permits one outstanding send and one outstanding receive at
 a time. Two simultaneous cpp:udp_socket::recv_from[recv_from] calls on the same socket are not
 supported. This is enough for the common pattern of a single coroutine that
-alternates send and receive, or a pair of coroutines where one drives
-outbound traffic and the other drains the receive queue.
+alternates send and receive. It also suits a pair of coroutines where one
+drives outbound traffic and the other drains the receive queue.
 
 For higher concurrency, use multiple sockets — UDP has no per-connection
 cost in the kernel, so a server can run several receivers in parallel.

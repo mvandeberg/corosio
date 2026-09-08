@@ -29,9 +29,9 @@ namespace boost::corosio {
 
     Combines @ref io_read_stream and @ref io_write_stream into
     a single bidirectional stream. The `read_some` and `write_some`
-    operations are inherited from the base classes and dispatch
-    through `do_read_some` / `do_write_some`, which this class
-    implements by forwarding to the platform `implementation`.
+    operations are inherited from the base classes and dispatch through
+    `do_read_some` / `do_write_some`. This class implements those by
+    forwarding to the platform `implementation`.
 
     The implementation hierarchy stays linear (no diamond):
     `io_object::implementation` -> `io_stream::implementation`
