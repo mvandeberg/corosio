@@ -133,9 +133,8 @@ public:
         completes, an error occurs, or the operation is
         cancelled via stop token.
 
-        @par Preconditions
-        The underlying stream must be connected. No other
-        TLS operation may be in progress on this stream.
+        @pre The underlying stream must be connected. No other
+            TLS operation may be in progress on this stream.
 
         @param role The handshake role, client or server.
 
@@ -149,11 +148,10 @@ public:
         close_notify response. Supports cancellation via
         stop token.
 
-        @par Preconditions
-        A handshake must have completed successfully. May overlap
-        a pending read; the read completes with `capy::error::eof`
-        when the peer answers the close_notify. No concurrent write
-        may be in progress.
+        @pre A handshake must have completed successfully. May overlap
+            a pending read; the read completes with `capy::error::eof`
+            when the peer answers the close_notify. No concurrent write
+            may be in progress.
 
         @par Postconditions
         If the transport ends before the peer's close_notify is
@@ -173,8 +171,7 @@ public:
         resumed, so a handshake after `reset()` is always a full
         handshake.
 
-        @par Preconditions
-        No TLS operation may be in progress on this stream.
+        @pre No TLS operation may be in progress on this stream.
 
         @note If the backend cannot restore a clean session state,
         subsequent handshakes fail rather than proceed on a

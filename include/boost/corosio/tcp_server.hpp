@@ -620,11 +620,10 @@ public:
         
         Calling `start()` on an already-running server has no effect.
 
-        @par Preconditions
-        - At least one endpoint bound via @ref bind.
-        - Workers provided via @ref set_workers.
-        - If restarting, @ref join must have completed first, and the
-          io_context must have been restarted (`ioc.restart()`).
+        @pre At least one endpoint bound via @ref bind.
+        @pre Workers provided via @ref set_workers.
+        @pre If restarting, @ref join must have completed first, and the
+            io_context must have been restarted (`ioc.restart()`).
 
         @par Effects
         Creates one accept coroutine per bound endpoint. Each coroutine
@@ -695,8 +694,7 @@ public:
         shutdown sequence, ensuring the server is fully stopped before
         restarting or destroying it.
 
-        @par Preconditions
-        @ref stop has been called and `ioc.run()` has returned.
+        @pre @ref stop has been called and `ioc.run()` has returned.
 
         @par Postconditions
         All accept loops have completed. The server is in the stopped

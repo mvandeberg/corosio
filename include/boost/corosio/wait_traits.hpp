@@ -42,10 +42,9 @@ struct wait_traits
         Should return a positive duration when @p d is positive; a
         non-positive result degrades to reactor-rate re-checking.
 
-        @par Preconditions
-        Must not throw and must not block — invoked on the
-        io_context's run thread, including from the timer
-        completion path.
+        @pre Must not throw and must not block — invoked on the
+            io_context's run thread, including from the timer
+            completion path.
 
         @param d The remaining time until the deadline.
 

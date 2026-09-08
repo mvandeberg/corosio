@@ -378,8 +378,7 @@ public:
 
         A closed acceptor completes with `errc::bad_file_descriptor`.
 
-        @par Preconditions
-        This acceptor must outlive the returned awaitable.
+        @pre This acceptor must outlive the returned awaitable.
     */
     [[nodiscard]] auto wait(wait_type w)
     {
@@ -442,8 +441,7 @@ public:
         @return The native socket handle, or -1/INVALID_SOCKET if not
             open.
 
-        @par Preconditions
-        None. May be called on closed acceptors.
+        @pre None. May be called on closed acceptors.
     */
     native_handle_type native_handle() const noexcept;
 

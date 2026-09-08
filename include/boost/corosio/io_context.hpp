@@ -202,17 +202,16 @@ effective_concurrency_hint(
     @par Example
     @par !example construct
 
-    @par Preconditions
-    The context must outlive every operation posted or dispatched
-    through its executor, and no thread may be executing a run
-    variant when the context is destroyed. Posting to the context
-    concurrently with, or after, its destruction is undefined
-    behavior. The safe teardown pattern is to stop submitting new
-    work, let every `run()` call return (each returns once no
-    outstanding work remains), and join the threads that ran the
-    loop before destroying the context. Work launched with
-    `capy::run` / `capy::run_async` is work-tracked, so a normal
-    `run()` completion already waits for it.
+    @pre The context must outlive every operation posted or dispatched
+        through its executor, and no thread may be executing a run
+        variant when the context is destroyed. Posting to the context
+        concurrently with, or after, its destruction is undefined
+        behavior. The safe teardown pattern is to stop submitting new
+        work, let every `run()` call return (each returns once no
+        outstanding work remains), and join the threads that ran the
+        loop before destroying the context. Work launched with
+        `capy::run` / `capy::run_async` is work-tracked, so a normal
+        `run()` completion already waits for it.
 
     @par Exception Safety
     A context that constructs is usable. The infrastructure its
@@ -625,8 +624,7 @@ public:
 
     /** Informs the executor that work has completed.
 
-        @par Preconditions
-        A preceding call to `on_work_started()` on an equal executor.
+        @pre A preceding call to `on_work_started()` on an equal executor.
     */
     void on_work_finished() const noexcept
     {
@@ -643,10 +641,9 @@ public:
 
         @return A handle for symmetric transfer or `std::noop_coroutine()`.
 
-        @par Preconditions
-        The associated context must outlive this call. Dispatching
-        concurrently with, or after, the context's destruction is
-        undefined behavior.
+        @pre The associated context must outlive this call. Dispatching
+            concurrently with, or after, the context's destruction is
+            undefined behavior.
     */
     std::coroutine_handle<> dispatch(capy::continuation& c) const
     {
@@ -661,10 +658,9 @@ public:
         Enqueues `c` directly on the scheduler's ready queue.
         No heap allocation occurs.
 
-        @par Preconditions
-        The associated context must outlive this call. Posting
-        concurrently with, or after, the context's destruction is
-        undefined behavior.
+        @pre The associated context must outlive this call. Posting
+            concurrently with, or after, the context's destruction is
+            undefined behavior.
     */
     void post(capy::continuation& c) const
     {
@@ -679,10 +675,9 @@ public:
 
         @param h The coroutine handle to post.
 
-        @par Preconditions
-        The associated context must outlive this call. Posting
-        concurrently with, or after, the context's destruction is
-        undefined behavior.
+        @pre The associated context must outlive this call. Posting
+            concurrently with, or after, the context's destruction is
+            undefined behavior.
     */
     void post(std::coroutine_handle<> h) const
     {

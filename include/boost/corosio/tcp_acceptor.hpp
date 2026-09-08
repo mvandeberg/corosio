@@ -367,8 +367,7 @@ public:
 
         A closed acceptor completes with `errc::bad_file_descriptor`.
 
-        @par Preconditions
-        The peer socket must be associated with the same execution context.
+        @pre The peer socket must be associated with the same execution context.
 
         Both this acceptor and @p peer must outlive the returned
         awaitable.
@@ -411,8 +410,7 @@ public:
         On failure the returned socket is default-constructed and
         may only be destroyed or assigned.
 
-        @par Preconditions
-        This acceptor must outlive the returned awaitable.
+        @pre This acceptor must outlive the returned awaitable.
 
         @par Example
         @par !example accept_returning_a_new_socket
@@ -447,8 +445,7 @@ public:
 
         A closed acceptor completes with `errc::bad_file_descriptor`.
 
-        @par Preconditions
-        This acceptor must outlive the returned awaitable.
+        @pre This acceptor must outlive the returned awaitable.
     */
     [[nodiscard]] auto wait(wait_type w)
     {
@@ -473,8 +470,7 @@ public:
 
         @return The native socket handle, or -1/INVALID_SOCKET if not open.
 
-        @par Preconditions
-        None. May be called on closed acceptors.
+        @pre None. May be called on closed acceptors.
     */
     native_handle_type native_handle() const noexcept;
 

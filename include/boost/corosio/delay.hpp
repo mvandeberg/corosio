@@ -88,11 +88,10 @@ emplace_delay_timer(std::optional<timer>& t, capy::execution_context& ctx)
     Not intended to be named directly; use the @ref delay factory
     overloads instead.
 
-    @par Preconditions
-    The awaiting coroutine's executor must belong to an
-    `io_context`. Any other execution context terminates with a
-    diagnostic, because silently running without a timer would
-    drop the requested delay.
+    @pre The awaiting coroutine's executor must belong to an
+        `io_context`. Any other execution context terminates with a
+        diagnostic, because silently running without a timer would
+        drop the requested delay.
 
     @par Cancellation
     If stop is already requested before suspension, the coroutine
@@ -200,11 +199,10 @@ public:
     Not intended to be named directly; use the @ref delay factory
     overloads instead.
 
-    @par Preconditions
-    The awaiting coroutine's executor must belong to an
-    `io_context`. Any other execution context terminates with a
-    diagnostic, because silently running without a timer would
-    drop the requested delay.
+    @pre The awaiting coroutine's executor must belong to an
+        `io_context`. Any other execution context terminates with a
+        diagnostic, because silently running without a timer would
+        drop the requested delay.
 
     @par Cancellation
     Identical to @ref delay_awaitable: stop already requested

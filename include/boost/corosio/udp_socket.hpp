@@ -719,8 +719,7 @@ public:
 
         A closed socket completes with `errc::bad_file_descriptor`.
 
-        @par Preconditions
-        This socket must outlive the returned awaitable.
+        @pre This socket must outlive the returned awaitable.
     */
     [[nodiscard]] auto wait(wait_type w)
     {

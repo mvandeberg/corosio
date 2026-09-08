@@ -33,10 +33,9 @@ namespace boost::corosio {
     Exceptions from the inner awaitable always propagate; they are
     never swallowed by the timer.
 
-    @par Preconditions
-    The awaiting coroutine's executor must belong to an
-    `io_context`; any other execution context terminates with a
-    diagnostic.
+    @pre The awaiting coroutine's executor must belong to an
+        `io_context`; any other execution context terminates with a
+        diagnostic.
 
     @par Cancellation
     If the parent's stop token is activated, the inner awaitable

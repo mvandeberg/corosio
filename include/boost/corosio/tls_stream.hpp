@@ -136,9 +136,8 @@ public:
         called first and performs a fresh handshake using the
         current configuration.
 
-        @par Preconditions
-        The underlying stream must be connected. No other TLS
-        operation may be in progress on this stream.
+        @pre The underlying stream must be connected. No other TLS
+            operation may be in progress on this stream.
 
         @param role The handshake role, client or server.
 
@@ -151,9 +150,8 @@ public:
         Initiates the TLS shutdown sequence by sending a close_notify
         alert and waiting for the peer's close_notify response.
 
-        @par Preconditions
-        A handshake must have completed successfully. May overlap
-        a pending read. No concurrent write may be in progress.
+        @pre A handshake must have completed successfully. May overlap
+            a pending read. No concurrent write may be in progress.
 
         @par Postconditions
         If the transport ends before the peer's close_notify is
@@ -178,9 +176,8 @@ public:
         implicitly performs a reset first, so explicit calls
         are only needed to eagerly release session state.
 
-        @par Preconditions
-        No TLS operation (handshake, read, write, shutdown) is
-        in progress.
+        @pre No TLS operation (handshake, read, write, shutdown) is
+            in progress.
 
         @par Thread Safety
         Not thread safe. The caller must ensure no concurrent
