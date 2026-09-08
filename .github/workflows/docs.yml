@@ -278,11 +278,13 @@ jobs:
       # the role=output exemption boundary) were fail-open at some point in Capy and
       # were only ever found by planting a violation. SHAPE in particular is
       # advisory and reads 0, so a broken looksLikeCode() is invisible everywhere
-      # else. Non-blocking for now: it is a meta-test and can go red for reasons
-      # unrelated to the documentation. Promoted to blocking at the final phase.
-      - name: "Lint: linter self-test"
+      # else. BLOCKING as of the final remediation phase: it has no baseline and no
+      # environment dependence — it plants violations in throwaway fixtures and
+      # asserts the linters notice — so a red run here means a linter regressed, which
+      # is exactly the failure nothing else can see.
+      - name: "Lint: linter self-test (BLOCKING)"
         if: always()
-        continue-on-error: true
+        continue-on-error: false
         working-directory: boost-root/libs/corosio/doc
         run: node lint/selftest.mjs
 
@@ -326,18 +328,46 @@ jobs:
       # Do NOT reseed baseline.json locally — a local run grandfathers local-vs-CI
       # drift as if it were the real backlog. Reseed via the workflow_dispatch steps
       # below, per doc/lint/README.md.
-      - name: "Lint: gate (new violations)"
+      # THE GATE IS SPLIT IN TWO, and the split is about baseline trust, not about
+      # which rules matter.
+      #
+      # doc/lint/baseline.json was seeded on a developer machine (doc/lint/README.md
+      # says so). A `--strict` run compares a CI scan against it, so any fingerprint
+      # that differs between the two environments reads as a NEW violation and would
+      # fail the job for a reason that has nothing to do with the documentation.
+      # That drift is not spread evenly:
+      #
+      #   * doc_lint and sentence_length are pure file parsing — Node built-ins, no
+      #     external tool, no version input. Their fingerprints are identical in both
+      #     environments, so they are STRICT now.
+      #   * vale_adoc / vale_docstrings depend on the asciidoctor build that Vale
+      #     shells out to, and mrdocs_warnings on the MrDocs develop build hash.
+      #     Those stay REPORTING until the first workflow_dispatch reseed replaces
+      #     the local baseline with a CI-authored one. Flipping them is then a
+      #     one-line change: move the specs into the strict step above.
+      #
+      # Do NOT "fix" a strict-step failure by reseeding locally. Reseed via the
+      # workflow_dispatch steps below, per doc/lint/README.md.
+      - name: "Lint: gate (structural + C2, BLOCKING)"
         if: always()
         continue-on-error: false
         working-directory: boost-root/libs/corosio/doc
         run: |
-          # Reports gated findings and annotates them on the diff; does NOT fail the
-          # job (no --strict). Adding --strict is the final phase's exit criterion.
-          node lint/check-no-new-violations.mjs \
+          node lint/check-no-new-violations.mjs --strict \
             --gate 'doc_lint:^(A1|A6|B2|D2|ANCHOR):' \
+            --gate 'sentence_length:^C2:'
+
+      - name: "Lint: gate (wording + reference, reporting)"
+        if: always()
+        continue-on-error: false
+        working-directory: boost-root/libs/corosio/doc
+        run: |
+          # Reports and annotates; does NOT fail the job (no --strict), because the
+          # committed baseline is a local seed and these three checks carry
+          # environment drift. See the comment above the strict step.
+          node lint/check-no-new-violations.mjs \
             --gate 'vale_adoc:Corosio\.PartHeadings$' \
             --gate 'mrdocs_warnings:.*' \
-            --gate 'sentence_length:^C2:' \
             --gate 'vale_adoc:(Corosio\.SimpleTense|Corosio\.NoFluff|Corosio\.Terminology)$' \
             --gate 'vale_docstrings:(Corosio\.SimpleTense|Corosio\.NoFluff|Corosio\.Terminology)$'
 
@@ -399,16 +429,21 @@ jobs:
           out="$RUNNER_TEMP/baseline-candidate"
           workflow=../.github/workflows/docs.yml
 
-          # Read ONLY the gate step's run block: from its name to the blank line
-          # that ends it, then stop. `awk ... {exit}` rather than a sed range
-          # because a sed range restarts at every match of its start pattern —
-          # including the copy of that pattern in this very extractor.
+          # Read the run blocks of BOTH gate steps: each starts at its `- name:` line
+          # and ends at the next blank line. Two details are load-bearing:
+          #   * the toggle is `inblock = 0`, not `exit` -- the gate is split in two
+          #     steps, and exiting at the first blank line would silently drop the
+          #     second step's specs from this safety net.
+          #   * the pattern is anchored to `^ *- name:`, because this awk program
+          #     CONTAINS the string it searches for. Without the anchor it matches
+          #     its own source line and captures the grep/sed lines below as if they
+          #     were gate specs (measured: two junk entries, one an invalid regex).
           gate_args=()
           while IFS= read -r spec; do
             gate_args+=(--gate "$spec")
           done < <(
-            awk '/name: "Lint: gate/ { inblock = 1 }
-                 inblock && /^[[:space:]]*$/ { exit }
+            awk '/^[[:space:]]*- name: "Lint: gate/ { inblock = 1; next }
+                 inblock && /^[[:space:]]*$/ { inblock = 0 }
                  inblock' "$workflow" \
               | grep -o -- "--gate '[^']*'" \
               | sed "s/^--gate '//; s/'\$//" \

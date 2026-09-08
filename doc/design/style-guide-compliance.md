@@ -27,14 +27,21 @@ as follow-ups with no owner in this plan.
 | 4 — C11 `@pre` | **done** — no `@par Preconditions` remains |
 | 5 — C9/C10 | **done** — both rules at zero on both corpora |
 | 6 — C4 present simple | **done** — both rules at zero on both corpora |
-| 7 — C2 sentence length | not started — 131 hard findings (61 docstrings, 70 pages) |
-| 8 — B4 briefs | not started — ~30 briefs, review tier |
-| 9 — close the gate | not started — `--strict` + blocking selftest |
+| 7 — C2 sentence length | **done** — hard 131 → 1, and that one is the `@n` artifact |
+| 8 — B4 briefs | **done** — 40 class briefs rewritten; scope noted at the phase |
+| 9 — close the gate | **partly done** — selftest blocking, structural+C2 strict; the wording and reference gates need the first CI reseed |
 
-Measured after phase 6, both corpora: Vale over `doc/modules` 466 → 200;
-`Vale.Spelling` 284 → 36; Vale over `lint/.docstrings` 785 → 438; `doc_lint`
-A1/A6/B2/ANCHOR all 0, D2 3 (the documented carve-out); C9/C10 0/0; C4 0/0.
-`sentence_length` is untouched by design — it is phase 7.
+Measured after phase 9, both corpora: Vale over `doc/modules` 466 → 132;
+`Vale.Spelling` 284 → 36; Vale over `lint/.docstrings` 785 → 427; `doc_lint`
+A1/A6/B2/ANCHOR all 0, D2 3 (the documented carve-out); C9/C10 0/0; C4 0/0;
+`sentence_length` hard 131 → 1, advisory 70.
+
+**What phase 9 still needs.** `doc/lint/baseline.json` is a local seed and is now
+stale-high. The wording and reference-surface gates (`vale_adoc`, `vale_docstrings`,
+`mrdocs_warnings`) cannot go strict against it: those three depend on the asciidoctor and
+MrDocs builds, and their environment drift would read as new violations. Run the
+Documentation workflow via `workflow_dispatch`, review the candidate, commit it, then move
+those three specs into the strict step.
 
 **Note for phase 7.** `sentence-length.mjs` does not treat Doxygen's `@n` as a
 sentence boundary, so `io_context`'s boost-wide thread-safety idiom

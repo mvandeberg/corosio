@@ -81,21 +81,47 @@ local-vs-CI drift fingerprints.
 > it carries local-vs-CI drift — a different MrDocs develop build hash and a different
 > file-processing order at minimum. Run the Documentation workflow via `workflow_dispatch`,
 > read the `baseline-diff.txt` report, and commit the candidate. Until that happens, treat a
-> clean gate as evidence about the *toolkit*, not about the corpus. Seeded counts, for
-> comparison against the first CI candidate: `vale_adoc` 466, `vale_docstrings` 785,
-> `sentence_length` 204, `doc_lint` 93, `mrdocs_warnings` 460.
+> clean gate as evidence about the *toolkit*, not about the corpus.
+>
+> The baseline is also **stale-high**: it was seeded before the remediation phases ran, so it
+> grandfathers well over a thousand findings that no longer exist. Nothing can be gated on
+> those having stayed fixed until it is reseeded. Counts at the seed, and as measured after
+> phase 9, for diffing against the first CI candidate:
+>
+> | Check | Seeded | Now |
+> |---|---|---|
+> | `vale_adoc` | 466 | 132 |
+> | `vale_docstrings` | 785 | 427 |
+> | `sentence_length` | 204 | 71 (hard 1, advisory 70) |
+> | `doc_lint` | 93 | 3 (all D2, the documented carve-out) |
+> | `mrdocs_warnings` | 460 | 460 |
 
-### Corosio's posture: report-only, for now
+### Corosio's posture: the gate is split in two
 
-The gate step runs **without `--strict`**, so it reports and annotates but does not fail the
-job. `selftest.mjs` likewise runs with `continue-on-error: true`. Both are deliberate and
-both are temporary: flipping `--strict` and promoting `selftest.mjs` to blocking are the
-**exit criteria of the final remediation phase**, recorded in
-`doc/design/style-guide-compliance.md` section 6.
+`selftest.mjs` is **blocking**. It has no baseline and no environment dependence, so a red
+run there means a linter regressed.
 
-The cost, stated plainly: until that flip, a new violation is reported but lands, and stays
-until a reseed grandfathers it. The mitigation is the per-phase reseed cadence in the same
-document — the window stays short per rule rather than open for the whole effort.
+The gate itself runs as two steps, and the split is about baseline trust rather than which
+rules matter:
+
+| Step | Checks | Posture |
+|---|---|---|
+| `Lint: gate (structural + C2, BLOCKING)` | `doc_lint` (A1/A6/B2/D2/ANCHOR), `sentence_length` (C2) | **`--strict`** |
+| `Lint: gate (wording + reference, reporting)` | `vale_adoc`, `vale_docstrings`, `mrdocs_warnings` | reports, does not fail |
+
+`doc_lint` and `sentence_length` are pure file parsing with Node built-ins: no external tool,
+no version input, identical fingerprints in any environment. They are safe to gate against a
+locally-seeded baseline, so they are strict now.
+
+The other three are not. `vale_adoc`/`vale_docstrings` depend on the asciidoctor build Vale
+shells out to, and `mrdocs_warnings` on the MrDocs develop build hash. Compared against a
+local baseline, environment drift in those reads as a NEW violation and would fail the job for
+a reason unrelated to the documentation. **They become strict once the first
+`workflow_dispatch` reseed replaces the local baseline with a CI-authored one** — at which
+point the change is moving their specs into the strict step.
+
+The cost, stated plainly: until that reseed, a new wording or reference-surface violation is
+reported but lands, and stays until a reseed grandfathers it.
 
 ## Corosio-specific configuration
 
@@ -146,6 +172,10 @@ exact rule and confirming the failure, at the port commit.
 | gate, report-only | the same plant, no `--strict` | **exit 0** — confirms the current posture reports without failing, and that the phase-9 flip is the only change needed |
 | fail-closed | `extract-docstrings.mjs` made to exit 3 | **exit 1**: `vale_docstrings` and `sentence_length` marked SKIPPED and, being gated, fail the gate. Zero findings did not read as success |
 | tail-anchor trap | `--gate 'vale_adoc:^Corosio\.PartHeadings$'` against a planted A7 | **exit 0 while gating nothing** — the trap is real on this corpus. The correct tail-only spec exits 1 on the same input |
+| strict gate, B2 | a bare `----` listing holding code, against the strict step's real spec | **exit 1** |
+| strict gate, C2 | a 28-word sentence on a hard-slice page | **exit 1** |
+| strict gate, clean | the same spec against an unmodified tree | exit 0, before and after both plants |
+| reseed gate-spec extractor | run against the two-step gate | recovers exactly the 6 live specs. It first recovered **8** — the awk program contains the string it searches for, so it matched its own source line and captured the `grep`/`sed` lines below as specs, one of them the invalid regex `[^`. The pattern is anchored to `^ *- name:` for that reason, and the toggle is `inblock = 0` rather than `exit` so the second gate step is not silently dropped |
 
 `selftest.mjs` automates the subset it can (37 assertions at the port) and is the standing
 guard afterwards. It is not a substitute for the table above: it passed *before* several of

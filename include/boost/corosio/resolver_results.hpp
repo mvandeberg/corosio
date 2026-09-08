@@ -20,7 +20,7 @@
 
 namespace boost::corosio {
 
-/** Carries one endpoint a resolver produced, with its host and service names.
+/** Carries one endpoint a resolver produced together with its host and service names.
 
     This class represents one resolved endpoint along with
     the host and service names used in the query.
