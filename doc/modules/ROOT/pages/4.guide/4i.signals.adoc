@@ -249,10 +249,10 @@ NOTE: After a move, the destination uses the source's execution context.
 |===
 | Operation | Thread Safety
 
-| Distinct signal_sets
+| Distinct cpp:signal_set[] objects
 | Safe from different threads
 
-| Same signal_set
+| The same cpp:signal_set[]
 | NOT safe for concurrent operations
 |===
 

@@ -283,7 +283,7 @@ Multiple threads running handlers concurrently.
 ----
 Throughput vs Thread Count:
 
-Threads    Corosio    Asio Coro  Asio CB    Best Scaling
+Threads    Corosio    Asio Coroutine  Asio CB    Best Scaling
    1       1.72 M     1.78 M     2.82 M     —
    2       2.10 M     1.40 M     2.33 M     Corosio (1.23×)
    4       2.02 M     1.25 M     2.10 M     Corosio (1.18×)
@@ -494,7 +494,7 @@ Multiple socket pairs operating concurrently (64-byte messages).
 
 [cols="1,1,1,1,1,1,1", options="header"]
 |===
-| Pairs | Corosio Mean | Asio Coro Mean | Asio CB Mean | Corosio p99 | Asio Coro p99 | Asio CB p99
+| Pairs | Corosio Mean | Asio Coroutine Mean | Asio CB Mean | Corosio p99 | Asio Coroutine p99 | Asio CB p99
 
 | 1
 | 10.78 μs
@@ -558,7 +558,7 @@ Multiple socket pairs operating concurrently (64-byte messages).
 
 [cols="1,1,1,1,1,1,1", options="header"]
 |===
-| Connections | Corosio Throughput | Asio Coro Throughput | Asio CB Throughput | Corosio Mean | Asio Coro Mean | Asio CB Mean
+| Connections | Corosio Throughput | Asio Coroutine Throughput | Asio CB Throughput | Corosio Mean | Asio Coroutine Mean | Asio CB Mean
 
 | 1
 | *86.79 Kops/s*
@@ -631,7 +631,7 @@ Multiple socket pairs operating concurrently (64-byte messages).
 
 [cols="1,1,1,1,1,1,1", options="header"]
 |===
-| Threads | Corosio Mean | Asio Coro Mean | Asio CB Mean | Corosio p99 | Asio Coro p99 | Asio CB p99
+| Threads | Corosio Mean | Asio Coroutine Mean | Asio CB Mean | Corosio p99 | Asio Coroutine p99 | Asio CB p99
 
 | 1
 | 393.50 μs
@@ -747,7 +747,7 @@ Multiple timers firing at 15 ms intervals concurrently.
 
 [cols="1,1,1,1,1,1,1", options="header"]
 |===
-| Timers | Corosio Mean | Asio Coro Mean | Asio CB Mean | Corosio p99 | Asio Coro p99 | Asio CB p99
+| Timers | Corosio Mean | Asio Coroutine Mean | Asio CB Mean | Corosio p99 | Asio Coroutine p99 | Asio CB p99
 
 | 10
 | 15.39 ms
@@ -816,7 +816,7 @@ The handler dispatch results tell a nuanced story across the three implementatio
 
 [cols="1,1,1,1", options="header"]
 |===
-| Pattern | Corosio vs Asio Coro | Corosio vs Asio CB | Notes
+| Pattern | Corosio vs Asio Coroutine | Corosio vs Asio CB | Notes
 
 | Single-threaded
 | +9%
@@ -876,7 +876,7 @@ Timer schedule/cancel throughput is a notable gap — Asio's timer operations ar
 |===
 | Component | Assessment
 
-| *Handler Dispatch (vs Asio Coro)*
+| *Handler Dispatch (vs Asio Coroutine)*
 | Corosio 9-50% faster
 
 | *Handler Dispatch (vs Asio CB)*

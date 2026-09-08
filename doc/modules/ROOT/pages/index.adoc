@@ -20,19 +20,19 @@ C++20 coroutines. Every operation returns an awaitable that integrates with
 the _IoAwaitable_ protocol, ensuring your coroutines resume on the correct
 executor without manual dispatch.
 
-* **io_context** — Event loop for processing asynchronous operations
-* **tcp_socket** — Asynchronous TCP socket with connect, read, and write
-* **tcp_acceptor** — TCP listener for accepting incoming connections
-* **tcp_server** — Server framework with worker pools
-* **udp_socket** — Asynchronous UDP socket for datagrams (including multicast)
-* **local_stream_socket** — Unix domain stream socket for local IPC
-* **local_stream_acceptor** — Unix domain stream listener
-* **local_datagram_socket** — Unix domain datagram socket for local IPC
-* **resolver** — Asynchronous DNS resolution
-* **delay()** / **timeout()**: stateless delays and deadline racing for coroutines
-* **signal_set** — Asynchronous signal handling
-* **stream_file** / **random_access_file** — Asynchronous file I/O
-* **openssl_stream** / **wolfssl_stream** — TLS encryption (OpenSSL or WolfSSL)
+* cpp:io_context[] — Event loop for processing asynchronous operations
+* cpp:tcp_socket[] — Asynchronous TCP socket with connect, read, and write
+* cpp:tcp_acceptor[] — TCP listener for accepting incoming connections
+* cpp:tcp_server[] — Server framework with worker pools
+* cpp:udp_socket[] — Asynchronous UDP socket for datagrams (including multicast)
+* cpp:local_stream_socket[] — Unix domain stream socket for local IPC
+* cpp:local_stream_acceptor[] — Unix domain stream listener
+* cpp:local_datagram_socket[] — Unix domain datagram socket for local IPC
+* cpp:resolver[] — Asynchronous DNS resolution
+* cpp:delay[] / cpp:timeout[]: stateless delays and deadline racing for coroutines
+* cpp:signal_set[] — Asynchronous signal handling
+* cpp:stream_file[] / cpp:random_access_file[] — Asynchronous file I/O
+* cpp:openssl_stream[] / cpp:wolfssl_stream[] — TLS encryption (OpenSSL or WolfSSL)
 
 == What This Library Does Not Do
 

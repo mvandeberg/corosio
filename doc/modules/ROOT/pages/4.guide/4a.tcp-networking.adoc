@@ -708,14 +708,14 @@ listening socket.
 
 Corosio wraps the complexity of TCP programming in a coroutine-friendly API:
 
-* **tcp_socket** — Connect to servers, send and receive data over TCP
-* **udp_socket** — Send and receive datagrams over UDP
-* **tcp_acceptor** — Listen for and accept incoming TCP connections
-* **local_stream_socket** — Stream-oriented Unix domain sockets for local IPC
-* **local_datagram_socket** — Datagram-oriented Unix domain sockets for local IPC
-* **resolver** — Translate hostnames to IP addresses
-* **endpoint** — Represent IP addresses and ports
-* **local_endpoint** — Represent Unix socket paths
+* cpp:tcp_socket[] — Connect to servers, send and receive data over TCP
+* cpp:udp_socket[] — Send and receive datagrams over UDP
+* cpp:tcp_acceptor[] — Listen for and accept incoming TCP connections
+* cpp:local_stream_socket[] — Stream-oriented Unix domain sockets for local IPC
+* cpp:local_datagram_socket[] — Datagram-oriented Unix domain sockets for local IPC
+* cpp:resolver[] — Translate hostnames to IP addresses
+* cpp:endpoint[] — Represent IP addresses and ports
+* cpp:local_endpoint[] — Represent Unix socket paths
 
 All operations are asynchronous and return awaitables. You don't manage raw
 socket handles or deal with platform-specific APIs directly.

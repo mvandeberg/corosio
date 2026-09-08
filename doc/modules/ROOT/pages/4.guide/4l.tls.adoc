@@ -30,10 +30,10 @@ include::example$snippets/4l_tls.cpp[tag=assume]
 TLS (Transport Layer Security) encrypts data on TCP connections, providing
 confidentiality, integrity, and authentication. Corosio supports TLS through:
 
-* **tls_context** — Portable configuration for certificates, keys, and options
-* **tls_stream** — Abstract base class adding handshake and shutdown
-* **wolfssl_stream** — TLS implementation using WolfSSL
-* **openssl_stream** — TLS implementation using OpenSSL
+* cpp:tls_context[] — Portable configuration for certificates, keys, and options
+* cpp:tls_stream[] — Abstract base class adding handshake and shutdown
+* cpp:wolfssl_stream[] — TLS implementation using WolfSSL
+* cpp:openssl_stream[] — TLS implementation using OpenSSL
 
 A verified-safe client trusts the system CAs, requires a peer certificate,
 and checks the hostname:
