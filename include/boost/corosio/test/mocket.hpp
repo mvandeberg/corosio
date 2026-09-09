@@ -528,7 +528,7 @@ public:
     supports provide/expect buffers for test instrumentation.
     The socket is the "peer" end with no test instrumentation.
 
-    Optional max_read_size and max_write_size parameters limit the
+    Optional `max_read_size` and `max_write_size` parameters limit the
     number of bytes transferred per I/O operation on the mocket,
     simulating chunked network delivery for testing purposes.
 

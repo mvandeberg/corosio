@@ -89,7 +89,28 @@ const LIST_ITEM = /^@li\b\s*/;
 // So the title is emitted as its own paragraph. A bare `@par` with no title is
 // Doxygen's plain paragraph break and contributes nothing.
 const PAR_TITLE = /^@par\b\s*/;
+// The TARGET is re-emitted as a code span, not as bare text. `@ref X`, `@p X` and
+// `@c X` all render as a link or as monospace in the real reference, so a bare `X`
+// in the corpus is a lie about the source AND a guaranteed Vale.Spelling false
+// positive: the speller sees an identifier sitting in running prose. Measured: the
+// bare form put 21 `@see` targets and 13 `@ref` targets into the docstring
+// Vale.Spelling backlog, none of them defects, and backticking them in the HEADER
+// instead would have broken the link or the parameter binding. `.vale.ini`'s
+// TokenIgnores skips backtick spans, so the code-span form is both faithful and
+// quiet.
 const INLINE_REFS = /@(ref|p|c)\s+(\S+)/g;
+// The capture is `\S+` so an odd target still loses its command word, but trailing
+// punctuation must stay OUTSIDE the span: `@ref io_stream,` is a reference followed
+// by a comma, and `` `io_stream,` `` would put the comma inside the symbol.
+const INLINE_REFS_SUB = (_m, _cmd, target) => {
+  const m = /^([*&]*[A-Za-z_][A-Za-z0-9_:]*(?:\(\))?)([^\w)]*)$/.exec(target);
+  return m ? `\`${m[1]}\`${m[2]}` : `\`${target}\``;
+};
+// `@see` takes a comma-separated list of symbols; each identifier-shaped item gets
+// the same treatment. Prose in a @see line is left alone.
+const seeList = (text) => text.replace(
+  /(^|,\s*)([A-Za-z_][A-Za-z0-9_:]*)(?=\s*(?:,|$))/g,
+  (_, sep, id) => `${sep}\`${id}\``);
 
 // A Doxygen `@li` item is a sentence, and the extractor used to hand Vale a run
 // of them as consecutive lines with the `@li` keyword still in the text. Two
@@ -124,25 +145,34 @@ function cleanBlock(raw) {
     const li = LIST_ITEM.exec(line);
     if (li) {
       if (item !== null) flush(); else separate();
-      item = line.slice(li[0].length).replace(INLINE_REFS, '$2');
+      item = line.slice(li[0].length).replace(INLINE_REFS, INLINE_REFS_SUB);
       continue;
     }
     const par = PAR_TITLE.exec(line);
     if (par) {
       flush();
       separate();
-      const title = line.slice(par[0].length).replace(INLINE_REFS, '$2').trim();
-      if (title) prose.push(title, '');
+      const title = line.slice(par[0].length).replace(INLINE_REFS, INLINE_REFS_SUB).trim();
+      // `@par !example <id>` is a DIRECTIVE for the reference-snippets extension,
+      // not a section title: the id names a compiled source under
+      // test/doc/reference and never reaches the reader as prose. Linting it put
+      // ids like `connect_and_read` and `bind_listen_accept` into the
+      // Vale.Spelling backlog as permanent, unfixable findings.
+      if (title && !title.startsWith('!')) prose.push(title, '');
       continue;
     }
     // A non-blank, non-tag line under an open item is its continuation.
     if (item !== null) {
-      if (!line.startsWith('@')) { item += ` ${line.replace(INLINE_REFS, '$2')}`; continue; }
+      if (!line.startsWith('@')) { item += ` ${line.replace(INLINE_REFS, INLINE_REFS_SUB)}`; continue; }
       flush();
     }
     line = line.replace(NAMED_TAGS, '');
-    line = line.replace(BARE_TAGS, '');
-    line = line.replace(INLINE_REFS, '$2');
+    {
+      const wasSee = /^@see\b/.test(line);
+      line = line.replace(BARE_TAGS, '');
+      if (wasSee) line = seeList(line);
+    }
+    line = line.replace(INLINE_REFS, INLINE_REFS_SUB);
     prose.push(line);
   }
   flush();

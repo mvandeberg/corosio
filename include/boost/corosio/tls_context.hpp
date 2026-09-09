@@ -746,7 +746,7 @@ public:
         results.
 
         The callback receives the built-in verification result so far and
-        a verify_context describing the certificate being verified. Return
+        a `verify_context` describing the certificate being verified. Return
         `true` to accept the certificate, `false` to reject. Inspect the
         certificate portably via `verify_context::certificate()` (its DER
         encoding) — for example to pin a specific certificate.

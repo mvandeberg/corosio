@@ -57,7 +57,7 @@ namespace boost::corosio {
 
     @par Semantics
     Wraps the platform TCP/IP stack. Operations dispatch to
-    OS socket APIs via the io_context reactor (epoll, IOCP,
+    OS socket APIs via the `io_context` reactor (epoll, IOCP,
     kqueue). Satisfies @ref capy::Stream.
 
     @par Example
@@ -140,7 +140,7 @@ public:
 
         /** Request cancellation of pending asynchronous operations.
 
-            All outstanding operations complete with operation_canceled error.
+            All outstanding operations complete with `operation_canceled` error.
             Check `ec == cond::canceled` for portable comparison.
         */
         virtual void cancel() noexcept = 0;
@@ -357,12 +357,12 @@ public:
         @param ep The remote endpoint to connect to.
 
         @return An awaitable that completes with `io_result<>`.
-            Returns success (default error_code) on successful connection,
+            Returns success (default `error_code`) on successful connection,
             or an error code on failure including:
-            - connection_refused: No server listening at endpoint
-            - timed_out: Connection attempt timed out
-            - network_unreachable: No route to host
-            - operation_canceled: Cancelled via stop_token or cancel().
+            - `connection_refused`: No server listening at endpoint
+            - `timed_out`: Connection attempt timed out
+            - `network_unreachable`: No route to host
+            - `operation_canceled`: Cancelled via stop_token or cancel().
                 Check `ec == cond::canceled` for portable comparison.
 
         If the socket needs to be opened and the open fails, the

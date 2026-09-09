@@ -70,13 +70,13 @@ namespace boost::corosio {
     @par !example running_the_server
 
     @par Graceful Shutdown
-    To shut down gracefully, call @ref stop then drain the io_context:
+    To shut down gracefully, call @ref stop then drain the `io_context`:
     @par !example graceful_shutdown
 
     @par Restart After Stop
     The server can be restarted after a complete shutdown cycle.
-    You must drain the io_context, call @ref join, and restart the
-    io_context itself (`ioc.restart()`) before restarting:
+    You must drain the `io_context`, call @ref join, and restart the
+    `io_context` itself (`ioc.restart()`) before restarting:
     @par !example restart_after_stop
 
     @par WARNING: What NOT to Do
@@ -623,7 +623,7 @@ public:
         @pre At least one endpoint bound via @ref bind.
         @pre Workers provided via @ref set_workers.
         @pre If restarting, @ref join must have completed first, and the
-            io_context must have been restarted (`ioc.restart()`).
+            `io_context` must have been restarted (`ioc.restart()`).
 
         @par Effects
         Creates one accept coroutine per bound endpoint. Each coroutine
@@ -710,7 +710,7 @@ public:
 
         @par Thread Safety
         May be called from any thread, but deadlocks if called
-        from within the io_context event loop or from a worker coroutine.
+        from within the `io_context` event loop or from a worker coroutine.
 
         @see stop, start
     */

@@ -53,7 +53,7 @@ namespace boost::corosio {
 
     @par Semantics
     Wraps the platform TCP listener. Operations dispatch to
-    OS accept APIs via the io_context reactor.
+    OS accept APIs via the `io_context` reactor.
 
     @par Example
     @par !example convenience_construction
@@ -362,7 +362,7 @@ public:
         @return An awaitable that completes with `io_result<>`.
             Returns success on successful accept, or an error code on
             failure including:
-            - operation_canceled: Cancelled via stop_token or cancel().
+            - `operation_canceled`: Cancelled via stop_token or cancel().
                 Check `ec == cond::canceled` for portable comparison.
 
         A closed acceptor completes with `errc::bad_file_descriptor`.
@@ -403,7 +403,7 @@ public:
             On success the payload is the connected peer socket; on failure
             (including cancellation) the error code is set and the payload
             socket is unconnected. Errors include:
-            - operation_canceled: Cancelled via stop_token or cancel().
+            - `operation_canceled`: Cancelled via stop_token or cancel().
                 Check `ec == cond::canceled` for portable comparison.
 
         A closed acceptor completes with `errc::bad_file_descriptor`.
@@ -641,7 +641,7 @@ public:
 
         /** Cancel any pending asynchronous operations.
 
-            All outstanding operations complete with operation_canceled error.
+            All outstanding operations complete with `operation_canceled` error.
         */
         virtual void cancel() noexcept = 0;
 

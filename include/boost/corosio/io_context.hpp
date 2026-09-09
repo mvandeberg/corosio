@@ -135,7 +135,7 @@ struct io_context_options
 
         With SQPOLL, the kernel forks a thread that busy-polls the
         submission ring. Submission becomes a userspace-only memory
-        store, which eliminates the io_uring_enter syscall on the submit
+        store, which eliminates the `io_uring_enter` syscall on the submit
         path. Most useful for sustained traffic. Idle thread parks
         after `sq_thread_idle_ms` of no activity.
 
@@ -185,7 +185,7 @@ effective_concurrency_hint(
 
 /** Runs asynchronous operations and owns the I/O backend that drives them.
 
-    The io_context provides an execution environment for async
+    The `io_context` provides an execution environment for async
     operations. It maintains a queue of pending work items and
     processes them when `run()` is called.
 
@@ -669,7 +669,7 @@ public:
 
     /** Post a bare coroutine handle for deferred execution.
 
-        Heap-allocates a scheduler_op to wrap the handle. A caller
+        Heap-allocates a `scheduler_op` to wrap the handle. A caller
         that already owns a `scheduler_op` can post it directly via
         the `post(scheduler_op*)` overload to avoid the allocation.
 

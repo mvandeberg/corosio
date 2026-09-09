@@ -98,9 +98,9 @@ emplace_delay_timer(std::optional<timer>& t, capy::execution_context& ctx)
     resumes immediately with `error::canceled`. If stop is
     requested while suspended, the pending wait is cancelled and
     the coroutine resumes with `error::canceled`. Requesting stop from
-    another thread while the io_context runs in single_threaded mode is
-    not permitted by io_context's threading rules. That mode is
-    auto-enabled at concurrency_hint == 1. Cross-thread cancellation
+    another thread while the `io_context` runs in `single_threaded` mode is
+    not permitted by `io_context`'s threading rules. That mode is
+    auto-enabled at `concurrency_hint` == 1. Cross-thread cancellation
     requires a multi-threaded-capable context.
 
     @see delay
@@ -359,7 +359,7 @@ delay(std::chrono::steady_clock::time_point tp) noexcept
     points already reached complete synchronously.
 
     @note `Clock::now()` and `Traits::to_wait_duration` are invoked
-    on the io_context's run thread and must not throw or block.
+    on the `io_context`'s run thread and must not throw or block.
 
     @par Example
     @par !example system_clock_deadline

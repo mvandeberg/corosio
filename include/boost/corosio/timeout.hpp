@@ -41,8 +41,8 @@ namespace boost::corosio {
     If the parent's stop token is activated, the inner awaitable
     is cancelled and its cancellation result is returned. Requesting
     stop from another thread requires a multi-threaded-capable
-    io_context; a context running in single_threaded mode
-    (auto-enabled at concurrency_hint == 1) does not permit
+    `io_context`; a context running in `single_threaded` mode
+    (auto-enabled at `concurrency_hint` == 1) does not permit
     cross-thread cancellation.
 
     @par Example

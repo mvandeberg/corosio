@@ -8,7 +8,7 @@
 // Official repository: https://github.com/cppalliance/corosio
 //
 
-/** @file native_socket_option.hpp
+/** @file `native_socket_option`.hpp
 
     Inline socket option types using platform-specific constants.
     All methods are `constexpr` or trivially inlined, giving zero

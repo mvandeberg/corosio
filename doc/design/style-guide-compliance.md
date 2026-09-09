@@ -23,7 +23,7 @@ as follow-ups with no owner in this plan.
 | 0 — infrastructure | **done** — toolkit ported, bite-tested, CI wired, baseline seeded |
 | 1 — A1/E2/A6/ANCHOR/B5 | **done** — all four checks at zero |
 | 2 — B2/B3 retagging | **done** — B2 at zero, SHAPE clean and proven live |
-| 3 — B1 `cpp:` conversion | **done** — 186 backtick spans + 30 bare names; residual recorded under phase 3 |
+| 3 — B1 `cpp:` conversion | **done** — pages: 186 backtick spans + 30 bare names. Docstrings: 93 bare identifiers backticked and three Doxygen extractor fixes; corpus 420 → 62 |
 | 4 — C11 `@pre` | **done** — no `@par Preconditions` remains |
 | 5 — C9/C10 | **done** — both rules at zero on both corpora |
 | 6 — C4 present simple | **done** — both rules at zero on both corpora |
@@ -376,6 +376,21 @@ member names page by page.
 feature lists and 2 in a thread-safety table. `accept.txt` absorbs the genuine prose
 words. Verified against the built site: zero unresolved-reference warnings, zero
 literal `cpp:` strings in the HTML.
+
+**Docstring half (added after the phases were first declared done).** B1 was
+originally scoped to `doc/modules/ROOT/pages` only, which left 214 bare Corosio
+identifiers in header docstrings — the same defect class, in the published
+reference. The remedy there is a code span, not a `cpp:` macro: the house convention
+runs 1179 backticks to 197 `@ref`, and `@ref` cannot resolve a name with no Corosio
+reference page (`operation_canceled` is a `std::errc`). 93 were backticked in the
+public headers; `detail/` was left alone because `extract-docstrings.mjs` excludes it
+as implementation-defined.
+
+Most of the backlog turned out not to be a docstring defect at all. Three extractor
+fixes — `@ref`/`@p`/`@c` and `@see` targets re-emitted as code spans, `@par !example`
+directives dropped — removed findings that could never have been fixed in a header,
+because backticking them there would break a link or a parameter binding. Corpus
+420 → 62, `Vale.Spelling` 389 → 24. Details in `doc/lint/README.md`.
 
 **Residual, deliberate.** About 26 bare type names stay unlinked. Most are the concept
 used as an English noun — "binds to a local endpoint", "the resolver may return

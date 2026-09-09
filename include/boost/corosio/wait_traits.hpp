@@ -43,7 +43,7 @@ struct wait_traits
         non-positive result degrades to reactor-rate re-checking.
 
         @pre Must not throw and must not block — invoked on the
-            io_context's run thread, including from the timer
+            `io_context`'s run thread, including from the timer
             completion path.
 
         @param d The remaining time until the deadline.

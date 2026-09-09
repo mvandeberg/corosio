@@ -41,7 +41,7 @@ enum class tls_role
 /** Abstract base class for TLS streams.
 
     This class provides a runtime-polymorphic interface for TLS
-    implementations. Derived classes (openssl_stream, wolfssl_stream)
+    implementations. Derived classes (`openssl_stream`, `wolfssl_stream`)
     implement the virtual functions to provide backend-specific
     TLS functionality.
 

@@ -113,7 +113,7 @@ connect(Socket& s, Iter begin, Iter end, ConnectCondition cond);
 
     @return An awaitable completing with
         `capy::io_result<typename Socket::endpoint_type>`:
-        - on success: default error_code and the connected endpoint;
+        - on success: default `error_code` and the connected endpoint;
         - on failure of all attempts: the error from the last attempt
           and a default-constructed endpoint;
         - on empty range: `std::errc::no_such_device_or_address` and a
@@ -223,7 +223,7 @@ connect(Socket& s, Range endpoints, ConnectCondition cond)
     @param end One past the last candidate.
 
     @return An awaitable completing with `capy::io_result<Iter>`:
-        - on success: default error_code and the iterator of the
+        - on success: default `error_code` and the iterator of the
           successful endpoint;
         - on failure of all attempts: the error from the last attempt
           and `end`;

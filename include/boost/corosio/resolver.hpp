@@ -37,7 +37,7 @@ namespace boost::corosio {
 
 /** Bitmask flags for resolver queries.
 
-    These flags correspond to the hints parameter of getaddrinfo.
+    These flags correspond to the hints parameter of `getaddrinfo`.
 */
 enum class resolve_flags : unsigned int
 {
@@ -69,7 +69,7 @@ enum class resolve_flags : unsigned int
     all_matching = 0x100
 };
 
-/** Combine two resolve_flags. */
+/** Combine two `resolve_flags`. */
 inline resolve_flags
 operator|(resolve_flags a, resolve_flags b) noexcept
 {
@@ -77,7 +77,7 @@ operator|(resolve_flags a, resolve_flags b) noexcept
         static_cast<unsigned int>(a) | static_cast<unsigned int>(b));
 }
 
-/** Combine two resolve_flags. */
+/** Combine two `resolve_flags`. */
 inline resolve_flags&
 operator|=(resolve_flags& a, resolve_flags b) noexcept
 {
@@ -85,7 +85,7 @@ operator|=(resolve_flags& a, resolve_flags b) noexcept
     return a;
 }
 
-/** Intersect two resolve_flags. */
+/** Intersect two `resolve_flags`. */
 inline resolve_flags
 operator&(resolve_flags a, resolve_flags b) noexcept
 {
@@ -93,7 +93,7 @@ operator&(resolve_flags a, resolve_flags b) noexcept
         static_cast<unsigned int>(a) & static_cast<unsigned int>(b));
 }
 
-/** Intersect two resolve_flags. */
+/** Intersect two `resolve_flags`. */
 inline resolve_flags&
 operator&=(resolve_flags& a, resolve_flags b) noexcept
 {
@@ -103,7 +103,7 @@ operator&=(resolve_flags& a, resolve_flags b) noexcept
 
 /** Bitmask flags for reverse resolver queries.
 
-    These flags correspond to the flags parameter of getnameinfo.
+    These flags correspond to the flags parameter of `getnameinfo`.
 */
 enum class reverse_flags : unsigned int
 {
@@ -123,7 +123,7 @@ enum class reverse_flags : unsigned int
     datagram_service = 0x08
 };
 
-/** Combine two reverse_flags. */
+/** Combine two `reverse_flags`. */
 inline reverse_flags
 operator|(reverse_flags a, reverse_flags b) noexcept
 {
@@ -131,7 +131,7 @@ operator|(reverse_flags a, reverse_flags b) noexcept
         static_cast<unsigned int>(a) | static_cast<unsigned int>(b));
 }
 
-/** Combine two reverse_flags. */
+/** Combine two `reverse_flags`. */
 inline reverse_flags&
 operator|=(reverse_flags& a, reverse_flags b) noexcept
 {
@@ -139,7 +139,7 @@ operator|=(reverse_flags& a, reverse_flags b) noexcept
     return a;
 }
 
-/** Intersect two reverse_flags. */
+/** Intersect two `reverse_flags`. */
 inline reverse_flags
 operator&(reverse_flags a, reverse_flags b) noexcept
 {
@@ -147,7 +147,7 @@ operator&(reverse_flags a, reverse_flags b) noexcept
         static_cast<unsigned int>(a) & static_cast<unsigned int>(b));
 }
 
-/** Intersect two reverse_flags. */
+/** Intersect two `reverse_flags`. */
 inline reverse_flags&
 operator&=(reverse_flags& a, reverse_flags b) noexcept
 {
@@ -167,8 +167,8 @@ operator&=(reverse_flags& a, reverse_flags b) noexcept
     operations.
 
     @par Semantics
-    Wraps platform DNS resolution (getaddrinfo/getnameinfo).
-    Operations dispatch to OS resolver APIs via the io_context
+    Wraps platform DNS resolution (`getaddrinfo`/`getnameinfo`).
+    Operations dispatch to OS resolver APIs via the `io_context`
     thread pool.
 
     @par Example
@@ -392,7 +392,7 @@ public:
     /** Backend interface for DNS resolution operations.
 
         Platform backends derive from this to implement forward and
-        reverse DNS resolution via getaddrinfo/getnameinfo.
+        reverse DNS resolution via `getaddrinfo`/`getnameinfo`.
     */
     struct implementation : io_object::implementation
     {

@@ -60,13 +60,13 @@ namespace boost::corosio {
 
     @par Thread Safety
     Distinct objects: Safe.@n
-    Shared objects: Unsafe. A signal_set must not have concurrent
+    Shared objects: Unsafe. A `signal_set` must not have concurrent
     wait operations.
 
     @par Semantics
-    Wraps platform signal handling (sigaction on POSIX, C runtime
+    Wraps platform signal handling (`sigaction` on POSIX, C runtime
     signal() on Windows). Operations dispatch to OS signal APIs
-    via the io_context reactor.
+    via the `io_context` reactor.
 
     @par Supported Signals
     On Windows, the following signals are supported:
@@ -154,7 +154,7 @@ public:
     /** Define backend hooks for signal set operations.
 
         Platform backends derive from this to provide signal
-        registration via sigaction (POSIX) or the C runtime
+        registration via `sigaction` (POSIX) or the C runtime
         signal() function (Windows).
     */
     struct implementation : io_signal_set::implementation
@@ -287,7 +287,7 @@ public:
         specified flags. It has no effect if the signal is already
         in the set with the same flags.
 
-        Another signal_set may already have registered the signal
+        Another `signal_set` may already have registered the signal
         globally. If the flags then differ, an error is returned unless
         one of them has the `dont_care` flag.
 

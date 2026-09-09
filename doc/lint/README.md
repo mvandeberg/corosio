@@ -18,7 +18,7 @@ rationale. What is Corosio-specific is recorded here.
 | Script | What it checks |
 |---|---|
 | `doc-lint.mjs` | Structural AsciiDoc/nav rules (A1, A6, B2, ANCHOR, SHAPE, D2). JSON on stdout. |
-| `extract-docstrings.mjs` | Extracts header docstrings into `.docstrings/*.adoc` so Vale can lint them. |
+| `extract-docstrings.mjs` | Extracts header docstrings into `.docstrings/*.adoc` so Vale can lint them. Doxygen targets (`@ref`/`@p`/`@c`/`@see`) are re-emitted as code spans, and `@par !example` directives are dropped — see below. |
 | `sentence-length.mjs` | **The authority for C2** (no sentence over 25 words), over both corpora. |
 | `check-include-tags.mjs` | Every `include::example$…[tag=…]` resolves to a live tag in a compiled source. |
 | `mrdocs-warnings.mjs` | Runs MrDocs directly and parses its reference-surface warnings. |
@@ -139,6 +139,39 @@ pin that skipped this check on the first reseed. Promote it only alongside a pin
 >   --gate 'vale_adoc:(Corosio\.SimpleTense|Corosio\.NoFluff|Corosio\.Terminology)$' \
 >   --gate 'vale_docstrings:(Corosio\.SimpleTense|Corosio\.NoFluff|Corosio\.Terminology)$'
 > ```
+
+## Linting Doxygen prose
+
+Vale is a plain-text speller; Doxygen prose is not plain text. Three extractor
+behaviours exist because of that, and each one removed a class of finding that could
+never have been fixed in a header:
+
+* **`@ref X`, `@p X`, `@c X` re-emit as `` `X` ``, not as bare `X`.** All three render
+  as a link or as monospace in the real reference, so bare text was a lie about the
+  source *and* a guaranteed `Vale.Spelling` hit. Backticking them in the header
+  instead would have broken the link or the parameter binding.
+* **`@see A, B, C` backticks each identifier-shaped item.** Doxygen auto-links a
+  `@see` list; `@see epoll_t, select_t, kqueue_t, iocp_t` alone accounted for 21
+  findings.
+* **`@par !example <id>` is dropped.** The id names a compiled source under
+  `test/doc/reference` for the reference-snippets extension. It is a machine
+  directive and never reaches a reader, so ids like `connect_and_read` were
+  permanent unfixable findings.
+
+Together with backticking 93 genuinely bare identifiers in the published headers,
+this took the docstring corpus from **420** findings to **62**, and `Vale.Spelling`
+from **389** to **24**. Trailing punctuation stays outside the span: `@ref io_stream,`
+becomes `` `io_stream` ``, not `` `io_stream,` ``.
+
+`detail/` headers are deliberately untouched by the B1 pass. `extract-docstrings.mjs`
+excludes them (and strips `namespace detail` blocks) because `mrdocs.yml` marks them
+implementation-defined, so no rule governs their prose and B1 is a reference rule.
+
+**Residual, 24 findings and non-gated.** Eight are `backend's`: C.1 lists bare
+"backend" as an Avoid term in favour of **I/O backend**, so that one is a real
+terminology item rather than noise, and silencing it in the vocabulary would hide the
+signal. The rest is a thin tail of single occurrences (`await_suspend`, `key_type`,
+`worker_base`, a few `native_*` names) sitting in `@param`/`@return` bodies.
 
 ## Corosio-specific configuration
 

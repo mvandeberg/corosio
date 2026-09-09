@@ -235,7 +235,7 @@ public:
 
 /** Endpoint format detection result.
 
-    Used internally by make_endpoint to determine
+    Used internally by `make_endpoint` to determine
     the format of an endpoint string.
 */
 enum class endpoint_format

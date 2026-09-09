@@ -255,3 +255,23 @@
 (?i)stop_tokens?
 (?i)acceptors?
 (?i)descriptors?
+
+# --- Reference-prose vocabulary (header docstrings) -----------------------------
+#
+# Words the docstring corpus uses as English or as proper nouns. Symbol names are
+# NOT here -- the docstring B1 pass backticked those instead, which is the house
+# convention (1179 backticks against 197 @ref).
+(?i)bitwise
+(?i)unicast
+(?i)devirtualized
+(?i)devirtualization
+(?i)inlined
+(?i)parameteriz(e|es|ed|ing)
+(?i)deallocating
+(?i)downcasted
+(?i)unconfigured
+(?i)bursty
+(?i)schannel
+(?i)winsock
+(?i)openssl
+(?i)wolfssl

@@ -57,7 +57,7 @@ namespace boost::corosio {
 
     @par Semantics
     Wraps the platform Unix domain socket stack. Operations
-    dispatch to OS socket APIs via the io_context backend
+    dispatch to OS socket APIs via the `io_context` backend
     (epoll, kqueue, select, or IOCP). Satisfies @ref capy::Stream.
 
     @par Example
@@ -139,7 +139,7 @@ public:
 
         /** Request cancellation of pending asynchronous operations.
 
-            All outstanding operations complete with operation_canceled error.
+            All outstanding operations complete with `operation_canceled` error.
             Check `ec == cond::canceled` for portable comparison.
         */
         virtual void cancel() noexcept = 0;

@@ -399,7 +399,7 @@ public:
         a default-constructed socket.
 
         @return An awaitable that completes with
-            io_result<local_stream_socket>.
+            io_result<`local_stream_socket`>.
 
         A closed acceptor reports `errc::bad_file_descriptor`.
         On failure the returned socket is default-constructed and

@@ -74,10 +74,10 @@ namespace boost::corosio {
     Distinct objects: Safe.@n
     Shared objects: Unsafe. A socket must not have concurrent
     operations of the same type (e.g., two simultaneous
-    recv_from). One send and one recv may be in flight
-    simultaneously. Both recv and recv_from share the
+    `recv_from`). One send and one `recv` may be in flight
+    simultaneously. Both `recv` and `recv_from` share the
     same internal read slot, so they must not overlap; likewise
-    send and send_to share the write slot.
+    send and `send_to` share the write slot.
 
     @par Example
     @par !example connectionless_and_connected
@@ -96,7 +96,7 @@ public:
     */
     struct implementation : io_object::implementation
     {
-        /** Initiate an asynchronous send_to operation.
+        /** Initiate an asynchronous `send_to` operation.
 
             @param h Coroutine handle to resume on completion.
             @param ex Executor for dispatching the completion.
@@ -118,7 +118,7 @@ public:
             std::error_code* ec,
             std::size_t* bytes_out) = 0;
 
-        /** Initiate an asynchronous recv_from operation.
+        /** Initiate an asynchronous `recv_from` operation.
 
             @param h Coroutine handle to resume on completion.
             @param ex Executor for dispatching the completion.
@@ -177,7 +177,7 @@ public:
             std::error_code* ec,
             std::size_t* bytes_out) = 0;
 
-        /** Initiate an asynchronous connected recv operation.
+        /** Initiate an asynchronous connected `recv` operation.
 
             @param h Coroutine handle to resume on completion.
             @param ex Executor for dispatching the completion.
@@ -238,7 +238,7 @@ public:
 
         /** Request cancellation of pending asynchronous operations.
 
-            All outstanding operations complete with operation_canceled
+            All outstanding operations complete with `operation_canceled`
             error. Check ec == cond::canceled for portable comparison.
         */
         virtual void cancel() noexcept = 0;
@@ -545,7 +545,7 @@ public:
     /** Bind the socket to a local endpoint.
 
         Associates the socket with a local address (filesystem path).
-        Required before calling recv_from in connectionless mode.
+        Required before calling `recv_from` in connectionless mode.
 
         @param ep The local endpoint to bind to.
 
@@ -603,7 +603,7 @@ public:
     /** Send a datagram to the specified destination.
 
         Completes when the transport accepts the entire datagram
-        by the kernel. The bytes_transferred value equals the
+        by the kernel. The `bytes_transferred` value equals the
         datagram size on success.
 
         @param buf The buffer containing data to send.
@@ -639,7 +639,7 @@ public:
     /** Receive a datagram and capture the sender's endpoint.
 
         Completes when one datagram arrives. The
-        bytes_transferred value is the number of bytes copied
+        `bytes_transferred` value is the number of bytes copied
         into the buffer. If the buffer is smaller than the
         datagram, excess bytes are discarded (datagram
         semantics).

@@ -38,10 +38,10 @@ namespace boost::corosio {
 
     Two construction modes are supported:
 
-    - **Owning**: Pass stream by value. The wolfssl_stream takes
+    - **Owning**: Pass stream by value. The `wolfssl_stream` takes
       ownership and the stream is moved into internal storage.
 
-    - **Reference**: Pass stream by pointer. The wolfssl_stream
+    - **Reference**: Pass stream by pointer. The `wolfssl_stream`
       does not own the stream; the caller must ensure the stream
       outlives this object.
 
@@ -73,7 +73,7 @@ public:
 
         Takes ownership of the underlying stream by moving it into
         internal storage. The stream is destroyed when this
-        wolfssl_stream is destroyed.
+        `wolfssl_stream` is destroyed.
 
         @param stream The stream to take ownership of. Must satisfy
             `capy::Stream`.
@@ -91,7 +91,7 @@ public:
 
         Wraps the underlying stream without taking ownership. The
         caller must ensure the stream remains valid for the lifetime
-        of this wolfssl_stream.
+        of this `wolfssl_stream`.
 
         @param stream Pointer to the stream to wrap. Must satisfy
             `capy::Stream`.

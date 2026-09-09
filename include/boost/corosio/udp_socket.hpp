@@ -60,8 +60,8 @@ namespace boost::corosio {
     @par Thread Safety
     Distinct objects: Safe.@n
     Shared objects: Unsafe. A socket must not have concurrent
-    operations of the same type (e.g., two simultaneous recv_from).
-    One send_to and one recv_from may be in flight simultaneously.
+    operations of the same type (e.g., two simultaneous `recv_from`).
+    One `send_to` and one `recv_from` may be in flight simultaneously.
 
     @par Example
     @par !example udp_socket
@@ -79,7 +79,7 @@ public:
     */
     struct implementation : io_object::implementation
     {
-        /** Initiate an asynchronous send_to operation.
+        /** Initiate an asynchronous `send_to` operation.
 
             @param h Coroutine handle to resume on completion.
             @param ex Executor for dispatching the completion.
@@ -102,7 +102,7 @@ public:
             std::error_code* ec,
             std::size_t* bytes_out) = 0;
 
-        /** Initiate an asynchronous recv_from operation.
+        /** Initiate an asynchronous `recv_from` operation.
 
             @param h Coroutine handle to resume on completion.
             @param ex Executor for dispatching the completion.
@@ -140,7 +140,7 @@ public:
 
         /** Request cancellation of pending asynchronous operations.
 
-            All outstanding operations complete with operation_canceled
+            All outstanding operations complete with `operation_canceled`
             error. Check `ec == cond::canceled` for portable comparison.
         */
         virtual void cancel() noexcept = 0;
@@ -219,7 +219,7 @@ public:
             std::error_code* ec,
             std::size_t* bytes_out) = 0;
 
-        /** Initiate an asynchronous connected recv operation.
+        /** Initiate an asynchronous connected `recv` operation.
 
             @param h Coroutine handle to resume on completion.
             @param ex Executor for dispatching the completion.

@@ -7,7 +7,7 @@
 // Official repository: https://github.com/cppalliance/corosio
 //
 
-/** @file native_tcp.hpp
+/** @file `native_tcp`.hpp
 
     Inline TCP protocol type using platform-specific constants.
     All methods are `constexpr` or trivially inlined, giving zero
