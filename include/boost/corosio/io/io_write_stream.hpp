@@ -79,12 +79,12 @@ protected:
         @return Coroutine handle to resume immediately.
     */
     virtual std::coroutine_handle<> do_write_some(
-        std::coroutine_handle<>,
-        capy::executor_ref,
-        buffer_param,
-        std::stop_token,
-        std::error_code*,
-        std::size_t*) = 0;
+        std::coroutine_handle<> h,
+        capy::executor_ref ex,
+        buffer_param buffers,
+        std::stop_token token,
+        std::error_code* ec,
+        std::size_t* bytes) = 0;
 
     io_write_stream() noexcept = default;
 

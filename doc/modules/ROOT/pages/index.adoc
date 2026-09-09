@@ -90,7 +90,7 @@ and xref:4.guide/4b.concurrent-programming.adoc[Concurrent Programming] for back
 
 === Platform Support
 
-* Linux — epoll backend (x86_64, ARM64); io_uring planned
+* Linux — epoll backend (x86_64, ARM64); io_uring backend available, not the default
 * Windows — IOCP backend
 * macOS — kqueue backend (ARM64)
 * FreeBSD — kqueue backend

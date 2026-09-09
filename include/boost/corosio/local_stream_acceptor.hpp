@@ -564,11 +564,11 @@ public:
             @return Coroutine handle to resume immediately.
         */
         virtual std::coroutine_handle<> accept(
-            std::coroutine_handle<>,
-            capy::executor_ref,
-            std::stop_token,
-            std::error_code*,
-            io_object::implementation**) = 0;
+            std::coroutine_handle<> h,
+            capy::executor_ref ex,
+            std::stop_token token,
+            std::error_code* ec,
+            io_object::implementation** impl_out) = 0;
 
         /** Initiate an asynchronous wait for acceptor readiness.
 

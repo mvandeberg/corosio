@@ -518,9 +518,8 @@ public:
 
     /** Normalize after `getsockopt`.
 
-        No-op — `struct linger` is always returned at full size.
-
-        @param s The number of bytes actually written by `getsockopt`.
+        No-op — `struct linger` is always returned at full size, so the
+        byte count `getsockopt` reports is ignored.
     */
     void resize(std::size_t) noexcept {}
 };

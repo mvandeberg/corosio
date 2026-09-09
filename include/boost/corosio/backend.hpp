@@ -376,7 +376,7 @@ struct iocp_t
         @return Reference to the newly created scheduler.
     */
     BOOST_COROSIO_DECL static detail::scheduler&
-    construct(capy::execution_context&, unsigned concurrency_hint);
+    construct(capy::execution_context& ctx, unsigned concurrency_hint);
 };
 
 /// Tag value for selecting the IOCP backend.
