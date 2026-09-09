@@ -95,28 +95,33 @@ nothing. Measured on this corpus; see the bite-test log below.
 workflow, never locally: a local run differs from a CI run and would grandfather hundreds of
 local-vs-CI drift fingerprints.
 
-> **One grandfathered false positive.** The baseline carries
+> **A false positive that came and went.** An earlier baseline carried
 > `benchmark-report.adoc:#1:Google.OxfordComma` on the sentence "…comparable to its
 > unidirectional throughput, suggesting serialization between the read and write
 > paths." That is not a list needing an Oxford comma — "the read and write paths" is
 > a compound noun phrase and the comma opens a participial clause, which slips past the
 > rule's own guard against clause-introducers because "suggesting" is not in its
 > exemption list. Grandfathering a rule false positive is what the baseline is for;
-> rewriting sound prose to appease a heuristic would be worse. It surfaced only after
-> the vocabulary additions removed a `Vale.Spelling` alert that had been masking it at
-> the same position.
+> rewriting sound prose to appease a heuristic would be worse.
 >
-> `baseline.json` is **CI-authored** (`workflow_dispatch`, 2026-09-09T17:25Z) and is the
+> It surfaced only after the vocabulary additions removed a `Vale.Spelling` alert that had
+> been masking it at the same position, and it **vanished again** in the 2026-09-09T18:40Z
+> reseed with that page untouched — the same position-resolution artifact the
+> `.vale.ini` comment describes, running in the other direction. The analysis is kept
+> because the finding is not stable: if it reappears, it is still a false positive and the
+> prose should still be left alone.
+>
+> `baseline.json` is **CI-authored** (`workflow_dispatch`, 2026-09-09T18:38Z) and is the
 > reference point the strict gate compares against. Counts at the original local seed and in
 > the accepted reseed:
 >
 > | Check | Local seed | CI baseline |
 > |---|---|---|
-> | `vale_adoc` | 466 | 67 |
+> | `vale_adoc` | 466 | 66 |
 > | `vale_docstrings` | 785 | 55 |
 > | `sentence_length` | 204 | 71 (hard 1, advisory 70) |
 > | `doc_lint` | 93 | 3 (all D2, the documented carve-out) |
-> | `mrdocs_warnings` | 460 | 262 |
+> | `mrdocs_warnings` | 460 | 201 |
 >
 > Four reseeds were needed. The first was refused because the MrDocs version pin made
 > `mrdocs_warnings` report SKIPPED, which would have wiped a 460-fingerprint gated backlog.
