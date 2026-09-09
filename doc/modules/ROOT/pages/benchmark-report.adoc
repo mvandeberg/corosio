@@ -869,7 +869,7 @@ HTTP server performance is comparable across all three implementations at all co
 
 === Timers
 
-Timer schedule/cancel throughput is a notable gap — Asio's timer operations are approximately 10× faster. However, the gap narrows substantially for timer fire rate (8%) and disappears entirely for concurrent timer latency accuracy. Applications that create and cancel timers at very high rates may notice this difference; applications that primarily use timers for timeouts and delays will not.
+Timer schedule/cancel throughput is a notable gap — Asio's timer operations are approximately 10× faster. However, the gap narrows substantially for timer fire rate (8%). It disappears entirely for concurrent timer latency accuracy. Applications that create and cancel timers at very high rates may notice this difference; applications that primarily use timers for timeouts and delays do not.
 
 === Summary
 

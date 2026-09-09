@@ -65,7 +65,7 @@ Window size (16 bits):: The number of bytes the sender is willing to accept. Thi
 
 Checksum (16 bits):: Covers the TCP header, the payload, and a pseudo-header derived from the IP addresses and protocol number. If the checksum fails, the segment is discarded silently.
 
-The sequence and acknowledgment numbers are the core of TCP's reliability. By tracking which bytes have been sent and which have been acknowledged, TCP can detect gaps (lost packets) and fill them with retransmissions.
+The sequence and acknowledgment numbers are the core of TCP's reliability. By tracking which bytes it sent and which the peer acknowledged, TCP can detect gaps (lost packets) and fill them with retransmissions.
 
 == TCP vs. UDP: Choosing
 

@@ -623,7 +623,7 @@ public:
         @pre At least one endpoint bound via @ref bind.
         @pre Workers provided via @ref set_workers.
         @pre If restarting, @ref join must have completed first, and the
-            `io_context` must have been restarted (`ioc.restart()`).
+            `io_context` must be restarted (`ioc.restart()`).
 
         @par Effects
         Creates one accept coroutine per bound endpoint. Each coroutine

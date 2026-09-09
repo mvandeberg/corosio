@@ -35,6 +35,14 @@ extends: existence
 message: "Avoid needless future/perfect tense — prefer present simple (style guide C4): '%s'."
 level: warning
 ignorecase: true
+# `have been` and `had been` are the same present/past-perfect construct as
+# `has been`, which C4 names explicitly. Matching only the singular left a blind
+# spot a future author could write into freely: a raw grep found 8 live sites the
+# rule could not see (6 in published docstrings, 2 on pages), including one CI
+# surfaced only because a long single-line paragraph parses differently there.
+# All 8 were fixed when these tokens were added, so the rule stays at zero.
 tokens:
   - 'will\s'
   - 'has been'
+  - 'have been'
+  - 'had been'

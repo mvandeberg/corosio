@@ -146,7 +146,7 @@ Begin accepting connections:
 include::example$snippets/4k_tcp_server.cpp[tag=start,indent=0]
 ----
 
-Workers must have been provided via `set_workers()` before calling `start()`,
+Workers must be provided via `set_workers()` before calling `start()`,
 and at least one endpoint must be bound.
 
 After `start()`, the server:

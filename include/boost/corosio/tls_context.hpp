@@ -831,7 +831,7 @@ public:
     /** Add a Certificate Revocation List from memory.
 
         Adds a CRL to the verification store for checking whether
-        certificates have been revoked. CRLs are typically fetched
+        certificates are revoked. CRLs are typically fetched
         from the URLs in a certificate's CRL Distribution Points
         extension.
 
@@ -855,7 +855,7 @@ public:
     /** Add a Certificate Revocation List from a file.
 
         Adds a CRL to the verification store for checking whether
-        certificates have been revoked.
+        certificates are revoked.
 
         @param filename Path to a CRL file (DER or PEM format).
 

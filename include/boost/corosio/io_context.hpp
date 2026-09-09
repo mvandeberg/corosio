@@ -397,8 +397,8 @@ public:
 
     /** Process all pending work items.
 
-        This function blocks until all pending work items have been
-        executed or `stop()` is called. The context is stopped
+        This function blocks until it executes all pending work items,
+        or until `stop()` is called. The context is stopped
         when there is no more outstanding work.
 
         @note The context must be restarted with `restart()` before
@@ -429,8 +429,8 @@ public:
 
     /** Process work items for the specified duration.
 
-        This function blocks until work items have been executed for
-        the specified duration, or `stop()` is called. The context
+        This function blocks until it has executed work items for the
+        specified duration, or until `stop()` is called. The context
         is stopped when there is no more outstanding work.
 
         @note The context must be restarted with `restart()` before

@@ -77,6 +77,15 @@ tested against the **whole** fingerprint.
 `#N` is the Nth occurrence of that (head, tail) pair, **not a line number**, so inserting
 text above a finding does not rename it.
 
+**A local Vale run can under-report, so it is not sufficient evidence.** Local Vale
+missed a live `Corosio.SimpleTense` finding on `benchmark-report.adoc` that CI caught
+on the same commit — a long single-line paragraph that the Ruby asciidoctor in CI
+extracts as prose and the local JS build does not. Local reported 131 page findings
+against CI's 66 and still missed that one. For the gated rules, a raw `grep` over the
+sources is a useful independent check precisely because it has no extraction step:
+`grep -rn '\bwill\b|\bhas been\b|\bhave been\b'` found eight sites the rule could not
+see at all.
+
 **A Vale gate spec must never carry a leading `^`.** The check name is at the tail, so
 `^Corosio\.PartHeadings$` matches nothing and the comparator then reports
 `gated: true, gatedNew: 0` at **exit 0** — a gate that announces it is gating while checking

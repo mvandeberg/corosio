@@ -397,7 +397,7 @@ public:
         @param w The wait direction (read, write, or error).
 
         @return An awaitable that completes with `io_result<>`.
-            On success, no bytes have been consumed from the
+            On success, the wait consumes no bytes from the
             stream; a subsequent `read_some` (for read waits)
             returns the available data.
 
