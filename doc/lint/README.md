@@ -229,6 +229,35 @@ CI there (`continue-on-error: true`, in no gate spec). A check that cannot fail 
 so neither it nor `pa11y-ci` was ported. `baseline.mjs` and `baseline-diff.mjs` had their
 `a11y` branches removed rather than left dangling.
 
+## The 8 `unsupported HTML tag <tt>` warnings are not ours
+
+`mrdocs_warnings` carries eight `unsupported HTML tag <tt>` findings with **no file
+attribution** (`file: null`, fingerprinted `?:#N:`). They are **not fixable in Corosio**,
+and the trail is worth recording because it is not obvious:
+
+* `grep -rn '<tt>' include/ doc/ test/` returns **zero**. Capy returns zero too.
+* Boost.Asio's headers are full of `<tt>` (381 occurrences), which makes it the obvious
+  suspect — and it is wrong. `capy/buffers.hpp` only forward-declares
+  `namespace asio`; a preprocessor run (`clang++ -H`) over every public Corosio header
+  confirms `boost/asio/buffer.hpp` is **never reached**.
+* Preprocessing all 59 public headers yields 547 reachable files. Exactly one contains
+  `<tt>`: **libstdc++'s `bits/alloc_traits.h`**, which carries 10 of them in its own
+  Doxygen comments (`<tt> pointer_traits<pointer>::rebind<const value_type> </tt>`).
+
+MrDocs emits the warnings while extracting declarations, with no location, because they
+come from the standard library implementation it parses. Nothing in this repository can
+change them. They are also **environment-dependent**: a different libstdc++ version, or
+libc++, produces a different count, which is part of why local and CI `mrdocs_warnings`
+totals differ and why the `?:#N:` fingerprints reindex on any change.
+
+`mrdocs.yml` has `use-system-libc` and `use-system-stdlib` commented out. Turning them on
+would change which standard library MrDocs parses and might retire these eight, but it
+would also change the whole reference build; they are off deliberately and this is not a
+reason to flip them.
+
+Treat these eight the way Part E4 treats generator and theme output: permanently
+grandfathered, not a defect in authored content. **Do not spend time on them again.**
+
 ## F4 bite-test log
 
 Style-guide Part F4: **a check is not adopted until a planted violation has failed it.** A
