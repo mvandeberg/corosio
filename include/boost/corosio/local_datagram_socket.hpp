@@ -102,6 +102,7 @@ public:
             @param ex Executor for dispatching the completion.
             @param buf The buffer data to send.
             @param dest The destination endpoint.
+            @param flags Message flags (e.g. `message_flags::dont_route`).
             @param token Stop token for cancellation.
             @param ec Output error code.
             @param bytes_out Output bytes transferred.
@@ -124,6 +125,7 @@ public:
             @param ex Executor for dispatching the completion.
             @param buf The buffer to receive into.
             @param source Output endpoint for the sender's address.
+            @param flags Message flags (e.g. `message_flags::peek`).
             @param token Stop token for cancellation.
             @param ec Output error code.
             @param bytes_out Output bytes transferred.
@@ -162,6 +164,7 @@ public:
             @param h Coroutine handle to resume on completion.
             @param ex Executor for dispatching the completion.
             @param buf The buffer data to send.
+            @param flags Message flags (e.g. `message_flags::dont_route`).
             @param token Stop token for cancellation.
             @param ec Output error code.
             @param bytes_out Output bytes transferred.

@@ -179,7 +179,11 @@ public:
     */
     void reset() override;
 
-    /// Set the peer hostname for SNI and certificate verification.
+    /** Set the peer hostname for SNI and certificate verification.
+
+        @param hostname The peer name to send as SNI and match against the
+            certificate.
+    */
     void set_hostname(std::string_view hostname) override;
 
     /// Return the underlying stream.

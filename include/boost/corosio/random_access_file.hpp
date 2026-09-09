@@ -110,7 +110,12 @@ public:
         /// Return the file size in bytes.
         virtual std::uint64_t size() const = 0;
 
-        /// Resize the file to @p new_size bytes.
+        /** Resize the file to @p new_size bytes.
+
+            @param new_size The requested size in bytes.
+
+            @return The error code, empty on success.
+        */
         virtual std::error_code resize(std::uint64_t new_size) noexcept = 0;
 
         /// Synchronize file data to stable storage.
@@ -122,7 +127,13 @@ public:
         /// Release ownership of the native handle.
         virtual native_handle_type release() = 0;
 
-        /// Adopt an existing native handle.
+        /** Adopt an existing native handle.
+
+            @param handle The native handle to adopt. The implementation takes
+                ownership and closes it.
+
+            @return The error code, empty on success.
+        */
         virtual std::error_code assign(native_handle_type handle) noexcept = 0;
     };
 

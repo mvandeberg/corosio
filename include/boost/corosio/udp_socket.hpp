@@ -145,7 +145,12 @@ public:
         */
         virtual void cancel() noexcept = 0;
 
-        /// Shut down the socket in one or both directions.
+        /** Shut down the socket in one or both directions.
+
+            @param what Which directions to disable.
+
+            @return The error code, empty on success.
+        */
         virtual std::error_code shutdown(shutdown_type what) noexcept = 0;
 
         /** Set a socket option.

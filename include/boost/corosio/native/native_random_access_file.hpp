@@ -203,6 +203,9 @@ public:
 
         Calls the backend implementation directly, bypassing virtual
         dispatch. Otherwise identical to @ref random_access_file::read_some_at.
+
+        @param offset The byte offset to read at.
+        @param buffers The buffers to read into.
     */
     template<capy::MutableBufferSequence MB>
     [[nodiscard]] auto read_some_at(std::uint64_t offset, MB const& buffers)
@@ -214,6 +217,9 @@ public:
 
         Calls the backend implementation directly, bypassing virtual
         dispatch. Otherwise identical to @ref random_access_file::write_some_at.
+
+        @param offset The byte offset to write at.
+        @param buffers The buffer data to write.
     */
     template<capy::ConstBufferSequence CB>
     [[nodiscard]] auto write_some_at(std::uint64_t offset, CB const& buffers)

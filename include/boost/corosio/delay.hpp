@@ -147,7 +147,15 @@ public:
         return false;
     }
 
-    /// Resume inline if stopped or elapsed; else wait on a timer.
+    /** Resume inline if stopped or elapsed; else wait on a timer.
+
+        @param h Coroutine handle to resume on completion.
+        @param env The I/O environment, carrying the executor, stop token
+            and frame allocator.
+
+        @return The handle to resume immediately, or `noop_coroutine()` when
+            the wait was published to the timer service.
+    */
     std::coroutine_handle<>
     await_suspend(std::coroutine_handle<> h, capy::io_env const* env)
     {
@@ -271,7 +279,15 @@ public:
         return false;
     }
 
-    /// Resume inline if stopped or reached; else wait on a timer.
+    /** Resume inline if stopped or reached; else wait on a timer.
+
+        @param h Coroutine handle to resume on completion.
+        @param env The I/O environment, carrying the executor, stop token
+            and frame allocator.
+
+        @return The handle to resume immediately, or `noop_coroutine()` when
+            the wait was published to the timer service.
+    */
     std::coroutine_handle<>
     await_suspend(std::coroutine_handle<> h, capy::io_env const* env)
     {

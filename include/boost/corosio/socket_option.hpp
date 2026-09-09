@@ -486,13 +486,19 @@ public:
     /// Return whether linger is enabled.
     bool enabled() const noexcept;
 
-    /// Set whether linger is enabled.
+    /** Set whether linger is enabled.
+
+        @param v `true` to linger on close.
+    */
     void enabled(bool v) noexcept;
 
     /// Return the linger timeout in seconds.
     int timeout() const noexcept;
 
-    /// Set the linger timeout in seconds.
+    /** Set the linger timeout in seconds.
+
+        @param v The timeout in seconds.
+    */
     void timeout(int v) noexcept;
 
     /// Return the protocol level.

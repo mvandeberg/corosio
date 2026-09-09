@@ -94,7 +94,17 @@ protected:
     /// Construct stream from a handle.
     explicit io_stream(handle h) noexcept : io_object(std::move(h)) {}
 
-    /// Dispatch read through implementation vtable.
+    /** Dispatch read through implementation vtable.
+
+        @param h Coroutine handle to resume on completion.
+        @param ex Executor for dispatching the completion.
+        @param buffers Target buffer sequence.
+        @param token Stop token for cancellation.
+        @param ec Output error code.
+        @param bytes Output bytes transferred.
+
+        @return Coroutine handle to resume immediately.
+    */
     std::coroutine_handle<> do_read_some(
         std::coroutine_handle<> h,
         capy::executor_ref ex,
@@ -106,7 +116,17 @@ protected:
         return get().read_some(h, ex, buffers, std::move(token), ec, bytes);
     }
 
-    /// Dispatch write through implementation vtable.
+    /** Dispatch write through implementation vtable.
+
+        @param h Coroutine handle to resume on completion.
+        @param ex Executor for dispatching the completion.
+        @param buffers Source buffer sequence.
+        @param token Stop token for cancellation.
+        @param ec Output error code.
+        @param bytes Output bytes transferred.
+
+        @return Coroutine handle to resume immediately.
+    */
     std::coroutine_handle<> do_write_some(
         std::coroutine_handle<> h,
         capy::executor_ref ex,

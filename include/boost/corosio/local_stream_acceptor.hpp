@@ -574,6 +574,14 @@ public:
 
             Completes when the listen socket becomes ready for
             the specified direction. No connection is consumed.
+
+            @param h Coroutine handle to resume on completion.
+            @param ex Executor for dispatching the completion.
+            @param w The direction to wait on.
+            @param token Stop token for cancellation.
+            @param ec Output error code.
+
+            @return Coroutine handle to resume immediately.
         */
         virtual std::coroutine_handle<> wait(
             std::coroutine_handle<> h,
@@ -597,14 +605,30 @@ public:
         /// Cancel pending accept operations.
         virtual void cancel() noexcept = 0;
 
-        /// Set a raw socket option.
+        /** Set a raw socket option.
+
+            @param level The protocol level (e.g. `SOL_SOCKET`).
+            @param optname The option name.
+            @param data Pointer to the option value.
+            @param size Size of the option value in bytes.
+
+            @return The error code, empty on success.
+        */
         virtual std::error_code set_option(
             int level,
             int optname,
             void const* data,
             std::size_t size) noexcept = 0;
 
-        /// Get a raw socket option.
+        /** Get a raw socket option.
+
+            @param level The protocol level (e.g. `SOL_SOCKET`).
+            @param optname The option name.
+            @param data Pointer to storage for the option value.
+            @param size In/out size of the storage, in bytes.
+
+            @return The error code, empty on success.
+        */
         virtual std::error_code
         get_option(int level, int optname, void* data, std::size_t* size)
             const noexcept = 0;

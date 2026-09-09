@@ -396,7 +396,12 @@ public:
     */
     struct implementation : io_object::implementation
     {
-        /// Initiate an asynchronous forward DNS resolution.
+        /** Initiate an asynchronous forward DNS resolution.
+
+            @param host The host name or address literal to resolve.
+            @param service The service name or port number.
+            @param flags Flags controlling the lookup.
+        */
         virtual std::coroutine_handle<> resolve(
             std::coroutine_handle<>,
             capy::executor_ref,

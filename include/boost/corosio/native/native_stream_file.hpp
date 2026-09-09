@@ -188,6 +188,8 @@ public:
 
         Calls the backend implementation directly, bypassing virtual
         dispatch. Otherwise identical to @ref io_stream::read_some.
+
+        @param buffers The buffers to read into.
     */
     template<capy::MutableBufferSequence MB>
     [[nodiscard]] auto read_some(MB const& buffers)
@@ -199,6 +201,8 @@ public:
 
         Calls the backend implementation directly, bypassing virtual
         dispatch. Otherwise identical to @ref io_stream::write_some.
+
+        @param buffers The buffer data to write.
     */
     template<capy::ConstBufferSequence CB>
     [[nodiscard]] auto write_some(CB const& buffers)

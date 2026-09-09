@@ -619,6 +619,14 @@ public:
             the specified direction (typically `wait_type::read`
             for an incoming connection), or an error condition is
             reported. No connection is consumed.
+
+            @param h Coroutine handle to resume on completion.
+            @param ex Executor for dispatching the completion.
+            @param w The direction to wait on.
+            @param token Stop token for cancellation.
+            @param ec Output error code.
+
+            @return Coroutine handle to resume immediately.
         */
         virtual std::coroutine_handle<> wait(
             std::coroutine_handle<> h,

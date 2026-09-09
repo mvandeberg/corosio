@@ -658,6 +658,8 @@ public:
         Enqueues `c` directly on the scheduler's ready queue.
         No heap allocation occurs.
 
+        @param c The continuation to enqueue.
+
         @pre The associated context must outlive this call. Posting
             concurrently with, or after, the context's destruction is
             undefined behavior.
