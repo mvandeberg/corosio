@@ -69,6 +69,7 @@ namespace boost::corosio {
 class BOOST_COROSIO_DECL udp_socket : public io_object
 {
 public:
+    /// The shutdown direction type used by this socket.
     using shutdown_type = corosio::shutdown_type;
     using enum corosio::shutdown_type;
 

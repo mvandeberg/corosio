@@ -308,7 +308,9 @@ public:
 class BOOST_COROSIO_DECL no_delay : public boolean_option
 {
 public:
+    /// Construct from a value, or default-construct.
     using boolean_option::boolean_option;
+    /// Assign a new option value.
     using boolean_option::operator=;
 
     /// Return the protocol level.
@@ -326,7 +328,9 @@ public:
 class BOOST_COROSIO_DECL keep_alive : public boolean_option
 {
 public:
+    /// Construct from a value, or default-construct.
     using boolean_option::boolean_option;
+    /// Assign a new option value.
     using boolean_option::operator=;
 
     /// Return the protocol level.
@@ -348,7 +352,9 @@ public:
 class BOOST_COROSIO_DECL v6_only : public boolean_option
 {
 public:
+    /// Construct from a value, or default-construct.
     using boolean_option::boolean_option;
+    /// Assign a new option value.
     using boolean_option::operator=;
 
     /// Return the protocol level.
@@ -366,7 +372,9 @@ public:
 class BOOST_COROSIO_DECL reuse_address : public boolean_option
 {
 public:
+    /// Construct from a value, or default-construct.
     using boolean_option::boolean_option;
+    /// Assign a new option value.
     using boolean_option::operator=;
 
     /// Return the protocol level.
@@ -388,7 +396,9 @@ public:
 class BOOST_COROSIO_DECL broadcast : public boolean_option
 {
 public:
+    /// Construct from a value, or default-construct.
     using boolean_option::boolean_option;
+    /// Assign a new option value.
     using boolean_option::operator=;
 
     /// Return the protocol level.
@@ -409,7 +419,9 @@ public:
 class BOOST_COROSIO_DECL reuse_port : public boolean_option
 {
 public:
+    /// Construct from a value, or default-construct.
     using boolean_option::boolean_option;
+    /// Assign a new option value.
     using boolean_option::operator=;
 
     /// Return the protocol level.
@@ -427,7 +439,9 @@ public:
 class BOOST_COROSIO_DECL receive_buffer_size : public integer_option
 {
 public:
+    /// Construct from a value, or default-construct.
     using integer_option::integer_option;
+    /// Assign a new option value.
     using integer_option::operator=;
 
     /// Return the protocol level.
@@ -445,7 +459,9 @@ public:
 class BOOST_COROSIO_DECL send_buffer_size : public integer_option
 {
 public:
+    /// Construct from a value, or default-construct.
     using integer_option::integer_option;
+    /// Assign a new option value.
     using integer_option::operator=;
 
     /// Return the protocol level.
@@ -541,7 +557,9 @@ public:
 class BOOST_COROSIO_DECL multicast_loop_v4 : public byte_boolean_option
 {
 public:
+    /// Construct from a value, or default-construct.
     using byte_boolean_option::byte_boolean_option;
+    /// Assign a new option value.
     using byte_boolean_option::operator=;
 
     /// Return the protocol level.
@@ -559,7 +577,9 @@ public:
 class BOOST_COROSIO_DECL multicast_loop_v6 : public boolean_option
 {
 public:
+    /// Construct from a value, or default-construct.
     using boolean_option::boolean_option;
+    /// Assign a new option value.
     using boolean_option::operator=;
 
     /// Return the protocol level.
@@ -581,7 +601,9 @@ public:
 class BOOST_COROSIO_DECL multicast_hops_v4 : public byte_integer_option
 {
 public:
+    /// Construct from a value, or default-construct.
     using byte_integer_option::byte_integer_option;
+    /// Assign a new option value.
     using byte_integer_option::operator=;
 
     /// Return the protocol level.
@@ -599,7 +621,9 @@ public:
 class BOOST_COROSIO_DECL multicast_hops_v6 : public integer_option
 {
 public:
+    /// Construct from a value, or default-construct.
     using integer_option::integer_option;
+    /// Assign a new option value.
     using integer_option::operator=;
 
     /// Return the protocol level.
@@ -617,7 +641,9 @@ public:
 class BOOST_COROSIO_DECL multicast_interface_v6 : public integer_option
 {
 public:
+    /// Construct from a value, or default-construct.
     using integer_option::integer_option;
+    /// Assign a new option value.
     using integer_option::operator=;
 
     /// Return the protocol level.

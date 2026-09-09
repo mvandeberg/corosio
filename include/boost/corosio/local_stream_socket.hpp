@@ -69,6 +69,7 @@ public:
     /// The endpoint type used by this socket.
     using endpoint_type = corosio::local_endpoint;
 
+    /// The shutdown direction type used by this socket.
     using shutdown_type = corosio::shutdown_type;
     using enum corosio::shutdown_type;
 
