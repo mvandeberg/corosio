@@ -378,6 +378,8 @@ public:
         @param buffers The buffer data to send.
         @param dest The destination endpoint.
         @param flags Message flags (e.g. `message_flags::dont_route`).
+
+        @return An awaitable yielding the error code and the byte count sent.
     */
     template<capy::ConstBufferSequence CB>
     [[nodiscard]] auto send_to(
@@ -407,6 +409,8 @@ public:
         @param buffers The buffers to receive into.
         @param source Output endpoint for the sender's address.
         @param flags Message flags (e.g. `message_flags::peek`).
+
+        @return An awaitable yielding the error code and the byte count received.
     */
     template<capy::MutableBufferSequence MB>
     [[nodiscard]] auto recv_from(
@@ -435,6 +439,10 @@ public:
         dispatch. Otherwise identical to @ref local_datagram_socket::connect.
 
         If the socket is not already open, it is opened automatically.
+
+        @param ep The endpoint to set as the default destination.
+
+        @return An awaitable yielding the error code.
     */
     [[nodiscard]] auto connect(corosio::local_endpoint ep)
     {
@@ -451,6 +459,8 @@ public:
 
         @param buffers The buffer data to send.
         @param flags Message flags (e.g. `message_flags::dont_route`).
+
+        @return An awaitable yielding the error code and the byte count sent.
     */
     template<capy::ConstBufferSequence CB>
     [[nodiscard]] auto send(CB const& buffers, corosio::message_flags flags)
@@ -475,6 +485,8 @@ public:
 
         @param buffers The buffers to receive into.
         @param flags Message flags (e.g. `message_flags::peek`).
+
+        @return An awaitable yielding the error code and the byte count received.
     */
     template<capy::MutableBufferSequence MB>
     [[nodiscard]] auto recv(MB const& buffers, corosio::message_flags flags)

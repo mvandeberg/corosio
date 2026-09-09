@@ -42,6 +42,7 @@ namespace boost::corosio {
 */
 enum class bind_option
 {
+    /// Bind without touching the socket path.
     none,
     /// Unlink the socket path before binding (ignored for abstract paths).
     unlink_existing
@@ -327,7 +328,10 @@ public:
     */
     void close() noexcept;
 
-    /// Check if the acceptor has an open socket handle.
+    /** Check if the acceptor has an open socket handle.
+
+        @return `true` if the acceptor holds an open handle.
+    */
     bool is_open() const noexcept
     {
         return h_ && get().is_open();

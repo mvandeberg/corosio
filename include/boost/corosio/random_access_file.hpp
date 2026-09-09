@@ -118,10 +118,16 @@ public:
         */
         virtual std::error_code resize(std::uint64_t new_size) noexcept = 0;
 
-        /// Synchronize file data to stable storage.
+        /** Synchronize file data to stable storage.
+
+            @return The error code, empty on success.
+        */
         virtual std::error_code sync_data() noexcept = 0;
 
-        /// Synchronize file data and metadata to stable storage.
+        /** Synchronize file data and metadata to stable storage.
+
+            @return The error code, empty on success.
+        */
         virtual std::error_code sync_all() noexcept = 0;
 
         /// Release ownership of the native handle.
@@ -299,7 +305,10 @@ public:
     */
     void close() noexcept;
 
-    /** Check if the file is open. */
+    /** Check if the file is open.
+
+        @return `true` if the file holds an open handle.
+    */
     bool is_open() const noexcept
     {
 #if BOOST_COROSIO_HAS_IOCP && !defined(BOOST_COROSIO_MRDOCS)

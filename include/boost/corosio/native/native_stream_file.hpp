@@ -190,6 +190,8 @@ public:
         dispatch. Otherwise identical to @ref io_stream::read_some.
 
         @param buffers The buffers to read into.
+
+        @return An awaitable yielding the error code and the byte count read.
     */
     template<capy::MutableBufferSequence MB>
     [[nodiscard]] auto read_some(MB const& buffers)
@@ -203,6 +205,8 @@ public:
         dispatch. Otherwise identical to @ref io_stream::write_some.
 
         @param buffers The buffer data to write.
+
+        @return An awaitable yielding the error code and the byte count written.
     */
     template<capy::ConstBufferSequence CB>
     [[nodiscard]] auto write_some(CB const& buffers)

@@ -222,7 +222,12 @@ public:
             std::stop_token token,
             std::error_code* ec) = 0;
 
-        /// Shut down part or all of the socket.
+        /** Shut down part or all of the socket.
+
+            @param what Which directions to disable.
+
+            @return The error code, empty on success.
+        */
         virtual std::error_code shutdown(shutdown_type what) noexcept = 0;
 
         /// Return the platform socket descriptor.

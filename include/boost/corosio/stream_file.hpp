@@ -77,10 +77,16 @@ public:
         */
         virtual std::error_code resize(std::uint64_t new_size) noexcept = 0;
 
-        /// Synchronize file data to stable storage.
+        /** Synchronize file data to stable storage.
+
+            @return The error code, empty on success.
+        */
         virtual std::error_code sync_data() noexcept = 0;
 
-        /// Synchronize file data and metadata to stable storage.
+        /** Synchronize file data and metadata to stable storage.
+
+            @return The error code, empty on success.
+        */
         virtual std::error_code sync_all() noexcept = 0;
 
         /// Release ownership of the native handle.

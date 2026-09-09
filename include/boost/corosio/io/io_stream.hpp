@@ -69,7 +69,10 @@ public:
     */
     struct implementation : io_object::implementation
     {
-        /// Initiate platform read operation.
+        /** Initiate platform read operation.
+
+            @return Coroutine handle to resume immediately.
+        */
         virtual std::coroutine_handle<> read_some(
             std::coroutine_handle<>,
             capy::executor_ref,
@@ -78,7 +81,10 @@ public:
             std::error_code*,
             std::size_t*) = 0;
 
-        /// Initiate platform write operation.
+        /** Initiate platform write operation.
+
+            @return Coroutine handle to resume immediately.
+        */
         virtual std::coroutine_handle<> write_some(
             std::coroutine_handle<>,
             capy::executor_ref,

@@ -401,6 +401,8 @@ public:
             @param host The host name or address literal to resolve.
             @param service The service name or port number.
             @param flags Flags controlling the lookup.
+
+            @return Coroutine handle to resume immediately.
         */
         virtual std::coroutine_handle<> resolve(
             std::coroutine_handle<>,
@@ -412,7 +414,10 @@ public:
             std::error_code*,
             resolver_results*) = 0;
 
-        /// Initiate an asynchronous reverse DNS resolution.
+        /** Initiate an asynchronous reverse DNS resolution.
+
+            @return Coroutine handle to resume immediately.
+        */
         virtual std::coroutine_handle<> reverse_resolve(
             std::coroutine_handle<>,
             capy::executor_ref,

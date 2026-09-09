@@ -605,7 +605,10 @@ public:
     */
     struct implementation : io_object::implementation
     {
-        /// Initiate an asynchronous accept operation.
+        /** Initiate an asynchronous accept operation.
+
+            @return Coroutine handle to resume immediately.
+        */
         virtual std::coroutine_handle<> accept(
             std::coroutine_handle<>,
             capy::executor_ref,
