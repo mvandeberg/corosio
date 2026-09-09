@@ -95,19 +95,33 @@ nothing. Measured on this corpus; see the bite-test log below.
 workflow, never locally: a local run differs from a CI run and would grandfather hundreds of
 local-vs-CI drift fingerprints.
 
-> `baseline.json` is **CI-authored** (`workflow_dispatch`, 2026-09-08T22:18Z) and is the
+> **One grandfathered false positive.** The baseline carries
+> `benchmark-report.adoc:#1:Google.OxfordComma` on the sentence "…comparable to its
+> unidirectional throughput, suggesting serialization between the read and write
+> paths." That is not a list needing an Oxford comma — "the read and write paths" is
+> a compound noun phrase and the comma opens a participial clause, which slips past the
+> rule's own guard against clause-introducers because "suggesting" is not in its
+> exemption list. Grandfathering a rule false positive is what the baseline is for;
+> rewriting sound prose to appease a heuristic would be worse. It surfaced only after
+> the vocabulary additions removed a `Vale.Spelling` alert that had been masking it at
+> the same position.
+>
+> `baseline.json` is **CI-authored** (`workflow_dispatch`, 2026-09-09T14:52Z) and is the
 > reference point the strict gate compares against. Counts at the original local seed and in
-> that reseed:
+> the accepted reseed:
 >
 > | Check | Local seed | CI baseline |
 > |---|---|---|
-> | `vale_adoc` | 466 | 66 |
-> | `vale_docstrings` | 785 | 420 |
+> | `vale_adoc` | 466 | 67 |
+> | `vale_docstrings` | 785 | 55 |
 > | `sentence_length` | 204 | 71 (hard 1, advisory 70) |
 > | `doc_lint` | 93 | 3 (all D2, the documented carve-out) |
 > | `mrdocs_warnings` | 460 | 352 |
 >
-> The reseed retired 1096 fingerprints and grandfathered none. `doc_lint` and
+> Three reseeds were needed. The first was refused because the MrDocs version pin made
+> `mrdocs_warnings` report SKIPPED, which would have wiped a 460-fingerprint gated backlog.
+> The second was refused for a **real** gated regression a local Vale run could not see. The
+> third retired 365 and grandfathered the one false positive above. `doc_lint` and
 > `sentence_length` measured **identically** in both environments (3 and 71), which is what
 > makes them safe to gate; every other difference above is environment drift.
 

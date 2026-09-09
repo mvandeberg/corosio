@@ -36,7 +36,13 @@ Measured after phase 9, both corpora: Vale over `doc/modules` 466 → 132;
 A1/A6/B2/ANCHOR all 0, D2 3 (the documented carve-out); C9/C10 0/0; C4 0/0;
 `sentence_length` hard 131 → 1, advisory 70.
 
-**How phase 9 closed.** The `workflow_dispatch` reseed replaced the local seed with a
+**How phase 9 closed.** It took three reseeds, and the safety net refused two of them:
+the first because the MrDocs version pin reported `mrdocs_warnings` as SKIPPED (section
+4.3), the second on a real gated `Corosio.SimpleTense` regression that no local run
+surfaced. The accepted candidate retires 365 fingerprints and grandfathers one
+`Google.OxfordComma` false positive, documented in `doc/lint/README.md`.
+
+**Earlier account of the close.** The `workflow_dispatch` reseed replaced the local seed with a
 CI-authored baseline: 1096 fingerprints retired, none grandfathered, none gated.
 `doc_lint` and `sentence_length` measured identically in both environments (3 and 71),
 confirming the split-gate reasoning; `vale_adoc` differed 132 local against 66 in CI, and
