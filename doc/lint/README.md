@@ -106,7 +106,7 @@ local-vs-CI drift fingerprints.
 > the vocabulary additions removed a `Vale.Spelling` alert that had been masking it at
 > the same position.
 >
-> `baseline.json` is **CI-authored** (`workflow_dispatch`, 2026-09-09T15:45Z) and is the
+> `baseline.json` is **CI-authored** (`workflow_dispatch`, 2026-09-09T17:25Z) and is the
 > reference point the strict gate compares against. Counts at the original local seed and in
 > the accepted reseed:
 >
@@ -116,7 +116,7 @@ local-vs-CI drift fingerprints.
 > | `vale_docstrings` | 785 | 55 |
 > | `sentence_length` | 204 | 71 (hard 1, advisory 70) |
 > | `doc_lint` | 93 | 3 (all D2, the documented carve-out) |
-> | `mrdocs_warnings` | 460 | 333 |
+> | `mrdocs_warnings` | 460 | 262 |
 >
 > Four reseeds were needed. The first was refused because the MrDocs version pin made
 > `mrdocs_warnings` report SKIPPED, which would have wiped a 460-fingerprint gated backlog.
@@ -125,8 +125,9 @@ local-vs-CI drift fingerprints.
 > rebase onto develop, absorbed the `io_uring`->`uring` rename churn and retired the 19 B4
 > parameter mismatches; its one gated addition was the same rename churn
 > (`io_uring_t::construct` -> `uring_t::construct`) and was fixed rather than grandfathered,
-> so the installed baseline is stale-high by 4 in `mrdocs_warnings` -- harmless, since that
-> check does not block. `doc_lint` and
+> so that baseline was briefly stale-high by 4 in `mrdocs_warnings`. A fifth reseed retired
+> 71 more (the parameter and return-value documentation pass) and grandfathered none, and is
+> what is installed now. `doc_lint` and
 > `sentence_length` measured **identically** in both environments (3 and 71), which is what
 > makes them safe to gate; every other difference above is environment drift.
 
@@ -255,8 +256,14 @@ would change which standard library MrDocs parses and might retire these eight, 
 would also change the whole reference build; they are off deliberately and this is not a
 reason to flip them.
 
-Treat these eight the way Part E4 treats generator and theme output: permanently
-grandfathered, not a defect in authored content. **Do not spend time on them again.**
+Treat these the way Part E4 treats generator and theme output: not a defect in authored
+content. **Do not spend time on them again.**
+
+**Update, and it settles the point:** the 2026-09-09T17:25 reseed came back with **zero**
+`<tt>` findings, where the reseed three hours earlier had eight. Nothing in this repository
+changed between them. A rolling MrDocs build or a runner image with a different libstdc++ is
+enough to make all eight appear or vanish, which is exactly the environment-dependence
+described above. If they reappear, they are still not ours.
 
 ## F4 bite-test log
 
