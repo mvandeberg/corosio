@@ -82,9 +82,18 @@ struct epoll_t
     using random_access_file_service_type =
         detail::posix_random_access_file_service;
 
-    /// Create the scheduler and services for this backend.
+    /** Create the scheduler and services for this backend.
+
+        @param ctx The execution context that owns the scheduler.
+        @param concurrency_hint Hint for the number of threads that
+            calls `run()`; a performance tuning knob. The
+            thread-safety contract is set separately by
+            @ref io_context_options::locking.
+
+        @return Reference to the newly created scheduler.
+    */
     BOOST_COROSIO_DECL static detail::scheduler&
-    construct(capy::execution_context&, unsigned concurrency_hint);
+    construct(capy::execution_context& ctx, unsigned concurrency_hint);
 };
 
 /// Tag value for selecting the epoll backend.
@@ -151,9 +160,18 @@ struct select_t
     using random_access_file_service_type =
         detail::posix_random_access_file_service;
 
-    /// Create the scheduler and services for this backend.
+    /** Create the scheduler and services for this backend.
+
+        @param ctx The execution context that owns the scheduler.
+        @param concurrency_hint Hint for the number of threads that
+            calls `run()`; a performance tuning knob. The
+            thread-safety contract is set separately by
+            @ref io_context_options::locking.
+
+        @return Reference to the newly created scheduler.
+    */
     BOOST_COROSIO_DECL static detail::scheduler&
-    construct(capy::execution_context&, unsigned concurrency_hint);
+    construct(capy::execution_context& ctx, unsigned concurrency_hint);
 };
 
 /// Tag value for selecting the select backend.
@@ -220,9 +238,18 @@ struct kqueue_t
     using random_access_file_service_type =
         detail::posix_random_access_file_service;
 
-    /// Create the scheduler and services for this backend.
+    /** Create the scheduler and services for this backend.
+
+        @param ctx The execution context that owns the scheduler.
+        @param concurrency_hint Hint for the number of threads that
+            calls `run()`; a performance tuning knob. The
+            thread-safety contract is set separately by
+            @ref io_context_options::locking.
+
+        @return Reference to the newly created scheduler.
+    */
     BOOST_COROSIO_DECL static detail::scheduler&
-    construct(capy::execution_context&, unsigned concurrency_hint);
+    construct(capy::execution_context& ctx, unsigned concurrency_hint);
 };
 
 /// Tag value for selecting the kqueue backend.
@@ -289,9 +316,18 @@ struct uring_t
     using random_access_file_service_type =
         detail::uring_random_access_file_service;
 
-    /// Create the scheduler and services for this backend.
+    /** Create the scheduler and services for this backend.
+
+        @param ctx The execution context that owns the scheduler.
+        @param concurrency_hint Hint for the number of threads that
+            calls `run()`; a performance tuning knob. The
+            thread-safety contract is set separately by
+            @ref io_context_options::locking.
+
+        @return Reference to the newly created scheduler.
+    */
     BOOST_COROSIO_DECL static detail::scheduler&
-    construct(capy::execution_context&, unsigned concurrency_hint);
+    construct(capy::execution_context& ctx, unsigned concurrency_hint);
 };
 
 /// Tag value for selecting the io_uring backend.

@@ -106,7 +106,7 @@ local-vs-CI drift fingerprints.
 > the vocabulary additions removed a `Vale.Spelling` alert that had been masking it at
 > the same position.
 >
-> `baseline.json` is **CI-authored** (`workflow_dispatch`, 2026-09-09T14:52Z) and is the
+> `baseline.json` is **CI-authored** (`workflow_dispatch`, 2026-09-09T15:45Z) and is the
 > reference point the strict gate compares against. Counts at the original local seed and in
 > the accepted reseed:
 >
@@ -116,12 +116,17 @@ local-vs-CI drift fingerprints.
 > | `vale_docstrings` | 785 | 55 |
 > | `sentence_length` | 204 | 71 (hard 1, advisory 70) |
 > | `doc_lint` | 93 | 3 (all D2, the documented carve-out) |
-> | `mrdocs_warnings` | 460 | 352 |
+> | `mrdocs_warnings` | 460 | 333 |
 >
-> Three reseeds were needed. The first was refused because the MrDocs version pin made
+> Four reseeds were needed. The first was refused because the MrDocs version pin made
 > `mrdocs_warnings` report SKIPPED, which would have wiped a 460-fingerprint gated backlog.
 > The second was refused for a **real** gated regression a local Vale run could not see. The
-> third retired 365 and grandfathered the one false positive above. `doc_lint` and
+> third retired 365 and grandfathered the one false positive above. The fourth, after the
+> rebase onto develop, absorbed the `io_uring`->`uring` rename churn and retired the 19 B4
+> parameter mismatches; its one gated addition was the same rename churn
+> (`io_uring_t::construct` -> `uring_t::construct`) and was fixed rather than grandfathered,
+> so the installed baseline is stale-high by 4 in `mrdocs_warnings` -- harmless, since that
+> check does not block. `doc_lint` and
 > `sentence_length` measured **identically** in both environments (3 and 71), which is what
 > makes them safe to gate; every other difference above is environment drift.
 
