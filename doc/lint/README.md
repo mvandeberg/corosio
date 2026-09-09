@@ -105,11 +105,11 @@ local-vs-CI drift fingerprints.
 > rewriting sound prose to appease a heuristic would be worse.
 >
 > It surfaced only after the vocabulary additions removed a `Vale.Spelling` alert that had
-> been masking it at the same position, and it **vanished again** in the 2026-09-09T18:40Z
-> reseed with that page untouched — the same position-resolution artifact the
-> `.vale.ini` comment describes, running in the other direction. The analysis is kept
-> because the finding is not stable: if it reappears, it is still a false positive and the
-> prose should still be left alone.
+> been masking it at the same position, vanished in the 2026-09-09T18:40Z reseed, and came
+> **back** in the 2026-09-09T20:27Z one — all three times with that page untouched. It is
+> the position-resolution artifact the `.vale.ini` comment describes, and it flaps. Treat any
+> future appearance the same way: it is a false positive on a participial clause, it
+> grandfathers, and the prose is left alone.
 >
 > `baseline.json` is **CI-authored** (`workflow_dispatch`, 2026-09-09T18:38Z) and is the
 > reference point the strict gate compares against. Counts at the original local seed and in
@@ -117,11 +117,11 @@ local-vs-CI drift fingerprints.
 >
 > | Check | Local seed | CI baseline |
 > |---|---|---|
-> | `vale_adoc` | 466 | 66 |
+> | `vale_adoc` | 466 | 67 |
 > | `vale_docstrings` | 785 | 55 |
 > | `sentence_length` | 204 | 71 (hard 1, advisory 70) |
 > | `doc_lint` | 93 | 3 (all D2, the documented carve-out) |
-> | `mrdocs_warnings` | 460 | 201 |
+> | `mrdocs_warnings` | 460 | 66 |
 >
 > Four reseeds were needed. The first was refused because the MrDocs version pin made
 > `mrdocs_warnings` report SKIPPED, which would have wiped a 460-fingerprint gated backlog.
