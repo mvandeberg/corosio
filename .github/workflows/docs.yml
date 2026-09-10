@@ -470,8 +470,12 @@ jobs:
           # A gated check dropping to zero is refused by default, because that is
           # indistinguishable from a crash. Naming it here is the acknowledgement,
           # and it lands in the run log next to the report it authorised.
-          # ALLOW_EMPTIED arrives via env, not `${{ }}` interpolation: the value is
-          # attacker-chosen text and would otherwise be pasted into this script.
+          # ALLOW_EMPTIED arrives through `env:` rather than template
+          # interpolation: the value is attacker-chosen text and would otherwise
+          # be pasted straight into this script. Note that a run: block is
+          # scanned for expressions in full, comments included -- writing an
+          # empty expression pair here, even inside a comment, is a parse error
+          # ("An expression was expected") for the whole workflow.
           # Unquoted on purpose -- word splitting is what turns the space-separated
           # input into separate checks. An empty value splits to zero words, so the
           # loop simply does not run.
