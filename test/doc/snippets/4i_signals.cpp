@@ -122,6 +122,18 @@ cancel_result_frag(corosio::signal_set& signals, std::error_code& out)
     out = ec;
 }
 
+// Cancellation delivery needs a stop source driving the launch; the
+// fragment only shows that the awaiting code does not change.
+[[maybe_unused]] capy::task<>
+stop_token_fragment(corosio::signal_set& signals)
+{
+    // tag::stop_token[]
+    // Inside a coroutine launched with a stop token:
+    auto [ec, signum] = co_await signals.wait();
+    // Automatically cancelled if stop is requested
+    // end::stop_token[]
+}
+
 // The use-case coroutines wait for operator-sent signals in loops, so
 // they are compiled but never launched. Fragments naming POSIX-only
 // signals or sigaction flags follow the unit tests' platform guard.

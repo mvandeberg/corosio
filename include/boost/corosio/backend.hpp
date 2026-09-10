@@ -52,7 +52,7 @@ class posix_random_access_file_service;
 
 } // namespace detail
 
-/// Backend tag for the Linux epoll I/O multiplexer.
+/// Selects the Linux epoll I/O multiplexer as the backend.
 struct epoll_t
 {
     /// The scheduler that drives the event loop.
@@ -107,11 +107,14 @@ struct epoll_t
 
         @param ctx The execution context that owns the scheduler.
         @param concurrency_hint Hint for the number of threads that
-            calls `run()`; a performance tuning knob. The
+            call `run()`. A performance tuning knob; the
             thread-safety contract is set separately by
             @ref io_context_options::locking.
 
         @return Reference to the newly created scheduler.
+
+        @throws std::system_error If the backend's infrastructure
+            could not be created.
     */
     BOOST_COROSIO_DECL static detail::scheduler&
     construct(capy::execution_context& ctx, unsigned concurrency_hint);
@@ -151,7 +154,7 @@ class posix_random_access_file_service;
 
 } // namespace detail
 
-/// Backend tag for the portable select() I/O multiplexer.
+/// Selects the portable select() I/O multiplexer as the backend.
 struct select_t
 {
     /// The scheduler that drives the event loop.
@@ -206,11 +209,14 @@ struct select_t
 
         @param ctx The execution context that owns the scheduler.
         @param concurrency_hint Hint for the number of threads that
-            calls `run()`; a performance tuning knob. The
+            call `run()`. A performance tuning knob; the
             thread-safety contract is set separately by
             @ref io_context_options::locking.
 
         @return Reference to the newly created scheduler.
+
+        @throws std::system_error If the backend's infrastructure
+            could not be created.
     */
     BOOST_COROSIO_DECL static detail::scheduler&
     construct(capy::execution_context& ctx, unsigned concurrency_hint);
@@ -250,7 +256,7 @@ class posix_random_access_file_service;
 
 } // namespace detail
 
-/// Backend tag for the BSD kqueue I/O multiplexer.
+/// Selects the BSD kqueue I/O multiplexer as the backend.
 struct kqueue_t
 {
     /// The scheduler that drives the event loop.
@@ -305,11 +311,14 @@ struct kqueue_t
 
         @param ctx The execution context that owns the scheduler.
         @param concurrency_hint Hint for the number of threads that
-            calls `run()`; a performance tuning knob. The
+            call `run()`. A performance tuning knob; the
             thread-safety contract is set separately by
             @ref io_context_options::locking.
 
         @return Reference to the newly created scheduler.
+
+        @throws std::system_error If the backend's infrastructure
+            could not be created.
     */
     BOOST_COROSIO_DECL static detail::scheduler&
     construct(capy::execution_context& ctx, unsigned concurrency_hint);
@@ -349,7 +358,7 @@ class posix_resolver_service;
 
 } // namespace detail
 
-/// Backend tag for the Linux io_uring proactor.
+/// Selects the Linux io_uring proactor as the backend.
 struct uring_t
 {
     /// The scheduler that drives the event loop.
@@ -404,11 +413,14 @@ struct uring_t
 
         @param ctx The execution context that owns the scheduler.
         @param concurrency_hint Hint for the number of threads that
-            calls `run()`; a performance tuning knob. The
+            call `run()`. A performance tuning knob; the
             thread-safety contract is set separately by
             @ref io_context_options::locking.
 
         @return Reference to the newly created scheduler.
+
+        @throws std::system_error If the backend's infrastructure
+            could not be created.
     */
     BOOST_COROSIO_DECL static detail::scheduler&
     construct(capy::execution_context& ctx, unsigned concurrency_hint);
@@ -449,11 +461,10 @@ class win_random_access_file_service;
 
 } // namespace detail
 
-/** Backend tag for the Windows I/O Completion Ports multiplexer.
+/** Selects the Windows I/O Completion Ports multiplexer as the backend.
 
-    Selects the IOCP-based reactor for all I/O services, including
-    TCP, UDP, Unix domain sockets (AF_UNIX), signals, and name
-    resolution.
+    Used for all I/O services, including TCP, UDP, Unix domain
+    sockets (AF_UNIX), signals, name resolution, and file I/O.
 */
 struct iocp_t
 {
@@ -507,11 +518,14 @@ struct iocp_t
 
         @param ctx The execution context that owns the scheduler.
         @param concurrency_hint Hint for the number of threads that
-            calls `run()`; a performance tuning knob. The
+            call `run()`. A performance tuning knob; the
             thread-safety contract is set separately by
             @ref io_context_options::locking.
 
         @return Reference to the newly created scheduler.
+
+        @throws std::system_error If the backend's infrastructure
+            could not be created.
     */
     BOOST_COROSIO_DECL static detail::scheduler&
     construct(capy::execution_context& ctx, unsigned concurrency_hint);

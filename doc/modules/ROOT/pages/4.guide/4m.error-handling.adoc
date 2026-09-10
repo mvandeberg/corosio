@@ -44,7 +44,7 @@ the piecewise path, never sees the throw:
 |===
 | Throwing convenience | Exception-free spelling
 
-| `tcp_acceptor(ctx, ep, backlog)` +
+| cpp:tcp_acceptor[] constructed with a context, endpoint, and backlog +
   `local_stream_acceptor(ctx, ep, backlog)`
 | default-construct, then `open()` + `bind()` + `listen()`.
 cpp:tcp_acceptor[] also configures address reuse via `set_option()`
@@ -57,14 +57,15 @@ Windows. The constructor throws exactly the codes this path reports
 | `ipv4_address(s)` / `ipv6_address(s)`
 | `make_ipv4_address(s)` / `make_ipv6_address(s)`
 
-| `signal_set(ctx, sig, sigs...)`
+| cpp:signal_set[] constructed with a context and one or more signals
 | `signal_set(ctx)`, then `add()` per signal
 
 | `local_endpoint(path)`
-| check `path.size() <= local_endpoint::max_path_length` first — the
-  public constant is the entire precondition
+| check `path.size() <=` cpp:local_endpoint[]`::max_path_length` first —
+  the public constant is the entire precondition
 
-| `io_context(opts, ...)` throwing `std::invalid_argument`
+| cpp:io_context[]'s options constructor throwing `std::invalid_argument`
+  (POSIX only)
 | ensure `opts.thread_pool_size >= 1`
 
 | `release()`, `size()`, `available()`, `set_option()`,
@@ -266,7 +267,7 @@ include::example$snippets/4m_error_handling.cpp[tag=timeout_vs_cancel,indent=0]
 ----
 
 Never infer a timeout from `capy::cond::canceled`, and never infer a
-cancellation from `capy::cond::timeout`; the two conditions never
+cancellation from `capy::cond::timeout`. The two conditions never
 overlap for a single result.
 
 == EOF Handling

@@ -10,7 +10,7 @@
 = Tutorials
 :page-mode: explanation
 
-Networked applications come alive when you build them yourself. Reading
+Networked applications are easier to understand once you build them yourself. Reading
 about sockets, protocols, and concurrency only goes so far. The real
 understanding comes from writing code that opens connections, sends data,
 and handles the responses. These tutorials give you that hands-on experience

@@ -84,7 +84,7 @@ include::example$snippets/4j_resolver.cpp[tag=with_flags,indent=0]
 | Service is a port number string, don't look up service name
 
 | `address_configured`
-| Only return IPv4 if the system has IPv4 configured, same for IPv6
+| Only return IPv4 if the system has a non-loopback IPv4 address configured, same for IPv6
 
 | `v4_mapped`
 | Intended to return IPv4-mapped IPv6 addresses when no IPv6 addresses are
@@ -127,7 +127,7 @@ include::example$snippets/4j_resolver.cpp[tag=iterate_results,indent=0]
 
 [NOTE]
 ====
-Copying a `resolver_results` deep-copies every entry, and each entry owns
+Copying a cpp:resolver_results[] deep-copies every entry, and each entry owns
 two `std::string` query names. Some sinks take the range by value, such
 as `corosio::connect`. To avoid the copy, pass an rvalue
 (`std::move(results)`) or use the iterator-based overload (`connect(s,
@@ -249,9 +249,10 @@ include::example$snippets/4j_resolver.cpp[tag=http_get]
 
 == Platform Notes
 
-The resolver uses the system's `getaddrinfo()` function. On most platforms,
-this is a blocking call executed on a thread pool to avoid blocking the
-I/O context.
+The resolver uses the system's `getaddrinfo()` function. On POSIX, this is a
+blocking call executed on a thread pool, so it does not block the I/O context.
+On Windows, resolution uses the native asynchronous `GetAddrInfoExW` API
+instead.
 
 [IMPORTANT]
 ====

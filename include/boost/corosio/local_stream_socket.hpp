@@ -140,7 +140,7 @@ public:
 
         /** Request cancellation of pending asynchronous operations.
 
-            All outstanding operations complete with `operation_canceled` error.
+            All outstanding operations complete with `errc::operation_canceled`.
             Check `ec == cond::canceled` for portable comparison.
         */
         virtual void cancel() noexcept = 0;
@@ -426,7 +426,7 @@ public:
         `errc::bad_file_descriptor`.
 
         @param what Determines which operations are no longer
-            be allowed.
+            allowed.
 
         @return The error code, empty on success.
     */

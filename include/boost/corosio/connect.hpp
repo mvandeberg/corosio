@@ -119,6 +119,9 @@ connect(Socket& s, Iter begin, Iter end, ConnectCondition cond);
         - on empty range: `std::errc::no_such_device_or_address` and a
           default-constructed endpoint.
 
+    @throws std::bad_alloc if copying an lvalue `endpoints` fails to
+        allocate.
+
     @note The socket is closed and re-opened before each attempt, so
         any socket options set by the caller (e.g. `no_delay`,
         `reuse_address`) are lost. Apply options after this operation
@@ -148,8 +151,8 @@ connect(Socket& s, Range endpoints)
     For each candidate the condition is invoked as
     `cond(last_ec, ep)` where `last_ec` is the error from the most
     recent attempt (default-constructed before the first attempt). If
-    the condition returns `false` the candidate is skipped; otherwise a
-    connect is attempted.
+    the condition returns `false`, the candidate is skipped. Otherwise,
+    a connect is attempted.
 
     @param s The socket to connect. See the non-condition overload for
         requirements.
@@ -247,6 +250,12 @@ connect(Socket& s, Iter begin, Iter end)
 
 /** Asynchronously connect a socket by trying each endpoint in an
     iterator range, filtered by a user-supplied condition.
+
+    @par Cancellation
+    Supports cancellation via the affine awaitable protocol. If a
+    per-endpoint connect completes with `capy::cond::canceled` the
+    operation completes immediately with that error and `end`, without
+    trying further endpoints.
 
     @param s The socket to connect.
     @param begin The first candidate.

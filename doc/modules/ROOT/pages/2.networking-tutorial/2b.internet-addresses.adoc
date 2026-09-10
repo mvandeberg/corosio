@@ -21,7 +21,7 @@ An IPv4 address is a 32-bit number, written as four decimal values separated by 
 192.168.1.42
 ----
 
-That is the human-readable form. Under the hood it is just 32 bits: `11000000.10101000.00000001.00101010`. Four billion possible addresses sounds like a lot until you consider that every phone, laptop, thermostat, and security camera on the planet needs one. The world ran out of fresh IPv4 addresses years ago, and workarounds like network address translation (NAT) keep things functioning -- but the shortage is real.
+That is the human-readable form. Under the hood it is just 32 bits: `11000000.10101000.00000001.00101010`. Four billion possible addresses sounds like a lot until you consider that every phone, laptop, thermostat, and security camera on the planet needs one. The world ran out of fresh IPv4 addresses years ago, and workarounds like network address translation (NAT) keep things functioning. The shortage is real.
 
 == Structure Inside the Address
 

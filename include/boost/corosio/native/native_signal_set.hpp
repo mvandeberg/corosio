@@ -119,21 +119,17 @@ public:
 
     /** Move construct.
 
-        @param other The signal set to move from.
-
-        @pre No awaitables returned by @p other's methods exist.
-        @pre The execution context associated with @p other must
+        @pre No awaitables returned by the source's methods exist.
+        @pre The execution context associated with the source must
             outlive this signal set.
     */
     native_signal_set(native_signal_set&&) noexcept = default;
 
     /** Move assign.
 
-        @param other The signal set to move from.
-
-        @pre No awaitables returned by either `*this` or @p other's
+        @pre No awaitables returned by either `*this` or the source's
             methods exist.
-        @pre The execution context associated with @p other must
+        @pre The execution context associated with the source must
             outlive this signal set.
     */
     native_signal_set& operator=(native_signal_set&&) noexcept = default;

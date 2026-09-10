@@ -26,14 +26,14 @@
 
 namespace boost::corosio {
 
-/** Locking-safety tier for an @ref io_context.
+/** Selects which internal locks the scheduler and reactor elide,
+    trading thread-safety guarantees for reduced synchronization
+    overhead.
 
-    Selects which internal locks the scheduler and reactor elide, trading
-    thread-safety guarantees for reduced synchronization overhead. This is
-    the analog of Boost.Asio's `SAFE` / `UNSAFE_IO` / `UNSAFE` concurrency
-    hint constants. The tier is chosen explicitly, not derived from the
-    `concurrency_hint`. (The reverse does apply: a lockless tier reduces the
-    effective hint used for performance tuning to 1.)
+    This is the analog of Boost.Asio's `SAFE` / `UNSAFE_IO` / `UNSAFE`
+    concurrency hint constants. The tier is chosen explicitly, not derived
+    from the `concurrency_hint`. (The reverse does apply: a lockless tier
+    reduces the effective hint used for performance tuning to 1.)
 
     @see io_context_options::locking
 */
@@ -62,7 +62,7 @@ enum class locking_mode
     unsafe
 };
 
-/** Runtime tuning options for @ref io_context.
+/** Configures scheduler and reactor tuning for an @ref io_context.
 
     All fields have defaults that match the library's built-in
     values, so constructing a default `io_context_options` produces
@@ -82,7 +82,7 @@ struct io_context_options
 
         Controls the buffer size passed to `epoll_wait()` or
         `kevent()`. Larger values reduce syscall frequency under
-        high load; smaller values improve fairness between
+        high load. Smaller values improve fairness between
         connections. Ignored on IOCP and select backends.
     */
     unsigned max_events_per_poll = 128;
@@ -148,7 +148,7 @@ struct io_context_options
     /** SQ-poll idle timeout in milliseconds.
 
         After this many ms of no submissions, the kernel polling
-        thread sleeps; next submit re-wakes it via SQ_WAKEUP. 0
+        thread sleeps. The next submit re-wakes it via SQ_WAKEUP. 0
         means use the kernel default (1ms). Recommended for bursty
         workloads: 100-1000ms (avoids park/unpark thrash).
 
@@ -209,7 +209,7 @@ effective_concurrency_hint(
         behavior. For a safe teardown, first stop submitting new work.
         Then let every `run()` call return; each returns once no
         outstanding work remains. Finally join the threads that ran the
-        loop, and only then destroy the context. Work started with
+        loop. Only then destroy the context. Work started with
         `capy::run` / `capy::run_async` is work-tracked, so a normal
         `run()` completion already waits for it.
 
@@ -253,7 +253,8 @@ protected:
     detail::scheduler* sched_;
 
 public:
-    /** The executor type for this context. */
+    /** Dispatches and posts work to this context; see the
+        executor_type definition below. */
     class executor_type;
 
     /** Construct with default concurrency and platform backend.
@@ -297,6 +298,10 @@ public:
 
     /** Construct with an explicit backend tag.
 
+        @tparam Backend A backend tag type that provides a static
+            `construct(capy::execution_context&, unsigned)` factory
+            used to build the scheduler.
+
         @param backend The backend tag value selecting the I/O
             multiplexer (e.g. `corosio::epoll`).
         @param concurrency_hint Hint for the number of threads
@@ -320,6 +325,10 @@ public:
     }
 
     /** Construct with an explicit backend tag and runtime options.
+
+        @tparam Backend A backend tag type that provides a static
+            `construct(capy::execution_context&, unsigned)` factory
+            used to build the scheduler.
 
         @param backend The backend tag value selecting the I/O
             multiplexer (e.g. `corosio::epoll`).
@@ -586,10 +595,7 @@ class io_context::executor_type
     io_context* ctx_ = nullptr;
 
 public:
-    /** Default constructor.
-
-        Constructs an executor not associated with any context.
-    */
+    /** Constructs an executor not associated with any context. */
     executor_type() = default;
 
     /** Construct an executor from a context.

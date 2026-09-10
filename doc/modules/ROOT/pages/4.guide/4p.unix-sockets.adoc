@@ -109,7 +109,7 @@ include::example$snippets/4p_unix_sockets.cpp[tag=datagram_connectionless,indent
 
 === Connected Mode
 
-After calling `connect()`, use cpp:local_datagram_socket::send[send]/cpp:local_datagram_socket::recv[recv] without specifying the peer:
+After calling cpp:local_datagram_socket::connect[connect], use cpp:local_datagram_socket::send[send]/cpp:local_datagram_socket::recv[recv] without specifying the peer:
 
 [source,cpp]
 ----

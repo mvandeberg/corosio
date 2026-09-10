@@ -321,12 +321,10 @@ by the kernel; these operations are coroutines that orchestrate reads and
 writes on the underlying stream. Its `read_some`/`write_some` template wrappers
 satisfy
 the `capy::Stream` concept, so composed operations like `capy::read` and
-`capy::write` work with it.
-
-[source,cpp]
-----
-include::example$snippets/4l_tls.cpp[tag=tls_stream_interface,indent=0]
-----
+`capy::write` work with it. It also provides `handshake()` to negotiate
+the session, `shutdown()` to close it gracefully, and `next_layer()` to
+reach the underlying stream. See cpp:tls_stream[] for the complete
+interface.
 
 === wolfssl_stream
 

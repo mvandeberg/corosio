@@ -17,7 +17,8 @@ namespace boost::corosio {
 class local_stream_socket;
 class local_stream_acceptor;
 
-/** Protocol tag for local (Unix domain) stream sockets.
+/** Provides the family(), type(), and protocol() constants
+    for opening a local (Unix domain) stream socket.
 
     Identifies the local stream protocol for parameterizing
     socket and acceptor open() calls with a self-documenting

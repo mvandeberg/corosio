@@ -38,7 +38,7 @@ namespace boost::corosio {
 #pragma warning(disable : 4251) // class needs to have dll-interface
 #endif
 
-/** TCP server with pooled workers.
+/** Manages a pool of reusable workers that handle incoming TCP connections.
 
     This class manages a pool of reusable worker objects that handle
     incoming connections. When a connection arrives, an idle worker
@@ -400,11 +400,14 @@ private:
     capy::task<void> do_accept(tcp_acceptor& acc);
 
 public:
-    /** Abstract base class for connection handlers.
+    /** Handles one accepted connection using a socket the derived class owns.
 
         Derive from this class to implement custom connection handling.
         Each worker owns a socket and is reused across multiple
         connections to avoid per-connection allocation.
+
+        @par Thread Safety
+        run() and socket() execute on the server's executor.
 
         @see tcp_server, launcher
     */
@@ -438,7 +441,8 @@ public:
         virtual corosio::tcp_socket& socket() = 0;
     };
 
-    /** Move-only handle to start a worker coroutine.
+    /** Starts a worker's connection-handling coroutine and returns the
+        worker to the idle pool automatically.
 
         Passed to @ref worker_base::run to start the connection-handling
         coroutine. The launcher ensures the worker returns to the idle
@@ -491,6 +495,8 @@ public:
             Starts the given coroutine on the specified executor. When
             the coroutine completes, the worker is automatically returned
             to the idle pool.
+
+            @tparam Executor Executor type satisfying capy::Executor.
 
             @param ex The executor to run the coroutine on.
             @param task The coroutine to execute.
@@ -583,7 +589,8 @@ public:
 
         @param ep The local endpoint to bind to.
 
-        @return The error code if binding fails.
+        @return An error code indicating success, or the reason binding
+            failed.
     */
     [[nodiscard]] std::error_code bind(endpoint ep);
 
@@ -665,7 +672,7 @@ public:
 
         Requests the accept loops' stop token and requests cancellation
         of active workers via their stop tokens. The acceptors are not
-        closed; a suspended accept completes once more before its loop
+        closed. A suspended accept completes once more before its loop
         observes the stop token and ends.
 
         This function returns immediately; it does not wait for workers
@@ -719,7 +726,7 @@ public:
         @par !example deadlock_scenarios
 
         @par Thread Safety
-        May be called from any thread, but deadlocks if called
+        May be called from any thread. It deadlocks if called
         from within the `io_context` event loop or from a worker coroutine.
 
         @see stop, start

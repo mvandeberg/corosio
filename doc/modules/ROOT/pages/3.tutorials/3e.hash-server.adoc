@@ -28,7 +28,7 @@ include::example$hash-server/hash_server.cpp[tag=assume]
 
 Most servers spend their time waiting on the network. When the work between
 reads and writes is cheap, a single-threaded cpp:io_context[] handles thousands
-of connections without breaking a sweat. But some operations — cryptographic
+of connections. But some operations — cryptographic
 hashes, compression, image processing — consume real CPU time. Running those
 inline blocks the event loop and starves every other connection.
 

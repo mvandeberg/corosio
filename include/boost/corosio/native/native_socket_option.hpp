@@ -8,7 +8,7 @@
 // Official repository: https://github.com/cppalliance/corosio
 //
 
-/** @file `native_socket_option`.hpp
+/** @file native_socket_option.hpp
 
     Inline socket option types using platform-specific constants.
     All methods are `constexpr` or trivially inlined, giving zero
@@ -77,7 +77,7 @@ class boolean
     int value_ = 0;
 
 public:
-    /// Construct with default value (disabled).
+    /// Construct with a default value (disabled).
     boolean() = default;
 
     /** Construct with an explicit value.
@@ -86,56 +86,83 @@ public:
     */
     explicit boolean(bool v) noexcept : value_(v ? 1 : 0) {}
 
-    /// Assign a new value.
+    /** Assign a new value.
+
+        @return A reference to this object.
+    */
     boolean& operator=(bool v) noexcept
     {
         value_ = v ? 1 : 0;
         return *this;
     }
 
-    /// Return the option value.
+    /** Return the option value.
+
+        @return The option value.
+    */
     bool value() const noexcept
     {
         return value_ != 0;
     }
 
-    /// Return the option value.
+    /** Return the option value.
+
+        @return The option value.
+    */
     explicit operator bool() const noexcept
     {
         return value_ != 0;
     }
 
-    /// Return the negated option value.
+    /** Return the negated option value.
+
+        @return The negated option value.
+    */
     bool operator!() const noexcept
     {
         return value_ == 0;
     }
 
-    /// Return the protocol level for `setsockopt`/`getsockopt`.
+    /** Return the protocol level for `setsockopt`/`getsockopt`.
+
+        @return The protocol level.
+    */
     static constexpr int level() noexcept
     {
         return Level;
     }
 
-    /// Return the option name for `setsockopt`/`getsockopt`.
+    /** Return the option name for `setsockopt`/`getsockopt`.
+
+        @return The option name.
+    */
     static constexpr int name() noexcept
     {
         return Name;
     }
 
-    /// Return a pointer to the underlying storage.
+    /** Return a pointer to the underlying storage.
+
+        @return A pointer to the underlying storage.
+    */
     void* data() noexcept
     {
         return &value_;
     }
 
-    /// Return a pointer to the underlying storage.
+    /** Return a pointer to the underlying storage.
+
+        @return A pointer to the underlying storage.
+    */
     void const* data() const noexcept
     {
         return &value_;
     }
 
-    /// Return the size of the underlying storage.
+    /** Return the size of the underlying storage.
+
+        @return The size of the underlying storage.
+    */
     std::size_t size() const noexcept
     {
         return sizeof(value_);
@@ -176,7 +203,7 @@ class integer
     int value_ = 0;
 
 public:
-    /// Construct with default value (zero).
+    /// Construct with a default value (zero).
     integer() = default;
 
     /** Construct with an explicit value.
@@ -185,44 +212,65 @@ public:
     */
     explicit integer(int v) noexcept : value_(v) {}
 
-    /// Assign a new value.
+    /** Assign a new value.
+
+        @return A reference to this object.
+    */
     integer& operator=(int v) noexcept
     {
         value_ = v;
         return *this;
     }
 
-    /// Return the option value.
+    /** Return the option value.
+
+        @return The option value.
+    */
     int value() const noexcept
     {
         return value_;
     }
 
-    /// Return the protocol level for `setsockopt`/`getsockopt`.
+    /** Return the protocol level for `setsockopt`/`getsockopt`.
+
+        @return The protocol level.
+    */
     static constexpr int level() noexcept
     {
         return Level;
     }
 
-    /// Return the option name for `setsockopt`/`getsockopt`.
+    /** Return the option name for `setsockopt`/`getsockopt`.
+
+        @return The option name.
+    */
     static constexpr int name() noexcept
     {
         return Name;
     }
 
-    /// Return a pointer to the underlying storage.
+    /** Return a pointer to the underlying storage.
+
+        @return A pointer to the underlying storage.
+    */
     void* data() noexcept
     {
         return &value_;
     }
 
-    /// Return a pointer to the underlying storage.
+    /** Return a pointer to the underlying storage.
+
+        @return A pointer to the underlying storage.
+    */
     void const* data() const noexcept
     {
         return &value_;
     }
 
-    /// Return the size of the underlying storage.
+    /** Return the size of the underlying storage.
+
+        @return The size of the underlying storage.
+    */
     std::size_t size() const noexcept
     {
         return sizeof(value_);
@@ -396,7 +444,10 @@ public:
         value_.l_linger = static_cast<decltype(value_.l_linger)>(timeout);
     }
 
-    /// Return whether linger is enabled.
+    /** Return whether linger is enabled.
+
+        @return `true` if linger is enabled.
+    */
     bool enabled() const noexcept
     {
         return value_.l_onoff != 0;
@@ -408,7 +459,10 @@ public:
         value_.l_onoff = v ? 1 : 0;
     }
 
-    /// Return the linger timeout in seconds.
+    /** Return the linger timeout in seconds.
+
+        @return The linger timeout, in seconds.
+    */
     int timeout() const noexcept
     {
         return static_cast<int>(value_.l_linger);
@@ -420,31 +474,46 @@ public:
         value_.l_linger = static_cast<decltype(value_.l_linger)>(v);
     }
 
-    /// Return the protocol level for `setsockopt`/`getsockopt`.
+    /** Return the protocol level for `setsockopt`/`getsockopt`.
+
+        @return The protocol level.
+    */
     static constexpr int level() noexcept
     {
         return SOL_SOCKET;
     }
 
-    /// Return the option name for `setsockopt`/`getsockopt`.
+    /** Return the option name for `setsockopt`/`getsockopt`.
+
+        @return The option name.
+    */
     static constexpr int name() noexcept
     {
         return SO_LINGER;
     }
 
-    /// Return a pointer to the underlying storage.
+    /** Return a pointer to the underlying storage.
+
+        @return A pointer to the underlying storage.
+    */
     void* data() noexcept
     {
         return &value_;
     }
 
-    /// Return a pointer to the underlying storage.
+    /** Return a pointer to the underlying storage.
+
+        @return A pointer to the underlying storage.
+    */
     void const* data() const noexcept
     {
         return &value_;
     }
 
-    /// Return the size of the underlying storage.
+    /** Return the size of the underlying storage.
+
+        @return The size of the underlying storage.
+    */
     std::size_t size() const noexcept
     {
         return sizeof(value_);
@@ -453,8 +522,6 @@ public:
     /** Normalize after `getsockopt`.
 
         No-op — `struct linger` is always returned at full size.
-
-        @param s The number of bytes actually written by `getsockopt`.
     */
     void resize(std::size_t) noexcept {}
 };
@@ -527,31 +594,46 @@ public:
         std::memcpy(&value_.imr_interface, ib.data(), 4);
     }
 
-    /// Return the protocol level for `setsockopt`/`getsockopt`.
+    /** Return the protocol level for `setsockopt`/`getsockopt`.
+
+        @return The protocol level.
+    */
     static constexpr int level() noexcept
     {
         return IPPROTO_IP;
     }
 
-    /// Return the option name for `setsockopt`/`getsockopt`.
+    /** Return the option name for `setsockopt`/`getsockopt`.
+
+        @return The option name.
+    */
     static constexpr int name() noexcept
     {
         return IP_ADD_MEMBERSHIP;
     }
 
-    /// Return a pointer to the underlying storage.
+    /** Return a pointer to the underlying storage.
+
+        @return A pointer to the underlying storage.
+    */
     void* data() noexcept
     {
         return &value_;
     }
 
-    /// Return a pointer to the underlying storage.
+    /** Return a pointer to the underlying storage.
+
+        @return A pointer to the underlying storage.
+    */
     void const* data() const noexcept
     {
         return &value_;
     }
 
-    /// Return the size of the underlying storage.
+    /** Return the size of the underlying storage.
+
+        @return The size of the underlying storage.
+    */
     std::size_t size() const noexcept
     {
         return sizeof(value_);
@@ -588,31 +670,46 @@ public:
         std::memcpy(&value_.imr_interface, ib.data(), 4);
     }
 
-    /// Return the protocol level for `setsockopt`/`getsockopt`.
+    /** Return the protocol level for `setsockopt`/`getsockopt`.
+
+        @return The protocol level.
+    */
     static constexpr int level() noexcept
     {
         return IPPROTO_IP;
     }
 
-    /// Return the option name for `setsockopt`/`getsockopt`.
+    /** Return the option name for `setsockopt`/`getsockopt`.
+
+        @return The option name.
+    */
     static constexpr int name() noexcept
     {
         return IP_DROP_MEMBERSHIP;
     }
 
-    /// Return a pointer to the underlying storage.
+    /** Return a pointer to the underlying storage.
+
+        @return A pointer to the underlying storage.
+    */
     void* data() noexcept
     {
         return &value_;
     }
 
-    /// Return a pointer to the underlying storage.
+    /** Return a pointer to the underlying storage.
+
+        @return A pointer to the underlying storage.
+    */
     void const* data() const noexcept
     {
         return &value_;
     }
 
-    /// Return the size of the underlying storage.
+    /** Return the size of the underlying storage.
+
+        @return The size of the underlying storage.
+    */
     std::size_t size() const noexcept
     {
         return sizeof(value_);
@@ -647,31 +744,46 @@ public:
         value_.ipv6mr_interface = if_index;
     }
 
-    /// Return the protocol level for `setsockopt`/`getsockopt`.
+    /** Return the protocol level for `setsockopt`/`getsockopt`.
+
+        @return The protocol level.
+    */
     static constexpr int level() noexcept
     {
         return IPPROTO_IPV6;
     }
 
-    /// Return the option name for `setsockopt`/`getsockopt`.
+    /** Return the option name for `setsockopt`/`getsockopt`.
+
+        @return The option name.
+    */
     static constexpr int name() noexcept
     {
         return IPV6_JOIN_GROUP;
     }
 
-    /// Return a pointer to the underlying storage.
+    /** Return a pointer to the underlying storage.
+
+        @return A pointer to the underlying storage.
+    */
     void* data() noexcept
     {
         return &value_;
     }
 
-    /// Return a pointer to the underlying storage.
+    /** Return a pointer to the underlying storage.
+
+        @return A pointer to the underlying storage.
+    */
     void const* data() const noexcept
     {
         return &value_;
     }
 
-    /// Return the size of the underlying storage.
+    /** Return the size of the underlying storage.
+
+        @return The size of the underlying storage.
+    */
     std::size_t size() const noexcept
     {
         return sizeof(value_);
@@ -706,31 +818,46 @@ public:
         value_.ipv6mr_interface = if_index;
     }
 
-    /// Return the protocol level for `setsockopt`/`getsockopt`.
+    /** Return the protocol level for `setsockopt`/`getsockopt`.
+
+        @return The protocol level.
+    */
     static constexpr int level() noexcept
     {
         return IPPROTO_IPV6;
     }
 
-    /// Return the option name for `setsockopt`/`getsockopt`.
+    /** Return the option name for `setsockopt`/`getsockopt`.
+
+        @return The option name.
+    */
     static constexpr int name() noexcept
     {
         return IPV6_LEAVE_GROUP;
     }
 
-    /// Return a pointer to the underlying storage.
+    /** Return a pointer to the underlying storage.
+
+        @return A pointer to the underlying storage.
+    */
     void* data() noexcept
     {
         return &value_;
     }
 
-    /// Return a pointer to the underlying storage.
+    /** Return a pointer to the underlying storage.
+
+        @return A pointer to the underlying storage.
+    */
     void const* data() const noexcept
     {
         return &value_;
     }
 
-    /// Return the size of the underlying storage.
+    /** Return the size of the underlying storage.
+
+        @return The size of the underlying storage.
+    */
     std::size_t size() const noexcept
     {
         return sizeof(value_);
@@ -766,31 +893,46 @@ public:
         std::memcpy(&value_, b.data(), 4);
     }
 
-    /// Return the protocol level for `setsockopt`/`getsockopt`.
+    /** Return the protocol level for `setsockopt`/`getsockopt`.
+
+        @return The protocol level.
+    */
     static constexpr int level() noexcept
     {
         return IPPROTO_IP;
     }
 
-    /// Return the option name for `setsockopt`/`getsockopt`.
+    /** Return the option name for `setsockopt`/`getsockopt`.
+
+        @return The option name.
+    */
     static constexpr int name() noexcept
     {
         return IP_MULTICAST_IF;
     }
 
-    /// Return a pointer to the underlying storage.
+    /** Return a pointer to the underlying storage.
+
+        @return A pointer to the underlying storage.
+    */
     void* data() noexcept
     {
         return &value_;
     }
 
-    /// Return a pointer to the underlying storage.
+    /** Return a pointer to the underlying storage.
+
+        @return A pointer to the underlying storage.
+    */
     void const* data() const noexcept
     {
         return &value_;
     }
 
-    /// Return the size of the underlying storage.
+    /** Return the size of the underlying storage.
+
+        @return The size of the underlying storage.
+    */
     std::size_t size() const noexcept
     {
         return sizeof(value_);

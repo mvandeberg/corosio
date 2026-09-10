@@ -164,9 +164,9 @@ public:
 
     /** Move construct.
 
-        @pre No awaitables returned by @p other's `resolve` methods
+        @pre No awaitables returned by the source's `resolve` methods
             exist.
-        @pre The execution context associated with @p other must
+        @pre The execution context associated with the source must
             outlive this resolver.
     */
     native_resolver(native_resolver&&) noexcept = default;
@@ -197,8 +197,8 @@ public:
 
         @return An awaitable yielding `io_result<resolver_results>`.
 
-        @note `resolver_results` is an alias for `std::vector<resolver_entry>`;
-            copying it deep-copies every entry. See @ref resolver::resolve.
+        @note `resolver_results` is an alias for `std::vector<resolver_entry>`.
+            Copying it deep-copies every entry. See @ref resolver::resolve.
     */
     [[nodiscard]] auto resolve(std::string_view host, std::string_view service)
     {

@@ -19,10 +19,8 @@ namespace boost::corosio {
 
 class local_datagram_socket;
 
-/** Protocol tag for local (Unix domain) datagram sockets.
-
-    Identifies the local datagram protocol for parameterizing
-    socket open() calls with a self-documenting type.
+/** Identifies the local (Unix domain) datagram protocol for
+    parameterizing socket open() calls.
 
     The family(), type(), and protocol() members return the
     three integers passed to the operating system's socket()
@@ -31,6 +29,9 @@ class local_datagram_socket;
 
     @note Not available on Windows. Windows does not support
         AF_UNIX datagram sockets (SOCK_DGRAM).
+
+    @par Example
+    @par !example open_with_protocol
 
     @see local_datagram_socket
 */

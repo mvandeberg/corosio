@@ -25,7 +25,7 @@
 
 namespace boost::corosio {
 
-/** Abstract base for streams that support async reads.
+/** Reads bytes from a stream asynchronously.
 
     Provides the `read_some` operation via a pure virtual
     `do_read_some` dispatch point. Concrete classes override

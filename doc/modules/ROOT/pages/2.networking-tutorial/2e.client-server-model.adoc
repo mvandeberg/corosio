@@ -103,7 +103,7 @@ Fire and forget:: The client sends data without expecting a response. Some loggi
 
 == Why This Matters to You
 
-The client-server model and port numbers are the foundation of every connection your program makes. When you see "connection refused," it means no process was listening on the target port. When you see "address already in use," it means another process (or a lingering socket in TIME_WAIT) is already bound to the port you requested.
+The client-server model and port numbers are the foundation of every connection your program makes. When you see "connection refused," it means no process was listening on the target port. When you see "address already in use," it means another process (or a lingering socket in TIME_WAIT, a brief post-close cleanup state) is already bound to the port you requested.
 
 Understanding the four-tuple explains why a server can accept many connections on a single port, and why the OS assigns ephemeral ports automatically on the client side. Understanding the socket interface tells you what system calls your networking library wraps on your behalf.
 

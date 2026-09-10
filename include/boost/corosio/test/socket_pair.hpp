@@ -38,6 +38,9 @@ namespace boost::corosio::test {
     @param ctx The I/O context for the sockets.
 
     @return A pair of connected sockets.
+
+    @throws std::runtime_error if opening, binding, listening,
+        accepting, or connecting fails.
 */
 template<
     class Socket   = tcp_socket,

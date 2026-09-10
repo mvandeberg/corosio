@@ -50,16 +50,17 @@ Corosio works with Boost.Capy for task management and execution contexts.
 **Coroutines only.** Every I/O operation returns an awaitable. There are no
 callback-based interfaces.
 
-**Affinity through protocol.** The dispatcher propagates through `await_suspend`
+**Affinity through protocol.** The executor propagates through `await_suspend`
 parameters, not through thread-local storage. When an I/O operation completes,
-it resumes your coroutine through the dispatcher you provided.
+it resumes your coroutine through the executor you provided.
 
 **Structured bindings.** Results use `io_result<T>` which supports structured
-bindings: `auto [ec, n] = co_await s.read_some(buf)`. `io_result` has no
-`value()`; to throw on error, check `ec` and `throw std::system_error(ec)`.
+bindings: `auto [ec, n] = co_await s.read_some(buf)`. See
+xref:4.guide/4m.error-handling.adoc[Error Handling] for how to handle the
+error code.
 
 **Type erasure at I/O boundaries.** Socket implementations use type-erased
-dispatchers internally. The indirection cost is negligible compared to I/O
+I/O backends internally. The indirection cost is negligible compared to I/O
 latency.
 
 == Target Audience
@@ -114,6 +115,7 @@ include::example$programs/index_page_connect.cpp[tag=full]
 == Next Steps
 
 * xref:quick-start.adoc[Quick Start] — Build a working echo server
+* xref:4.guide/4m.error-handling.adoc[Error Handling] — How errors are reported and handled
 * xref:4.guide/4a.tcp-networking.adoc[TCP/IP Networking] — Networking fundamentals
 * xref:4.guide/4b.concurrent-programming.adoc[Concurrent Programming] — Coroutines and strands
 * xref:4.guide/4c.io-context.adoc[I/O Context] — Understand the event loop

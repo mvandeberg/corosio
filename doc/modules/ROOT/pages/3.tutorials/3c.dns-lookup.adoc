@@ -69,39 +69,13 @@ include::example$nslookup/nslookup.cpp[tag=main]
 
 == Resolver Flags
 
-The resolver accepts optional flags to control behavior:
+The resolver accepts optional flags to control behavior. See the
+xref:../4.guide/4j.resolver.adoc[Resolver Guide] for the full flag reference.
 
 [source,cpp]
 ----
 include::example$snippets/3c_dns_lookup.cpp[tag=resolve_with_flags,indent=0]
 ----
-
-Available flags:
-
-[cols="1,3"]
-|===
-| Flag | Description
-
-| `passive`
-| Return endpoints suitable for binding (server use)
-
-| `numeric_host`
-| Host is a numeric address string, skip DNS
-
-| `numeric_service`
-| Service is a port number string
-
-| `address_configured`
-| Only return addresses if configured on the system
-
-| `v4_mapped`
-| Intended to return IPv4-mapped IPv6 addresses if no IPv6 found. Has no effect
-in the current implementation (see note below).
-
-| `all_matching`
-| Intended to combine with `v4_mapped` to return all matching addresses. Has no
-effect in the current implementation (see note below).
-|===
 
 [NOTE]
 ====
@@ -142,7 +116,7 @@ Total: 1 addresses
 
 == Cancellation
 
-Resolver operations support cancellation via `std::stop_token`:
+Resolver operations support cancellation. Explicit cancellation looks like this:
 
 [source,cpp]
 ----
@@ -154,7 +128,7 @@ with `ec == capy::cond::canceled`. The underlying value depends on the path:
 `cancel()` reports `capy::error::canceled`, and a stop-token request reports
 the generic `std::errc::operation_canceled`.
 
-Or through the affine awaitable protocol, which propagates the stop token from `capy::run_async` to every awaitable in the chain.
+Or through the xref:../4.guide/4b.concurrent-programming.adoc[affine awaitable protocol], which propagates the stop token from `capy::run_async` to every awaitable in the chain.
 
 == Next Steps
 

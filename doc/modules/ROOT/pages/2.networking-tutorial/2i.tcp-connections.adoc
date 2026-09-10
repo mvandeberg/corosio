@@ -41,7 +41,7 @@ The initial sequence numbers are chosen randomly (not starting from zero) to pre
 
 What happens when the server does not respond to the SYN? The client waits, retransmits the SYN after a short delay, and retransmits again with increasingly longer delays. After several retries spanning a total of roughly 30 to 75 seconds (depending on the operating system), the connection attempt gives up and your application receives a timeout error.
 
-This is the error you see when connecting to a host that is unreachable, firewalled, or not running a server on the target port. The long delay before the error appears is TCP being patient -- giving the network every chance to deliver the SYN.
+This is the error you see when connecting to a host that is unreachable, firewalled, or not running a server on the target port. TCP retries the SYN with increasing delays, giving the network every chance to deliver it before the error appears.
 
 If the server is reachable but nothing is listening on the port, the response is faster: the server immediately sends a RST (reset) segment, and your application gets a "connection refused" error within milliseconds.
 
@@ -108,13 +108,13 @@ After both sides have exchanged FINs and ACKs, you might expect the connection t
 TIME_WAIT exists for two reasons:
 
 . *Reliable termination*: If the final ACK is lost, the remote side retransmits its FIN. The TIME_WAIT state ensures that the local side is still around to re-acknowledge it.
-. *Preventing stale segments*: If a new connection is established on the same four-tuple immediately after closing, delayed segments from the old connection might arrive and be misinterpreted as belonging to the new one. TIME_WAIT ensures that enough time passes for any lingering segments to expire.
+. *Preventing stale segments*: If a new connection is established on the same four-tuple (source address, source port, destination address, destination port) immediately after closing, delayed segments from the old connection might arrive and be misinterpreted as belonging to the new one. TIME_WAIT ensures that enough time passes for any lingering segments to expire.
 
 The practical consequence is the dreaded "address already in use" error. If your server shuts down and immediately restarts, it cannot bind to the same port because the old connections are still in TIME_WAIT. The standard solution is to set the `SO_REUSEADDR` socket option before binding, which tells the OS to allow binding to a port that has connections in TIME_WAIT.
 
 == Reset Segments
 
-A RST (reset) segment is the emergency stop. It terminates the connection immediately, without the graceful FIN exchange. The receiving side sees an error on the socket -- typically "connection reset by peer."
+A RST (reset) segment terminates a connection immediately, without a graceful FIN exchange. The receiving side sees an error on the socket -- typically "connection reset by peer."
 
 RST is sent in several situations:
 

@@ -84,7 +84,7 @@ public:
         flags can be combined using the bitwise OR operator.
 
         @note Flags only have effect on POSIX systems. On Windows,
-        only `none` and `dont_care` are supported; other flags return
+        only `none` and `dont_care` are supported. Other flags return
         `operation_not_supported`.
     */
     enum flags_t : unsigned
@@ -295,13 +295,13 @@ public:
 
         The first signal registration on an execution context installs
         the process signal-delivery pipe. If that installation fails,
-        the error is returned and the next call retries it.
+        the error is returned. The next call retries it.
 
         @param signal_number The signal to be added to the set.
         @param flags The flags to apply when registering the signal.
             On POSIX systems, these map to sigaction() flags.
-            On Windows, only `none` and `dont_care` are supported;
-            other flags cause `errc::operation_not_supported` to
+            On Windows, only `none` and `dont_care` are supported.
+            Other flags cause `errc::operation_not_supported` to
             be returned.
 
         @return Success, or an error if the signal could not be added.

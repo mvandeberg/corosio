@@ -46,7 +46,7 @@ This avoids allocation during operation and limits resource usage.
 
 == Worker Implementation
 
-Workers derive from `tcp_server::worker_base` and implement two methods:
+Workers derive from cpp:tcp_server::worker_base[worker_base] and implement two methods:
 
 [source,cpp]
 ----
@@ -109,9 +109,7 @@ The cpp:tcp_server[] framework provides:
 
 === Why Worker Pooling?
 
-* **Bounded memory**: Fixed number of connections
-* **No allocation**: Sockets and buffers preallocated
-* **Simple accounting**: Framework tracks worker availability
+See "Why a Worker Pool?" in xref:../4.guide/4k.tcp-server.adoc[the TCP Server guide] for the rationale.
 
 === Why Composed Write?
 

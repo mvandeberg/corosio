@@ -76,7 +76,7 @@ namespace boost::corosio {
     operations of the same type (e.g., two simultaneous
     `recv_from`). One send and one `recv` may be in flight
     simultaneously. Both `recv` and `recv_from` share the
-    same internal read slot, so they must not overlap; likewise
+    same internal read slot, so they must not overlap. Likewise,
     send and `send_to` share the write slot.
 
     @par Example
@@ -185,7 +185,7 @@ public:
             @param h Coroutine handle to resume on completion.
             @param ex Executor for dispatching the completion.
             @param buf The buffer to receive into.
-            @param flags Message flags (e.g. MSG_PEEK).
+            @param flags Message flags (e.g. `message_flags::peek`).
             @param token Stop token for cancellation.
             @param ec Output error code.
             @param bytes_out Output bytes transferred.
@@ -648,6 +648,7 @@ public:
 
         @param buf The buffer containing data to send.
         @param dest The destination endpoint.
+        @param flags Message flags (e.g. message_flags::do_not_route).
 
         @par Cancellation
         Supports cancellation via stop_token or cancel().
@@ -885,8 +886,8 @@ public:
         library — from `socketpair()`, received over `SCM_RIGHTS`,
         or made natively — and registers it with the backend. The
         socket must be a datagram socket in the `AF_UNIX` family.
-        Adoption never alters the descriptor's flags or options; the
-        fd must already be non-blocking.
+        Adoption never alters the descriptor's flags or options.
+        The fd must already be non-blocking.
 
         If this object is already open, pending operations complete
         with `errc::operation_canceled` and the held socket is

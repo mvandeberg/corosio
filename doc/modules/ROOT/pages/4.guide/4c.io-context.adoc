@@ -10,7 +10,7 @@
 = I/O Context
 :page-mode: how-to
 
-The cpp:io_context[] class is the heart of Corosio. It's an event loop that
+The cpp:io_context[] class is the event loop every Corosio program needs: it
 processes asynchronous I/O operations, manages timers, and coordinates
 coroutine execution.
 
@@ -72,8 +72,9 @@ are expected to call `run()`. It tunes:
   from cpp:io_context_options::thread_pool_size[thread_pool_size].
 
 The hint does not affect thread safety, which is governed by the cpp:io_context_options::locking[locking]
-tier. To reduce synchronization overhead in a single-threaded program, select a
-lockless cpp:io_context_options::locking[locking] tier (see
+tier. A lockless cpp:io_context_options::locking[locking] tier (`unsafe_io` or `unsafe`) overrides
+the effective hint to 1 regardless of the value passed. To reduce synchronization overhead in a
+single-threaded program, select a lockless cpp:io_context_options::locking[locking] tier (see
 xref:4.guide/4c2.configuration.adoc#single-threaded-mode[Locking Tiers]).
 
 == Running the Event Loop
@@ -214,7 +215,7 @@ include::example$snippets/4c_io_context.cpp[tag=multithreaded,indent=0]
 
 Multiple threads can call `run()` concurrently. The cpp:io_context[] distributes
 work across threads. The one exception is a lockless cpp:io_context_options::locking[locking] tier: constructing
-with `io_context_options::locking` set to `unsafe_io` or `unsafe` drops these
+with cpp:io_context_options::locking[locking] set to `unsafe_io` or `unsafe` drops these
 guarantees (see
 xref:4.guide/4c2.configuration.adoc#single-threaded-mode[Locking Tiers]).
 
@@ -262,7 +263,7 @@ On Windows, the cpp:io_context[] uses I/O Completion Ports:
 
 * Scalable to thousands of concurrent connections
 * Efficient thread pool utilization
-* Native async I/O with zero-copy potential
+* Native async I/O
 
 === Linux (epoll)
 

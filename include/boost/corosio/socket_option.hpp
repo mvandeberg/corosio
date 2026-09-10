@@ -36,7 +36,7 @@
 
 namespace boost::corosio::socket_option {
 
-/** Base class for concrete boolean socket options.
+/** Stores a boolean option value for derived socket-option types.
 
     Stores a boolean as an `int` suitable for `setsockopt`/`getsockopt`.
     Derived types provide `level()` and `name()` for the specific option.
@@ -55,7 +55,10 @@ public:
     */
     explicit boolean_option(bool v) noexcept : value_(v ? 1 : 0) {}
 
-    /// Assign a new value.
+    /** Assign a new value.
+
+        @param v `true` to enable the option, `false` to disable.
+    */
     boolean_option& operator=(bool v) noexcept
     {
         value_ = v ? 1 : 0;
@@ -111,7 +114,7 @@ public:
     }
 };
 
-/** Base class for concrete integer socket options.
+/** Stores an integer option value for derived socket-option types.
 
     Stores an integer suitable for `setsockopt`/`getsockopt`.
     Derived types provide `level()` and `name()` for the specific option.
@@ -130,7 +133,10 @@ public:
     */
     explicit integer_option(int v) noexcept : value_(v) {}
 
-    /// Assign a new value.
+    /** Assign a new value.
+
+        @param v The option value.
+    */
     integer_option& operator=(int v) noexcept
     {
         value_ = v;
@@ -173,7 +179,8 @@ public:
     }
 };
 
-/** Base class for concrete boolean socket options with single-byte storage.
+/** Stores a boolean option value in single-byte storage for derived
+    socket-option types.
 
     Some BSD-derived kernels, among them macOS and FreeBSD, require certain
     IPv4 multicast options such as `IP_MULTICAST_LOOP` to be set with a
@@ -195,7 +202,10 @@ public:
     */
     explicit byte_boolean_option(bool v) noexcept : value_(v ? 1 : 0) {}
 
-    /// Assign a new value.
+    /** Assign a new value.
+
+        @param v `true` to enable the option, `false` to disable.
+    */
     byte_boolean_option& operator=(bool v) noexcept
     {
         value_ = v ? 1 : 0;
@@ -245,7 +255,8 @@ public:
     void resize([[maybe_unused]] std::size_t n) noexcept {}
 };
 
-/** Base class for concrete integer socket options with single-byte storage.
+/** Stores an integer option value in single-byte storage for derived
+    socket-option types.
 
     Same rationale as `byte_boolean_option`: BSD-derived kernels require
     `IP_MULTICAST_TTL` to be set with a one-byte value. Linux accepts
@@ -268,7 +279,10 @@ public:
     {
     }
 
-    /// Assign a new value; truncated to one byte.
+    /** Assign a new value; truncated to one byte.
+
+        @param v The option value; truncated to one byte.
+    */
     byte_integer_option& operator=(int v) noexcept
     {
         value_ = static_cast<unsigned char>(v);
@@ -477,9 +491,8 @@ public:
     static int name() noexcept;
 };
 
-/** Controls how long `close()` blocks while unsent data drains.
+/** Control how long `close()` blocks while unsent data drains.
 
-    Controls behavior when closing a socket with unsent data.
     When enabled, `close()` blocks until pending data is sent
     or the timeout expires.
 

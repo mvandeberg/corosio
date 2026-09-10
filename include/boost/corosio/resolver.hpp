@@ -401,7 +401,7 @@ public:
     void cancel() noexcept;
 
 public:
-    /** Backend interface for DNS resolution operations.
+    /** Define backend hooks for DNS resolution operations.
 
         Platform backends derive from this to implement forward and
         reverse DNS resolution via `getaddrinfo`/`getnameinfo`.

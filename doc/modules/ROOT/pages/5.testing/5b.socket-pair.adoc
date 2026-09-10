@@ -26,10 +26,10 @@ include::example$snippets/5b_socket_pair.cpp[tag=assume]
 
 == Overview
 
-[source,cpp]
-----
-include::example$snippets/5b_socket_pair.cpp[tag=signature]
-----
+cpp:make_socket_pair[] takes an cpp:io_context[] and returns a
+`std::pair` of two connected sockets. Three template parameters
+customize it: `Socket` (default cpp:tcp_socket[]), `Acceptor` (default
+cpp:tcp_acceptor[]), and `Linger` (default `true`, see below).
 
 The function:
 

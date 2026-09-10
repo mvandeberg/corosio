@@ -342,6 +342,10 @@ public:
     /** Construct a native UDP socket from an executor.
 
         @param ex The executor whose context owns the socket.
+
+        @tparam Ex A type satisfying @ref capy::Executor. Must not
+            be `native_udp_socket` itself (disables implicit
+            conversion from move).
     */
     template<class Ex>
         requires(!std::same_as<std::remove_cvref_t<Ex>, native_udp_socket>) &&
@@ -350,10 +354,25 @@ public:
     {
     }
 
-    /// Move construct.
+    /** Move construct.
+
+        @param other The socket to move from.
+
+        @pre No awaitables returned by @p other's methods exist.
+        @pre The execution context associated with @p other must
+            outlive this socket.
+    */
     native_udp_socket(native_udp_socket&&) noexcept = default;
 
-    /// Move assign.
+    /** Move assign.
+
+        @param other The socket to move from.
+
+        @pre No awaitables returned by either `*this` or @p other's
+            methods exist.
+        @pre The execution context associated with @p other must
+            outlive this socket.
+    */
     native_udp_socket& operator=(native_udp_socket&&) noexcept = default;
 
     /// Copy construction is disabled; the handle is uniquely owned.

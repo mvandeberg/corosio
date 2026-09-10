@@ -39,10 +39,10 @@ namespace boost::corosio {
     Two construction modes are supported:
 
     - **Owning**: Pass stream by value. The `openssl_stream` takes
-      ownership and the stream is moved into internal storage.
+      ownership. The stream is moved into internal storage.
 
     - **Reference**: Pass stream by pointer. The `openssl_stream`
-      does not own the stream; the caller must ensure the stream
+      does not own the stream. The caller must ensure the stream
       outlives this object.
 
     @par Thread Safety
@@ -76,7 +76,8 @@ public:
         `openssl_stream` is destroyed.
 
         @param stream The stream to take ownership of. Must satisfy
-            `capy::Stream`.
+            `capy::Stream` and must not be an `openssl_stream`; that
+            case binds to the move constructor instead.
         @param ctx The TLS context containing configuration.
     */
     template<capy::Stream S>
@@ -104,7 +105,7 @@ public:
     {
     }
 
-    /** Destructor.
+    /** Destroy the OpenSSL stream.
 
         Releases the underlying OpenSSL resources. If constructed
         in owning mode, also destroys the underlying stream.
@@ -149,14 +150,14 @@ public:
         stop token.
 
         @pre A handshake must have completed successfully. May overlap
-            a pending read; the read completes with `capy::error::eof`
+            a pending read. That read completes with `capy::error::eof`
             when the peer answers the close_notify. No concurrent write
             may be in progress.
 
         @par Postconditions
         If the transport ends before the peer's close_notify is
         received, the result is `capy::error::stream_truncated`, not
-        success. A shutdown stopped mid-flight reports canceled; any
+        success. A shutdown stopped mid-flight reports canceled. Any
         other transport error propagates unchanged.
 
         @return An awaitable yielding `(error_code)`.

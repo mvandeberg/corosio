@@ -27,12 +27,7 @@ include::example$snippets/4r_wait.cpp[tag=assume]
 
 == Overview
 
-Three directions are exposed via the cpp:wait_type[] enum:
-
-[source,cpp]
-----
-include::example$snippets/4r_wait.cpp[tag=wait_type_enum,indent=0]
-----
+Three directions are exposed via the cpp:wait_type[] enum.
 
 The awaitable yields an `error_code` with no `bytes_transferred`. On
 success the socket is ready; the wait consumes no data from it.
@@ -93,7 +88,7 @@ signaling) without holding an `accept()` call open.
 
 A connection already queued when the wait begins completes it
 immediately — including on an adopted listener whose backlog predates
-the adoption, the socket-activation handoff shape.
+the adoption.
 
 == Cancellation
 

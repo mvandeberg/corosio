@@ -46,7 +46,7 @@ namespace boost::corosio {
     is added.
 
     A `native_io_context` IS-A `io_context` and can be passed
-    anywhere an `io_context&` is accepted, in which case virtual
+    anywhere an `io_context&` is accepted. In that case, virtual
     dispatch is used transparently.
 
     @tparam Backend A backend tag value (e.g., `epoll`,
@@ -78,7 +78,7 @@ public:
     /** Construct with a concurrency hint.
 
         @param concurrency_hint Hint for the number of threads that
-            calls `run()`.
+            call `run()`.
     */
     explicit native_io_context(unsigned concurrency_hint)
         : io_context(Backend, concurrency_hint)
@@ -90,7 +90,7 @@ public:
         @param opts Runtime options controlling scheduler and
             service behavior.
         @param concurrency_hint Hint for the number of threads that
-            calls `run()`.
+            call `run()`.
     */
     explicit native_io_context(
         io_context_options const& opts,
@@ -111,7 +111,10 @@ public:
         sched().stop();
     }
 
-    /// Return whether the context stopped.
+    /** Return whether the context stopped.
+
+        @return `true` if the context has stopped.
+    */
     bool stopped() const noexcept
     {
         return const_cast<native_io_context*>(this)->sched().stopped();

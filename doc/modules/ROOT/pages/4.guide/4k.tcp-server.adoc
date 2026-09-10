@@ -66,7 +66,7 @@ include::example$snippets/4k_tcp_server.cpp[tag=my_worker]
 === Providing Workers
 
 The worker pool is installed with `set_workers()`. It accepts any forward
-range of pointer-like objects convertible to `worker_base*`, such as a
+range of pointer-like objects convertible to a pointer to cpp:tcp_server::worker_base[], such as a
 `std::vector<std::unique_ptr<worker_base>>`. The server takes ownership of the
 range and reuses each worker across connections:
 
@@ -82,7 +82,7 @@ A small helper that builds the range keeps construction tidy:
 include::example$snippets/4k_tcp_server.cpp[tag=make_workers]
 ----
 
-Because the range holds `unique_ptr<worker_base>`, workers are stored
+Because the range holds a `unique_ptr` to cpp:tcp_server::worker_base[], workers are stored
 polymorphically, allowing different worker types in the same pool if needed.
 
 == The Launcher

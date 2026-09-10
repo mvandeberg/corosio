@@ -52,7 +52,7 @@ namespace boost::corosio {
 class BOOST_COROSIO_DECL stream_file : public io_stream
 {
 public:
-    /** Platform-specific file implementation interface.
+    /** Defines the file operations a platform backend implements.
 
         Backends derive from this to provide file I/O.
         `read_some` and `write_some` are inherited from
@@ -66,7 +66,10 @@ public:
         /// Cancel pending asynchronous operations.
         virtual void cancel() noexcept = 0;
 
-        /// Return the file size in bytes.
+        /** Return the file size in bytes.
+
+            @throws std::system_error if the underlying size query fails.
+        */
         virtual std::uint64_t size() const = 0;
 
         /** Resize the file to @p new_size bytes.
@@ -89,7 +92,10 @@ public:
         */
         virtual std::error_code sync_all() noexcept = 0;
 
-        /// Release ownership of the native handle.
+        /** Release ownership of the native handle.
+
+            @throws std::system_error if the file is not open.
+        */
         virtual native_handle_type release() = 0;
 
         /** Adopt an existing native handle.
@@ -111,9 +117,7 @@ public:
         seek(std::int64_t offset, file_base::seek_basis origin) noexcept = 0;
     };
 
-    /** Destructor.
-
-        Closes the file if open, cancelling any pending operations.
+    /** Closes the file if open, cancelling any pending operations.
     */
     ~stream_file() override;
 
@@ -134,15 +138,13 @@ public:
     {
     }
 
-    /** Move constructor.
-
-        Transfers ownership of the file resources.
+    /** Transfers ownership of the file resources.
     */
     stream_file(stream_file&& other) noexcept : io_object(std::move(other)) {}
 
-    /** Move assignment operator.
+    /** Closes any existing file and transfers ownership.
 
-        Closes any existing file and transfers ownership.
+        @return Reference to this object.
     */
     stream_file& operator=(stream_file&& other) noexcept
     {
@@ -215,6 +217,8 @@ public:
 
     /** Return the file size in bytes.
 
+        @return The file size in bytes.
+
         @throws std::system_error If the file is not open, or if the
             underlying size query fails.
     */
@@ -268,8 +272,8 @@ public:
 
         Closes any currently open file before adopting.
         The file object takes ownership of the handle. Handles
-        created elsewhere may be unsuitable for asynchronous I/O;
-        such failures are reported through the returned error code.
+        created elsewhere may be unsuitable for asynchronous I/O.
+        Such failures are reported through the returned error code.
 
         @param handle The native file descriptor or handle.
 
@@ -297,7 +301,10 @@ protected:
     /// Default-construct (for derived types that initialize io_object directly).
     stream_file() noexcept = default;
 
-    /// Construct from a pre-built handle (for native_stream_file).
+    /** Construct from a pre-built handle (for native_stream_file).
+
+        @param h The pre-built handle to adopt.
+    */
     explicit stream_file(handle h) noexcept : io_object(std::move(h)) {}
 
 private:

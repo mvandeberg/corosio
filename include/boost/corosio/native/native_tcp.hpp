@@ -44,7 +44,8 @@ class tcp_acceptor;
 
 namespace boost::corosio {
 
-/** Inline TCP protocol type with platform constants.
+/** Resolves the TCP protocol's family, type, and protocol
+    values using platform socket headers.
 
     Same shape as @ref boost::corosio::tcp but with inline
     `family()`, `type()`, and `protocol()` methods; `type()`

@@ -39,10 +39,10 @@ namespace boost::corosio {
     Two construction modes are supported:
 
     - **Owning**: Pass stream by value. The `wolfssl_stream` takes
-      ownership and the stream is moved into internal storage.
+      ownership. The stream is moved into internal storage.
 
     - **Reference**: Pass stream by pointer. The `wolfssl_stream`
-      does not own the stream; the caller must ensure the stream
+      does not own the stream. The caller must ensure the stream
       outlives this object.
 
     @par Thread Safety
@@ -104,7 +104,7 @@ public:
     {
     }
 
-    /** Destructor.
+    /** Destroy the WolfSSL stream.
 
         Releases the underlying WolfSSL resources. If constructed
         in owning mode, also destroys the underlying stream.
@@ -149,14 +149,14 @@ public:
         stop token.
 
         @pre A handshake must have completed successfully. May overlap
-            a pending read; the read completes with `capy::error::eof`
+            a pending read. That read completes with `capy::error::eof`
             when the peer answers the close_notify. No concurrent write
             may be in progress.
 
         @par Postconditions
         If the transport ends before the peer's close_notify is
         received, the result is `capy::error::stream_truncated`, not
-        success. A shutdown stopped mid-flight reports canceled; any
+        success. A shutdown stopped mid-flight reports canceled. Any
         other transport error propagates unchanged.
 
         @return An awaitable yielding `(error_code)`.
@@ -281,9 +281,9 @@ BOOST_COROSIO_DECL bool wolfssl_supports_crl() noexcept;
     Matching an IP literal against a certificate's iPAddress entries
     requires a WolfSSL built with both `OPENSSL_EXTRA` and
     `WOLFSSL_IP_ALT_NAME`. The first routes the address into the verify
-    parameters the certificate check consults; the second records
+    parameters the certificate check consults. The second records
     iPAddress entries during parsing. On a build lacking either,
-    `wolfSSL_check_ip_address` reports success but verification silently
+    `wolfSSL_check_ip_address` reports success. Verification silently
     checks nothing. A handshake with an IP literal set via @ref
     tls_stream::set_hostname therefore fails with
     `std::errc::function_not_supported` rather than proceed unverified.

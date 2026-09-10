@@ -187,8 +187,11 @@ The endpoint stores:
 * Port number (16-bit, host byte order)
 * Address type flag (is_v4)
 
+[NOTE]
+====
 Both address types are stored to avoid needing a union or variant. The
 `is_v4` flag indicates which address is active.
+====
 
 == Thread Safety
 

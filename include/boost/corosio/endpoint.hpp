@@ -29,7 +29,7 @@ namespace boost::corosio {
 
     This class represents an endpoint for IP communication,
     consisting of either an IPv4 or IPv6 address and a port number.
-    Endpoints are used to specify connection targets and bind addresses.
+    Use an endpoint to specify a connection target or bind address.
 
     The endpoint holds both address types as separate members (not a union),
     with a discriminator to track which address type is active.
@@ -49,9 +49,7 @@ class endpoint
     bool is_v4_         = true;
 
 public:
-    /** Default constructor.
-
-        Creates an endpoint with the IPv4 any address (0.0.0.0) and port 0.
+    /** Creates an endpoint with the IPv4 any address (0.0.0.0) and port 0.
     */
     endpoint() noexcept
         : v4_address_(ipv4_address::any())
@@ -204,8 +202,8 @@ public:
 
         Establishes a strict total ordering consistent with
         @ref operator==: equal endpoints compare equivalent.
-        Endpoints are ordered first by address family (IPv4
-        before IPv6), then by address value, then by port. This
+        `operator<=>` orders endpoints first by address family
+        (IPv4 before IPv6), then by address value, then by port. This
         makes `endpoint` usable as a key in ordered containers
         such as `std::map` and `std::set`.
 
@@ -233,7 +231,7 @@ public:
     }
 };
 
-/** Endpoint format detection result.
+/** Identifies which of the four supported endpoint string formats a string is in.
 
     Used internally by `make_endpoint` to determine
     the format of an endpoint string.

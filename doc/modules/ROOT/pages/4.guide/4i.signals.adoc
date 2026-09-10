@@ -90,7 +90,7 @@ Add a signal to the set:
 include::example$snippets/4i_signals.cpp[tag=add_signal,indent=0]
 ----
 
-Adding a signal that's already in the set has no effect.
+Adding a signal that's already in the set with the same flags has no effect.
 
 ==== Signal Flags (POSIX)
 
@@ -129,9 +129,9 @@ Available flags:
 | Accept existing flags if signal is already registered
 |===
 
-NOTE: On Windows, only `none` and `dont_care` flags are supported. On some POSIX
-systems, `no_child_wait` may not be available. Using unsupported flags returns
-`operation_not_supported`.
+NOTE: On Windows, only `none` and `dont_care` flags are supported. On POSIX
+systems without `SA_NOCLDWAIT`, `no_child_wait` is unavailable. Using
+unsupported flags returns `operation_not_supported`.
 
 ==== Flag Compatibility
 
@@ -195,7 +195,12 @@ configured and can be waited on again.
 
 === Stop Token Cancellation
 
-Signal waits support stop token cancellation through the affine protocol.
+Signal waits support stop token cancellation through the affine protocol:
+
+[source,cpp]
+----
+include::example$snippets/4i_signals.cpp[tag=stop_token,indent=0]
+----
 
 == Use Cases
 
@@ -257,7 +262,7 @@ NOTE: After a move, the destination uses the source's execution context.
 |===
 
 Don't call `wait()`, `add()`, `remove()`, `clear()`, or `cancel()`
-concurrently on the same signal_set.
+concurrently on the same cpp:signal_set[].
 
 == Example: Server with Graceful Shutdown
 

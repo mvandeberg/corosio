@@ -15,8 +15,8 @@ This glossary defines terms used throughout the Corosio documentation.
 == A
 
 Acceptor::
-An I/O object that listens for and accepts incoming TCP connections. See
-`corosio::tcp_acceptor` and xref:4.guide/4e.tcp-acceptor.adoc[Acceptors Guide].
+An I/O object that listens for and accepts incoming connections. See
+cpp:tcp_acceptor[] and xref:4.guide/4e.tcp-acceptor.adoc[Acceptors Guide].
 
 Affine Awaitable:: An awaitable type that implements the affine protocol.
 It receives an `io_env const*` in `await_suspend`, carrying the executor,
@@ -57,6 +57,9 @@ complete with an error code indicating cancellation.
 Completion::
 The event when an asynchronous operation finishes, either successfully or
 with an error.
+
+Completion Handler::
+A function or coroutine handle that runs when an operation completes.
 
 Composed Operation::
 An operation built from multiple primitive operations. For example,
@@ -118,14 +121,11 @@ Handle::
 A reference to a system resource (socket, file, etc.) managed by the
 operating system.
 
-Handler::
-A callback function or coroutine handle that runs when an operation completes.
-
 == I
 
 I/O Context::
 The main event loop in Corosio. Processes asynchronous operations and
-dispatches completions. See `corosio::io_context`.
+dispatches completions. See cpp:io_context[].
 
 I/O Object::
 A class representing an I/O resource (socket, resolver, etc.). Base class is
@@ -156,7 +156,7 @@ by `corosio::local_endpoint`. See xref:4.guide/4p.unix-sockets.adoc[Unix Domain 
 == M
 
 Mocket::
-A mock socket for testing. See `corosio::test::mocket`.
+The in-process test double for a socket. See `corosio::test::mocket`.
 
 Move-Only::
 A type that can be moved but not copied. Sockets and other I/O objects are
@@ -193,7 +193,7 @@ any amount of data.
 == R
 
 Resolver::
-An I/O object that performs DNS lookups. See `corosio::resolver`.
+An I/O object that resolves host names to addresses. See cpp:resolver[].
 
 Resume::
 Continuing execution of a suspended coroutine.
@@ -216,7 +216,7 @@ An I/O object that waits for operating system signals. See
 `corosio::signal_set`.
 
 Socket::
-An I/O object for TCP network communication. See `corosio::tcp_socket`.
+An I/O object for network communication. See cpp:tcp_socket[].
 
 Stop Token::
 A mechanism for requesting cancellation. See `std::stop_token`.
@@ -252,7 +252,7 @@ A framework class for building TCP servers with worker pools. See
 
 Thread Safety::
 The ability to use an object safely from multiple threads. Individual I/O
-objects are generally not thread-safe.
+objects are not thread-safe.
 
 Timeout::
 Racing an awaitable against a deadline. See `corosio::timeout()` and

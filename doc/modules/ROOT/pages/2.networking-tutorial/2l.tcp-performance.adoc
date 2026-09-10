@@ -43,7 +43,7 @@ To use this link fully, the sender must have 625,000 bytes of data in flight sim
 
 Networks with high bandwidth and high latency -- satellite links, transcontinental fiber, data center interconnects -- have large BDPs. These are sometimes called *long fat networks*, and they expose the original TCP window's 65,535-byte limit as a severe bottleneck.
 
-On a transoceanic link at 10 Gbps with a 100-millisecond RTT, the BDP is 125 megabytes. A 64 KB window would use less than 0.05% of the available bandwidth. Without the window scale extension, such a link would be unusable for a single TCP connection.
+On a transoceanic link at 10 Gbps with a 100-millisecond RTT, the BDP is 125 megabytes. A 64 KB window would use about 0.05% of the available bandwidth. Without the window scale extension, such a link would be unusable for a single TCP connection.
 
 == Window Scaling
 

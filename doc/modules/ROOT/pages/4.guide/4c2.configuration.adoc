@@ -10,12 +10,12 @@ freshly default-constructed cpp:io_context_options[].
 [IMPORTANT]
 ====
 The inline budget defaults in the table are *not* what a
-default-constructed `io_context` runs with on a multi-core machine.
+default-constructed cpp:io_context[] runs with on a multi-core machine.
 When `concurrency_hint > 1` and the inline budgets are still at their
 struct defaults, the constructor overrides them to `(0, 0, 0)`. That
 disables the inline fast path; see the note under
 <<inline-completion-budget>>. Pass an explicit
-`io_context_options` with non-default budgets to keep the fast path
+cpp:io_context_options[] with non-default budgets to keep the fast path
 enabled in multi-threaded mode.
 ====
 

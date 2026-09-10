@@ -160,8 +160,8 @@ public:
         the result is `capy::error::stream_truncated`, not success. An
         unannounced close is indistinguishable from a truncation attack,
         so it must not be reported as a clean shutdown. A shutdown
-        stopped mid-flight reports canceled;
-        any other transport error propagates unchanged.
+        stopped mid-flight reports canceled. Any other transport
+        error propagates unchanged.
 
         @return An awaitable yielding `(error_code)`.
     */
@@ -274,7 +274,7 @@ protected:
     /// Default construct; a derived class supplies the session.
     tls_stream() = default;
 
-    /** Virtual read implementation.
+    /** Perform the backend-specific decrypted read.
 
         Derived classes override this to perform TLS decryption
         and read operations.
@@ -287,7 +287,7 @@ protected:
         capy::detail::mutable_buffer_array<capy::detail::max_iovec_>
             buffers) = 0;
 
-    /** Virtual write implementation.
+    /** Perform the backend-specific encrypted write.
 
         Derived classes override this to perform TLS encryption
         and write operations.

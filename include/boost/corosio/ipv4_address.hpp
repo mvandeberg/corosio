@@ -235,8 +235,7 @@ public:
 
     /** Format the address to an output stream.
 
-        IPv4 addresses written to output streams
-        are written in their dotted decimal format.
+        This operator writes the address in dotted decimal format.
 
         @param os The output stream.
         @param addr The address to format.

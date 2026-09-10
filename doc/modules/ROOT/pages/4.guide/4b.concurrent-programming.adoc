@@ -190,7 +190,7 @@ handling.
 === The Reactor Pattern
 
 Corosio uses the reactor pattern: register interest in I/O events, wait for
-events, dispatch handlers. The `io_context::run()` method implements this loop.
+events, dispatch handlers. The cpp:io_context[] `run()` method implements this loop.
 
 The reactor is efficient because it waits for any of many events simultaneously,
 rather than polling each socket individually.
@@ -198,8 +198,8 @@ rather than polling each socket individually.
 == C++20 Coroutines
 
 A coroutine is a function that can suspend and resume execution. Unlike threads,
-coroutines don't block the thread when waiting—they yield control to a
-scheduler.
+coroutines don't block the thread when waiting—they yield control to an
+executor.
 
 === Language Mechanics
 
@@ -286,7 +286,7 @@ necessarily the thread that started the operation.
 include::example$snippets/4b_concurrent_programming.cpp[tag=executor_affinity,indent=0]
 ----
 
-If `io_context::run()` is called from one thread, resumptions happen on that
+If cpp:io_context[] `run()` is called from one thread, resumptions happen on that
 thread. With multiple threads calling `run()`, resumptions happen on whichever
 thread is available.
 
@@ -382,7 +382,7 @@ Different applications need different concurrency strategies.
 
 === Single-Threaded: One Thread, Many Coroutines
 
-The simplest model: one thread runs `io_context::run()`, handling all events.
+The simplest model: one thread runs cpp:io_context[] `run()`, handling all events.
 Coroutines provide concurrency without threads.
 
 Advantages:

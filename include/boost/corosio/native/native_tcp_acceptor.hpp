@@ -198,6 +198,10 @@ public:
     /** Construct a native acceptor from an executor.
 
         @param ex The executor whose context owns the acceptor.
+
+        @tparam Ex A type satisfying @ref capy::Executor. Must not
+            be `native_tcp_acceptor` itself (disables implicit
+            conversion from move).
     */
     template<class Ex>
         requires(!std::same_as<std::remove_cvref_t<Ex>, native_tcp_acceptor>) &&

@@ -55,7 +55,8 @@ namespace boost::corosio {
 class BOOST_COROSIO_DECL random_access_file : public io_object
 {
 public:
-    /** Platform-specific random-access file implementation interface.
+    /** Declares the offset-based file operations a platform backend
+        must implement.
 
         Backends derive from this to provide offset-based file I/O.
     */
@@ -143,7 +144,8 @@ public:
         virtual std::error_code assign(native_handle_type handle) noexcept = 0;
     };
 
-    /** Awaitable for async read-at operations. */
+    /** Suspends the awaiting coroutine and resumes it with the
+        result of a read at the given offset. */
     template<class MutableBufferSequence>
     struct read_some_at_awaitable
     {
@@ -215,7 +217,8 @@ public:
         mutable std::size_t bytes_ = 0;
     };
 
-    /** Awaitable for async write-at operations. */
+    /** Suspends the awaiting coroutine and resumes it with the
+        result of a write at the given offset. */
     template<class ConstBufferSequence>
     struct write_some_at_awaitable
     {

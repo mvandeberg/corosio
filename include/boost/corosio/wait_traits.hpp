@@ -17,9 +17,7 @@
 
 namespace boost::corosio {
 
-/** Default wait traits for clock-based delays.
-
-    Controls how much of the remaining time a single underlying
+/** Controls how much of the remaining time a single underlying
     steady-clock wait may cover before `Clock::now()` is re-read.
     A larger value costs fewer wakeups; a smaller value bounds how
     late an adjustment of `Clock` ( e.g. a stepped time-of-day
@@ -60,7 +58,8 @@ struct wait_traits
 
     Satisfied when `Traits::to_wait_duration` accepts a
     `Clock::duration` and returns something convertible back to it.
-    `Traits::to_wait_duration` must not throw.
+    `Traits::to_wait_duration` is expected not to throw; the
+    requires-expression above does not enforce this.
 */
 template<class Traits, class Clock>
 concept WaitTraits = requires(typename Clock::duration d) {

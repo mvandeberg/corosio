@@ -651,7 +651,7 @@ with `errc::address_in_use` on every platform.
 
 === SO_REUSEPORT
 
-`SO_REUSEPORT` (available on some operating systems) allows multiple sockets
+`SO_REUSEPORT` (not available on Windows) allows multiple sockets
 to bind to the same address and port. The operating system distributes incoming
 connections among them.
 

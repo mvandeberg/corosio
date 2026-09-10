@@ -35,10 +35,8 @@
 
 namespace boost::corosio {
 
-/** Options for @ref local_stream_acceptor::bind().
-
-    Controls filesystem cleanup behavior before binding
-    to a Unix domain socket path.
+/** Controls whether @ref local_stream_acceptor::bind() unlinks
+    an existing socket path before binding.
 */
 enum class bind_option
 {
@@ -187,9 +185,7 @@ class BOOST_COROSIO_DECL local_stream_acceptor : public io_object
     };
 
 public:
-    /** Destructor.
-
-        Closes the acceptor if open, cancelling any pending operations.
+    /** Closes the acceptor if open, cancelling any pending operations.
     */
     ~local_stream_acceptor() override;
 
@@ -241,6 +237,8 @@ public:
         @param ep The local endpoint to bind to.
         @param backlog The maximum pending connection queue length.
 
+        @tparam Ex A type satisfying @ref capy::Executor.
+
         @throws std::system_error on open, bind, or listen failure.
     */
     template<class Ex>
@@ -251,9 +249,8 @@ public:
     {
     }
 
-    /** Move constructor.
-
-        Transfers ownership of the acceptor resources.
+    /** Transfers ownership of the acceptor resources from another
+        acceptor.
 
         @param other The acceptor to move from.
 
@@ -266,10 +263,9 @@ public:
     {
     }
 
-    /** Move assignment operator.
-
-        Closes any existing acceptor and transfers ownership.
-        Both acceptors must share the same execution context.
+    /** Closes any existing acceptor and transfers ownership from
+        another acceptor. Both acceptors must share the same
+        execution context.
 
         @param other The acceptor to move from.
 
@@ -382,7 +378,7 @@ public:
         Suspends until the listen socket is ready in the
         requested direction. For `wait_type::read`, completion
         signals that a subsequent @ref accept succeeds
-        without blocking; a connection already queued when the
+        without blocking. A connection already queued when the
         wait begins completes it immediately. No connection is
         consumed.
 
@@ -499,9 +495,10 @@ public:
 
     /** Return the local endpoint the acceptor is bound to.
 
-        Returns a default-constructed (empty) endpoint if the
-        acceptor is not open or not yet bound. Safe to call in
-        any state.
+        Safe to call in any state.
+
+        @return The bound local endpoint, or a default-constructed
+            endpoint if the acceptor is not open or not yet bound.
     */
     corosio::local_endpoint local_endpoint() const noexcept;
 
@@ -562,10 +559,8 @@ public:
         return opt;
     }
 
-    /** Backend hooks for local stream acceptor operations.
-
-        Platform backends derive from this to implement
-        accept, option, and lifecycle management.
+    /** Backends derive from this to implement accept, option, and
+        lifecycle management.
     */
     struct implementation : io_object::implementation
     {

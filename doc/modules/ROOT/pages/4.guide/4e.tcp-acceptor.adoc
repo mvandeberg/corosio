@@ -181,8 +181,8 @@ All outstanding `accept()` operations complete with an error matching
 
 === Stop Token Cancellation
 
-Accept operations support `std::stop_token` through the affine awaitable
-protocol:
+Accept operations support `std::stop_token` through the
+xref:4.guide/4b.concurrent-programming.adoc[affine awaitable protocol]:
 
 [source,cpp]
 ----

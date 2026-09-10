@@ -35,7 +35,7 @@
 
 namespace boost::corosio::test {
 
-/** A mock socket for testing I/O operations.
+/** Stages data for reads and validates data written, to test I/O code.
 
     This class provides a testable socket-like interface where data
     can be staged for reading and expected data can be validated on
@@ -92,6 +92,8 @@ public:
         @param f The fuse for error injection testing.
         @param max_read_size Maximum bytes per read operation.
         @param max_write_size Maximum bytes per write operation.
+
+        @throws std::logic_error if max_read_size or max_write_size is 0.
     */
     basic_mocket(
         capy::execution_context& ctx,
@@ -541,6 +543,9 @@ public:
     @param max_write_size Maximum bytes per write operation (default unlimited).
 
     @return A pair of (mocket, socket).
+
+    @throws std::runtime_error if opening, binding, listening, accepting,
+        or connecting fails.
 
     @note Mockets are not thread-safe and must be used in a
         single-threaded, deterministic context.

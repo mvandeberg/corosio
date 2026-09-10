@@ -179,9 +179,7 @@ class BOOST_COROSIO_DECL tcp_acceptor : public io_object
     };
 
 public:
-    /** Destructor.
-
-        Closes the acceptor if open, cancelling any pending operations.
+    /** Closes the acceptor if open, cancelling any pending operations.
     */
     ~tcp_acceptor() override;
 
@@ -199,12 +197,12 @@ public:
         address family is deduced from @p ep.
 
         Before binding, the constructor configures address reuse so a
-        server can rebind its port immediately after a restart. It sets
-        `SO_REUSEADDR` on POSIX and `SO_EXCLUSIVEADDRUSE` on Windows,
-        where `SO_REUSEADDR` instead grants other sockets bind-over
-        rights. A second listener on an occupied
-        endpoint therefore throws `errc::address_in_use` on every
-        platform.
+        server can rebind its port immediately after a restart. It
+        sets `SO_REUSEADDR` on POSIX and `SO_EXCLUSIVEADDRUSE` on
+        Windows. Windows does not use `SO_REUSEADDR` because it
+        instead grants other sockets bind-over rights. A second
+        listener on an occupied endpoint therefore throws
+        `errc::address_in_use` on every platform.
 
         @param ctx The execution context that owns this acceptor.
         @param ep The local endpoint to bind to.
@@ -217,7 +215,8 @@ public:
 
     /** Construct an acceptor from an executor.
 
-        The acceptor is associated with the executor's context.
+        The acceptor is associated with the executor's context. `Ex`
+        must satisfy `capy::Executor`.
 
         @param ex The executor whose context owns the acceptor.
     */
@@ -229,6 +228,21 @@ public:
     }
 
     /** Convenience constructor from an executor.
+
+        Creates a fully-bound listening acceptor in a single
+        expression, throwing the codes the piecewise `open()` +
+        `set_option()` + `bind()` + `listen()` path reports. The
+        address family is deduced from @p ep.
+
+        Before binding, the constructor configures address reuse so a
+        server can rebind its port immediately after a restart. It
+        sets `SO_REUSEADDR` on POSIX and `SO_EXCLUSIVEADDRUSE` on
+        Windows. Windows does not use `SO_REUSEADDR` because it
+        instead grants other sockets bind-over rights. A second
+        listener on an occupied endpoint therefore throws
+        `errc::address_in_use` on every platform.
+
+        `Ex` must satisfy `capy::Executor`.
 
         @param ex The executor whose context owns the acceptor.
         @param ep The local endpoint to bind to.
@@ -244,9 +258,7 @@ public:
     {
     }
 
-    /** Move constructor.
-
-        Transfers ownership of the acceptor resources.
+    /** Transfers ownership of the acceptor resources.
 
         @param other The acceptor to move from.
 
@@ -256,9 +268,7 @@ public:
     */
     tcp_acceptor(tcp_acceptor&& other) noexcept : io_object(std::move(other)) {}
 
-    /** Move assignment operator.
-
-        Closes any existing acceptor and transfers ownership.
+    /** Closes any existing acceptor and transfers ownership.
 
         @param other The acceptor to move from.
 
@@ -287,7 +297,7 @@ public:
     /** Create the acceptor socket without binding or listening.
 
         Creates a TCP socket with dual-stack enabled for IPv6.
-        Does not set SO_REUSEADDR — call `set_option` explicitly
+        Does not set SO_REUSEADDR. Call `set_option` explicitly
         if needed.
 
         If the acceptor is already open, this function is a no-op.
@@ -324,8 +334,7 @@ public:
             on any local interface.
         @li `errc::permission_denied`: Insufficient privileges to bind
             to the endpoint (e.g., privileged port).
-
-        A closed acceptor reports `errc::bad_file_descriptor`.
+        @li `errc::bad_file_descriptor`: The acceptor is not open.
     */
     [[nodiscard]] std::error_code bind(endpoint ep) noexcept;
 
@@ -406,7 +415,7 @@ public:
         socket for it, associated with this acceptor's execution context.
         The acceptor must be listening before calling this function.
 
-        The caller does not pre-construct the peer socket; the returned
+        The caller does not pre-construct the peer socket. The returned
         socket shares this acceptor's execution context.
 
         The operation supports cancellation via `std::stop_token` through
@@ -445,7 +454,7 @@ public:
         Suspends until the listen socket is ready in the
         requested direction, or an error condition is reported.
         For `wait_type::read`, completion signals that a
-        subsequent @ref accept succeeds without blocking; a
+        subsequent @ref accept succeeds without blocking. A
         connection already queued when the wait begins completes
         it immediately. No connection is consumed.
 
@@ -491,10 +500,11 @@ public:
 
     /** Assign an existing native socket to this acceptor.
 
-        Adopts a listening socket created outside the library —
-        received from a service manager, inherited, or made natively —
-        and registers it with the backend. The socket must be a
-        listening stream socket in the `AF_INET` or `AF_INET6` family.
+        Adopts a listening socket created outside the library. The
+        socket may come from a service manager, be inherited, or be
+        created natively. Adoption registers the socket with the
+        backend. The socket must be a listening stream socket in the
+        `AF_INET` or `AF_INET6` family.
         Adoption never alters the descriptor's flags or options: on
         POSIX the fd must already be non-blocking, and on Windows the
         socket must be overlapped-capable.
@@ -659,16 +669,28 @@ public:
             std::stop_token token,
             std::error_code* ec) = 0;
 
-        /// Returns the cached local endpoint.
+        /** Returns the cached local endpoint.
+
+            @return The cached local endpoint.
+        */
         virtual endpoint local_endpoint() const noexcept = 0;
 
-        /// Return true if the acceptor has a kernel resource open.
+        /** Return true if the acceptor has a kernel resource open.
+
+            @return true if the acceptor has a kernel resource open.
+        */
         virtual bool is_open() const noexcept = 0;
 
-        /// Return the native handle, or the platform sentinel if closed.
+        /** Return the native handle, or the platform sentinel if closed.
+
+            @return The native handle, or the platform sentinel if closed.
+        */
         virtual native_handle_type native_handle() const noexcept = 0;
 
-        /// Release and return the native handle without closing.
+        /** Release and return the native handle without closing.
+
+            @return The native handle.
+        */
         virtual native_handle_type release_socket() noexcept = 0;
 
         /** Cancel any pending asynchronous operations.
@@ -712,7 +734,11 @@ protected:
     */
     explicit tcp_acceptor(handle h) noexcept : io_object(std::move(h)) {}
 
-    /// Transfer accepted peer impl to the peer socket.
+    /** Transfer accepted peer impl to the peer socket.
+
+        @param peer The socket that receives the transferred implementation.
+        @param impl The accepted peer implementation, or null to do nothing.
+    */
     static void
     reset_peer_impl(tcp_socket& peer, io_object::implementation* impl) noexcept
     {

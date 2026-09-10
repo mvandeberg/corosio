@@ -43,7 +43,8 @@ class udp_socket;
 
 namespace boost::corosio {
 
-/** Inline UDP protocol type with platform constants.
+/** Resolves the UDP protocol's family, type, and protocol
+    values using platform socket headers.
 
     Same shape as @ref boost::corosio::udp but with inline
     `family()`, `type()`, and `protocol()` methods; `type()`

@@ -25,7 +25,7 @@
 
 namespace boost::corosio {
 
-/** Platform stream with read/write operations.
+/** Reads and writes bytes through a platform I/O backend.
 
     Combines @ref io_read_stream and @ref io_write_stream into
     a single bidirectional stream. The `read_some` and `write_some`
@@ -39,8 +39,8 @@ namespace boost::corosio {
 
     @par Semantics
     Concrete classes wrap direct platform I/O completed by the kernel.
-    Functions taking `io_stream&` signal "platform implementation
-    required" - use this when you need actual kernel I/O rather than
+    Functions taking `io_stream&` signal that platform implementation
+    is required. Use this when you need actual kernel I/O rather than
     a mock or test double.
 
     For generic stream algorithms that work with test mocks,
@@ -61,7 +61,8 @@ class BOOST_COROSIO_DECL io_stream
     , public io_write_stream
 {
 public:
-    /** Platform-specific stream implementation interface.
+    /** Declares the read and write operations a platform backend
+        must implement.
 
         Derived classes implement this interface to provide kernel-level
         read and write operations for each supported platform (IOCP,

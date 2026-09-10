@@ -25,7 +25,7 @@
 
 namespace boost::corosio {
 
-/** Abstract base for streams that support async writes.
+/** Writes bytes to a stream asynchronously.
 
     Provides the `write_some` operation via a pure virtual
     `do_write_some` dispatch point. Concrete classes override

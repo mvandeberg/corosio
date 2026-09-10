@@ -225,10 +225,7 @@ public:
     };
 
 public:
-    /** Destructor.
-
-        Closes the socket if open, cancelling any pending operations.
-    */
+    /** Closes the socket if open, cancelling any pending operations. */
     ~tcp_socket() override;
 
     /** Construct a socket from an execution context.
@@ -240,6 +237,8 @@ public:
     /** Construct a socket from an executor.
 
         The socket is associated with the executor's context.
+
+        @tparam Ex A type satisfying capy::Executor.
 
         @param ex The executor whose context owns the socket.
     */
@@ -331,8 +330,7 @@ public:
             available on any local interface.
         @li `errc::permission_denied`: Insufficient privileges to
             bind to the endpoint (e.g., privileged port).
-
-        A closed socket reports `errc::bad_file_descriptor`.
+        @li `errc::bad_file_descriptor`: The socket is closed.
     */
     [[nodiscard]] std::error_code bind(endpoint ep) noexcept;
 
@@ -500,7 +498,7 @@ public:
             close() to ensure graceful connection termination.
 
         @li @ref shutdown_receive disables reading on the socket. This
-            does NOT send anything to the peer - they are not informed
+            does not send anything to the peer. The peer is not informed
             and may continue sending data. Subsequent reads fail
             or return end-of-file. Incoming data may be discarded or
             buffered depending on the operating system.
@@ -515,6 +513,7 @@ public:
 
         @par !example shutdown
 
+        @par Error Conditions
         Failures such as a peer that already disconnected are
         normal runtime conditions and are reported through the
         returned error code. A closed socket reports

@@ -12,7 +12,7 @@
 
 This page collects recipes that combine xref:5.testing/5a.mocket.adoc[`mocket`]
 and xref:5.testing/5b.socket-pair.adoc[`make_socket_pair`] in realistic test
-scenarios. Each recipe is a small standalone block; copy and adapt.
+scenarios. Each recipe is a small standalone block. Copy and adapt it.
 
 [NOTE]
 ====

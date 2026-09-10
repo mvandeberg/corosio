@@ -30,7 +30,7 @@ enum class wait_type
     /// Error events are not buffered across operations: an error that
     /// fires before wait(error) is registered may be lost. Kernel
     /// semantics for what counts as an "error condition" vary by
-    /// platform; treat the contract as best-effort.
+    /// platform. Treat the contract as best-effort.
     error
 };
 

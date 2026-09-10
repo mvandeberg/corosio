@@ -75,9 +75,7 @@ emplace_delay_timer(std::optional<timer>& t, capy::execution_context& ctx)
 
 } // namespace detail
 
-/** IoAwaitable returned by @ref delay.
-
-    Suspends the calling coroutine until the deadline elapses or
+/** Suspends the calling coroutine until the deadline elapses or
     the environment's stop token is activated, whichever comes
     first. A deadline already elapsed at suspension, or a stop
     token already active, resumes the coroutine inline, without
@@ -85,7 +83,7 @@ emplace_delay_timer(std::optional<timer>& t, capy::execution_context& ctx)
     coroutine resumes through the executor once the timer fires
     or a mid-wait cancellation arrives.
 
-    Not intended to be named directly; use the @ref delay factory
+    Not intended to be named directly. Use the @ref delay factory
     overloads instead.
 
     @pre The awaiting coroutine's executor must belong to an
@@ -196,17 +194,18 @@ public:
     }
 };
 
-/** IoAwaitable returned by the clock overloads of @ref delay.
-
-    Suspends the calling coroutine until `Clock::now()` reaches the
+/** Suspends the calling coroutine until `Clock::now()` reaches the
     deadline or the environment's stop token is activated. The wait is a
     sequence of steady-clock timer waits. After each expiry the clock is
-    re-read; if the deadline is unreached, the same frame-embedded
+    re-read. If the deadline is unreached, the same frame-embedded
     waiter is re-published for the next `Traits::to_wait_duration` cap.
     That re-publish neither resumes the coroutine nor allocates.
 
-    Not intended to be named directly; use the @ref delay factory
+    Not intended to be named directly. Use the @ref delay factory
     overloads instead.
+
+    @tparam Clock The clock the deadline is expressed in.
+    @tparam Traits The wait-traits policy bounding each steady-clock wait.
 
     @pre The awaiting coroutine's executor must belong to an
         `io_context`. Any other execution context terminates with a
@@ -374,10 +373,10 @@ delay(std::chrono::steady_clock::time_point tp) noexcept
     observation of `Clock::now() >= tp`, or earlier if the
     environment's stop token is activated. The wait is one or more
     bounded steady-clock waits, re-reading `Clock::now()` after
-    each; `Traits::to_wait_duration` bounds each one. With the default
+    each. `Traits::to_wait_duration` bounds each one. With the default
     @ref wait_traits a single full-length wait is used. An adjustment of
-    `Clock` mid-wait is therefore observed only at natural wakeup;
-    supply capping traits to bound that latency. Time
+    `Clock` mid-wait is therefore observed only at natural wakeup.
+    Supply capping traits to bound that latency. Time
     points already reached complete synchronously.
 
     @note `Clock::now()` and `Traits::to_wait_duration` are invoked
@@ -388,6 +387,11 @@ delay(std::chrono::steady_clock::time_point tp) noexcept
 
     @tparam Traits The wait-traits policy; `void` selects
         @ref wait_traits.
+
+    @tparam Clock The clock type. This overload does not participate
+        when `Clock` is `std::chrono::steady_clock`. The dedicated
+        @ref delay overload taking a `steady_clock::time_point` handles
+        that case.
 
     @param tp The time point to wait until.
 

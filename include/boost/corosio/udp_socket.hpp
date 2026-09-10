@@ -439,9 +439,7 @@ public:
     };
 
 public:
-    /** Destructor.
-
-        Closes the socket if open, cancelling any pending operations.
+    /** Closes the socket if open, cancelling any pending operations.
     */
     ~udp_socket() override;
 
@@ -464,17 +462,13 @@ public:
     {
     }
 
-    /** Move constructor.
-
-        Transfers ownership of the socket resources.
+    /** Transfers ownership of the socket resources.
 
         @param other The socket to move from.
     */
     udp_socket(udp_socket&& other) noexcept : io_object(std::move(other)) {}
 
-    /** Move assignment operator.
-
-        Closes any existing socket and transfers ownership.
+    /** Closes any existing socket and transfers ownership.
 
         @param other The socket to move from.
         @return Reference to this socket.

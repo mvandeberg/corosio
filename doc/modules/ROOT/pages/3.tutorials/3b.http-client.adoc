@@ -73,7 +73,7 @@ include::example$client/http_client.cpp[tag=run_client]
 ----
 
 `connect()` opens the socket automatically. We pass the socket as an
-`io_stream&` to `do_request`, so the same function works with any plain
+cpp:io_stream[] to `do_request`, so the same function works with any plain
 socket. TLS streams have a different type and need their own overload, as
 shown below.
 
@@ -105,7 +105,7 @@ This:
 
 This example uses exceptions because:
 
-* Connection errors are fatal—we want to abort
+* Connection errors are fatal. We want to abort.
 * The code is more linear without error checks
 
 Compare structured bindings:
@@ -154,7 +154,7 @@ Content-Type: text/html; charset=UTF-8
 
 To make HTTPS requests, wrap the connected socket in a cpp:wolfssl_stream[].
 A cpp:wolfssl_stream[] is not an cpp:io_stream[], so it needs its own
-`do_request` overload taking `corosio::tls_stream&`:
+`do_request` overload taking cpp:tls_stream[]:
 
 [source,cpp]
 ----

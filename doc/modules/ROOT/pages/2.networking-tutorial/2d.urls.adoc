@@ -46,7 +46,7 @@ When the host is a domain name, your program resolves it through DNS (as describ
 http://[2001:db8::1]:8080/status
 ----
 
-The authority can also include user credentials in the form `user:password@host`, but this is deprecated for security reasons and you should not rely on it.
+The authority can also include user credentials in the form `user:password@host`. This is deprecated for security reasons, and you should not rely on it.
 
 == How a URL Drives a Connection
 

@@ -23,7 +23,7 @@
 
 namespace boost::corosio {
 
-/** Abstract base for asynchronous signal sets.
+/** Delivers a registered signal to the waiting coroutine.
 
     Provides the common signal set interface: `wait` and `cancel`.
     Concrete classes like @ref signal_set add signal registration
