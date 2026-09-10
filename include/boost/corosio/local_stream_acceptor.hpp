@@ -72,13 +72,15 @@ class BOOST_COROSIO_DECL local_stream_acceptor : public io_object
 {
     struct wait_awaitable : detail::void_op_base<wait_awaitable>
     {
+    private:
+        friend local_stream_acceptor;
+
         wait_awaitable(local_stream_acceptor& acc, wait_type w) noexcept
             : acc_(acc)
             , w_(w)
         {
         }
 
-    private:
         friend detail::void_op_base<wait_awaitable>;
 
         local_stream_acceptor& acc_;
@@ -93,6 +95,9 @@ class BOOST_COROSIO_DECL local_stream_acceptor : public io_object
 
     struct move_accept_awaitable
     {
+    private:
+        friend local_stream_acceptor;
+
         local_stream_acceptor& acc_;
         std::stop_token token_;
         mutable std::error_code ec_;
@@ -103,6 +108,7 @@ class BOOST_COROSIO_DECL local_stream_acceptor : public io_object
         {
         }
 
+    public:
         bool await_ready() const noexcept
         {
             // A pre-set ec_ means the initiator failed before
@@ -137,6 +143,9 @@ class BOOST_COROSIO_DECL local_stream_acceptor : public io_object
 
     struct accept_awaitable
     {
+    private:
+        friend local_stream_acceptor;
+
         local_stream_acceptor& acc_;
         local_stream_socket& peer_;
         std::stop_token token_;
@@ -150,6 +159,7 @@ class BOOST_COROSIO_DECL local_stream_acceptor : public io_object
         {
         }
 
+    public:
         bool await_ready() const noexcept
         {
             // A pre-set ec_ means the initiator failed before

@@ -179,6 +179,9 @@ class BOOST_COROSIO_DECL resolver : public io_object
     struct resolve_awaitable
         : detail::value_op_base<resolve_awaitable, resolver_results>
     {
+    private:
+        friend resolver;
+
         resolve_awaitable(
             resolver& r,
             std::string_view host,
@@ -191,7 +194,6 @@ class BOOST_COROSIO_DECL resolver : public io_object
         {
         }
 
-    private:
         friend detail::value_op_base<resolve_awaitable, resolver_results>;
         resolver& r_;
         std::string host_;
@@ -210,6 +212,9 @@ class BOOST_COROSIO_DECL resolver : public io_object
         : detail::
               value_op_base<reverse_resolve_awaitable, reverse_resolver_result>
     {
+    private:
+        friend resolver;
+
         reverse_resolve_awaitable(
             resolver& r, endpoint const& ep, reverse_flags flags) noexcept
             : r_(r)
@@ -218,7 +223,6 @@ class BOOST_COROSIO_DECL resolver : public io_object
         {
         }
 
-    private:
         friend detail::
             value_op_base<reverse_resolve_awaitable, reverse_resolver_result>;
 

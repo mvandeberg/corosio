@@ -182,6 +182,9 @@ public:
     /// Represent the awaitable returned by @ref connect.
     struct connect_awaitable : detail::void_op_base<connect_awaitable>
     {
+    private:
+        friend local_stream_socket;
+
         connect_awaitable(
             local_stream_socket& s, corosio::local_endpoint ep) noexcept
             : s_(s)
@@ -189,7 +192,6 @@ public:
         {
         }
 
-    private:
         friend detail::void_op_base<connect_awaitable>;
 
         local_stream_socket& s_;
@@ -205,13 +207,15 @@ public:
     /// Represent the awaitable returned by @ref wait.
     struct wait_awaitable : detail::void_op_base<wait_awaitable>
     {
+    private:
+        friend local_stream_socket;
+
         wait_awaitable(local_stream_socket& s, wait_type w) noexcept
             : s_(s)
             , w_(w)
         {
         }
 
-    private:
         friend detail::void_op_base<wait_awaitable>;
 
         local_stream_socket& s_;

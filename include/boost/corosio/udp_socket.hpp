@@ -275,6 +275,9 @@ public:
     */
     struct send_to_awaitable : detail::bytes_op_base<send_to_awaitable>
     {
+    private:
+        friend udp_socket;
+
         send_to_awaitable(
             udp_socket& s,
             buffer_param buf,
@@ -287,7 +290,6 @@ public:
         {
         }
 
-    private:
         friend detail::bytes_op_base<send_to_awaitable>;
 
         udp_socket& s_;
@@ -310,6 +312,9 @@ public:
     */
     struct recv_from_awaitable : detail::bytes_op_base<recv_from_awaitable>
     {
+    private:
+        friend udp_socket;
+
         recv_from_awaitable(
             udp_socket& s,
             buffer_param buf,
@@ -322,7 +327,6 @@ public:
         {
         }
 
-    private:
         friend detail::bytes_op_base<recv_from_awaitable>;
 
         udp_socket& s_;
@@ -341,13 +345,15 @@ public:
     /// Represent the awaitable returned by @ref connect.
     struct connect_awaitable : detail::void_op_base<connect_awaitable>
     {
+    private:
+        friend udp_socket;
+
         connect_awaitable(udp_socket& s, endpoint ep) noexcept
             : s_(s)
             , endpoint_(ep)
         {
         }
 
-    private:
         friend detail::void_op_base<connect_awaitable>;
 
         udp_socket& s_;
@@ -363,9 +369,11 @@ public:
     /// Represent the awaitable returned by @ref wait.
     struct wait_awaitable : detail::void_op_base<wait_awaitable>
     {
+    private:
+        friend udp_socket;
+
         wait_awaitable(udp_socket& s, wait_type w) noexcept : s_(s), w_(w) {}
 
-    private:
         friend detail::void_op_base<wait_awaitable>;
 
         udp_socket& s_;
@@ -381,6 +389,9 @@ public:
     /// Represent the awaitable returned by @ref send.
     struct send_awaitable : detail::bytes_op_base<send_awaitable>
     {
+    private:
+        friend udp_socket;
+
         send_awaitable(udp_socket& s, buffer_param buf, int flags = 0) noexcept
             : s_(s)
             , buf_(buf)
@@ -388,7 +399,6 @@ public:
         {
         }
 
-    private:
         friend detail::bytes_op_base<send_awaitable>;
 
         udp_socket& s_;
@@ -405,6 +415,9 @@ public:
     /// Represent the awaitable returned by @ref recv.
     struct recv_awaitable : detail::bytes_op_base<recv_awaitable>
     {
+    private:
+        friend udp_socket;
+
         recv_awaitable(udp_socket& s, buffer_param buf, int flags = 0) noexcept
             : s_(s)
             , buf_(buf)
@@ -412,7 +425,6 @@ public:
         {
         }
 
-    private:
         friend detail::bytes_op_base<recv_awaitable>;
 
         udp_socket& s_;

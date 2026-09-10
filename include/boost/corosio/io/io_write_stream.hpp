@@ -49,6 +49,9 @@ protected:
     struct write_some_awaitable
         : detail::bytes_op_base<write_some_awaitable<ConstBufferSequence>>
     {
+    private:
+        friend io_write_stream;
+
         write_some_awaitable(
             io_write_stream& ios, ConstBufferSequence buffers) noexcept
             : ios_(ios)
@@ -56,7 +59,6 @@ protected:
         {
         }
 
-    private:
         friend detail::bytes_op_base<write_some_awaitable<ConstBufferSequence>>;
         io_write_stream& ios_;
         ConstBufferSequence buffers_;

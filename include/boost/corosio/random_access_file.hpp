@@ -147,6 +147,9 @@ public:
     template<class MutableBufferSequence>
     struct read_some_at_awaitable
     {
+    private:
+        friend random_access_file;
+
         read_some_at_awaitable(
             random_access_file& f,
             std::uint64_t offset,
@@ -160,6 +163,7 @@ public:
         {
         }
 
+    public:
         bool await_ready() const noexcept
         {
             // A pre-set ec_ means the initiator failed before
@@ -184,7 +188,6 @@ public:
 
     private:
         // read_some_at/write_some_at pre-set ec_ when the file is closed.
-        friend random_access_file;
 
         random_access_file& f_;
         std::uint64_t offset_;
@@ -198,6 +201,9 @@ public:
     template<class ConstBufferSequence>
     struct write_some_at_awaitable
     {
+    private:
+        friend random_access_file;
+
         write_some_at_awaitable(
             random_access_file& f,
             std::uint64_t offset,
@@ -211,6 +217,7 @@ public:
         {
         }
 
+    public:
         bool await_ready() const noexcept
         {
             // A pre-set ec_ means the initiator failed before
@@ -235,7 +242,6 @@ public:
 
     private:
         // read_some_at/write_some_at pre-set ec_ when the file is closed.
-        friend random_access_file;
 
         random_access_file& f_;
         std::uint64_t offset_;

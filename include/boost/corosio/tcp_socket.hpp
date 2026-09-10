@@ -183,13 +183,15 @@ public:
     /// Represent the awaitable returned by @ref connect.
     struct connect_awaitable : detail::void_op_base<connect_awaitable>
     {
+    private:
+        friend tcp_socket;
+
         connect_awaitable(tcp_socket& s, endpoint ep) noexcept
             : s_(s)
             , endpoint_(ep)
         {
         }
 
-    private:
         friend detail::void_op_base<connect_awaitable>;
 
         tcp_socket& s_;
@@ -205,9 +207,11 @@ public:
     /// Represent the awaitable returned by @ref wait.
     struct wait_awaitable : detail::void_op_base<wait_awaitable>
     {
+    private:
+        friend tcp_socket;
+
         wait_awaitable(tcp_socket& s, wait_type w) noexcept : s_(s), w_(w) {}
 
-    private:
         friend detail::void_op_base<wait_awaitable>;
 
         tcp_socket& s_;

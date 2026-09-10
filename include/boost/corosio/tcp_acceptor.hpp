@@ -65,13 +65,15 @@ class BOOST_COROSIO_DECL tcp_acceptor : public io_object
 {
     struct wait_awaitable : detail::void_op_base<wait_awaitable>
     {
+    private:
+        friend tcp_acceptor;
+
         wait_awaitable(tcp_acceptor& acc, wait_type w) noexcept
             : acc_(acc)
             , w_(w)
         {
         }
 
-    private:
         friend detail::void_op_base<wait_awaitable>;
 
         tcp_acceptor& acc_;
@@ -86,6 +88,9 @@ class BOOST_COROSIO_DECL tcp_acceptor : public io_object
 
     struct accept_awaitable
     {
+    private:
+        friend tcp_acceptor;
+
         tcp_acceptor& acc_;
         tcp_socket& peer_;
         std::stop_token token_;
@@ -98,6 +103,7 @@ class BOOST_COROSIO_DECL tcp_acceptor : public io_object
         {
         }
 
+    public:
         bool await_ready() const noexcept
         {
             // A pre-set ec_ means the initiator failed before
@@ -126,6 +132,9 @@ class BOOST_COROSIO_DECL tcp_acceptor : public io_object
 
     struct accept_value_awaitable
     {
+    private:
+        friend tcp_acceptor;
+
         tcp_acceptor& acc_;
         std::stop_token token_;
         mutable std::error_code ec_;
@@ -135,6 +144,7 @@ class BOOST_COROSIO_DECL tcp_acceptor : public io_object
         {
         }
 
+    public:
         bool await_ready() const noexcept
         {
             // A pre-set ec_ means the initiator failed before

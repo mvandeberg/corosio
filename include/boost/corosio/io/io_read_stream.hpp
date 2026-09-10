@@ -49,6 +49,9 @@ protected:
     struct read_some_awaitable
         : detail::bytes_op_base<read_some_awaitable<MutableBufferSequence>>
     {
+    private:
+        friend io_read_stream;
+
         read_some_awaitable(
             io_read_stream& ios, MutableBufferSequence buffers) noexcept
             : ios_(ios)
@@ -56,7 +59,6 @@ protected:
         {
         }
 
-    private:
         friend detail::bytes_op_base<
             read_some_awaitable<MutableBufferSequence>>;
         io_read_stream& ios_;

@@ -299,6 +299,9 @@ public:
     */
     struct send_to_awaitable : detail::bytes_op_base<send_to_awaitable>
     {
+    private:
+        friend local_datagram_socket;
+
         send_to_awaitable(
             local_datagram_socket& s,
             buffer_param buf,
@@ -311,7 +314,6 @@ public:
         {
         }
 
-    private:
         friend detail::bytes_op_base<send_to_awaitable>;
 
         local_datagram_socket& s_;
@@ -334,6 +336,9 @@ public:
     */
     struct recv_from_awaitable : detail::bytes_op_base<recv_from_awaitable>
     {
+    private:
+        friend local_datagram_socket;
+
         recv_from_awaitable(
             local_datagram_socket& s,
             buffer_param buf,
@@ -346,7 +351,6 @@ public:
         {
         }
 
-    private:
         friend detail::bytes_op_base<recv_from_awaitable>;
 
         local_datagram_socket& s_;
@@ -369,6 +373,9 @@ public:
     */
     struct connect_awaitable : detail::void_op_base<connect_awaitable>
     {
+    private:
+        friend local_datagram_socket;
+
         connect_awaitable(
             local_datagram_socket& s, corosio::local_endpoint ep) noexcept
             : s_(s)
@@ -376,7 +383,6 @@ public:
         {
         }
 
-    private:
         friend detail::void_op_base<connect_awaitable>;
 
         local_datagram_socket& s_;
@@ -392,13 +398,15 @@ public:
     /// Represent the awaitable returned by @ref wait.
     struct wait_awaitable : detail::void_op_base<wait_awaitable>
     {
+    private:
+        friend local_datagram_socket;
+
         wait_awaitable(local_datagram_socket& s, wait_type w) noexcept
             : s_(s)
             , w_(w)
         {
         }
 
-    private:
         friend detail::void_op_base<wait_awaitable>;
 
         local_datagram_socket& s_;
@@ -418,6 +426,9 @@ public:
     */
     struct send_awaitable : detail::bytes_op_base<send_awaitable>
     {
+    private:
+        friend local_datagram_socket;
+
         send_awaitable(
             local_datagram_socket& s, buffer_param buf, int flags = 0) noexcept
             : s_(s)
@@ -426,7 +437,6 @@ public:
         {
         }
 
-    private:
         friend detail::bytes_op_base<send_awaitable>;
 
         local_datagram_socket& s_;
@@ -447,6 +457,9 @@ public:
     */
     struct recv_awaitable : detail::bytes_op_base<recv_awaitable>
     {
+    private:
+        friend local_datagram_socket;
+
         recv_awaitable(
             local_datagram_socket& s, buffer_param buf, int flags = 0) noexcept
             : s_(s)
@@ -455,7 +468,6 @@ public:
         {
         }
 
-    private:
         friend detail::bytes_op_base<recv_awaitable>;
 
         local_datagram_socket& s_;

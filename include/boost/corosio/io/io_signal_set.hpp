@@ -39,6 +39,9 @@ class BOOST_COROSIO_DECL io_signal_set : public io_object
 {
     struct wait_awaitable
     {
+    private:
+        friend io_signal_set;
+
         io_signal_set& s_;
         std::stop_token token_;
         mutable std::error_code ec_;
@@ -46,6 +49,7 @@ class BOOST_COROSIO_DECL io_signal_set : public io_object
 
         explicit wait_awaitable(io_signal_set& s) noexcept : s_(s) {}
 
+    public:
         bool await_ready() const noexcept
         {
             return static_cast<bool>(ec_) || token_.stop_requested();
