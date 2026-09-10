@@ -49,9 +49,11 @@ confirming the split-gate reasoning; `vale_adoc` differed 132 local against 66 i
 `mrdocs_warnings` 460 against 352.
 
 After the awaitable encapsulation and the special-member documentation pass,
-`mrdocs_warnings` measures **8** locally, all of them the unattributed `<tt>` findings
-that reach MrDocs through libstdc++ and are not fixable in Corosio. A reseed is due; see
-`doc/lint/README.md`.
+`mrdocs_warnings` measures **8** locally — all of them the unattributed `<tt>` findings
+that reach MrDocs through libstdc++ and are not fixable in Corosio — and **0** in CI,
+which has never emitted them. The sixth reseed (2026-09-10T17:09Z) retired the last 44
+and is installed, so the reference surface is clean and every future MrDocs warning is a
+new one. See `doc/lint/README.md` for how that zero was authorised.
 
 Every gated rule is now strict except `mrdocs_warnings`. That one keeps reporting because
 its `.*` spec gates all 352 warnings while MrDocs is a rolling `develop-release` build whose

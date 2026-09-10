@@ -119,25 +119,26 @@ local-vs-CI drift fingerprints.
 > rewriting sound prose to appease a heuristic would be worse.
 >
 > It surfaced only after the vocabulary additions removed a `Vale.Spelling` alert that had
-> been masking it at the same position, vanished in the 2026-09-09T18:40Z reseed, and came
-> **back** in the 2026-09-09T20:27Z one — all three times with that page untouched. It is
-> the position-resolution artifact the `.vale.ini` comment describes, and it flaps. Treat any
+> been masking it at the same position, vanished in the 2026-09-09T18:40Z reseed, came
+> **back** in the 2026-09-09T20:27Z one, and returned again in the 2026-09-10T17:09Z reseed
+> as its only added fingerprint — every time with that page untouched. It is the
+> position-resolution artifact the `.vale.ini` comment describes, and it flaps. Treat any
 > future appearance the same way: it is a false positive on a participial clause, it
 > grandfathers, and the prose is left alone.
 >
-> `baseline.json` is **CI-authored** (`workflow_dispatch`, 2026-09-09T18:38Z) and is the
+> `baseline.json` is **CI-authored** (`workflow_dispatch`, 2026-09-10T17:09Z) and is the
 > reference point the strict gate compares against. Counts at the original local seed and in
 > the accepted reseed:
 >
 > | Check | Local seed | CI baseline |
 > |---|---|---|
-> | `vale_adoc` | 466 | 66 |
+> | `vale_adoc` | 466 | 67 |
 > | `vale_docstrings` | 785 | 55 |
 > | `sentence_length` | 204 | 71 (hard 1, advisory 70) |
 > | `doc_lint` | 93 | 3 (all D2, the documented carve-out) |
-> | `mrdocs_warnings` | 460 | 44 |
+> | `mrdocs_warnings` | 460 | **0** |
 >
-> Four reseeds were needed. The first was refused because the MrDocs version pin made
+> Six reseeds were needed. The first was refused because the MrDocs version pin made
 > `mrdocs_warnings` report SKIPPED, which would have wiped a 460-fingerprint gated backlog.
 > The second was refused for a **real** gated regression a local Vale run could not see. The
 > third retired 365 and grandfathered the one false positive above. The fourth, after the
@@ -148,11 +149,28 @@ local-vs-CI drift fingerprints.
 > 71 more (the parameter and return-value documentation pass) and grandfathered none, and is
 > what is installed now.
 >
-> A reseed is **due**: the awaitable encapsulation and the special-member documentation
-> pass took `mrdocs_warnings` from 111 to 8 locally, and the 8 that remain are the
-> unattributed `<tt>` findings below. Because those fingerprint as `?:#N`, retiring the
-> 103 above them renumbers all 8, so they report as NEW until the baseline is reseeded —
-> an artifact of index-based fingerprints, not a regression. `doc_lint` and
+> A **sixth** reseed, after the awaitable encapsulation and the special-member
+> documentation pass, retired the last 44 `mrdocs_warnings` and grandfathered one
+> fingerprint: `benchmark-report.adoc:#1:Google.OxfordComma`, the participial-clause false
+> positive above, flapping back in for the fourth time. Nothing gated was added. **The
+> reference surface is now clean in CI: `mrdocs_warnings` is 0.**
+>
+> That zero had to be authorised. `baseline-diff.mjs` refuses a candidate in which a gated
+> check drops to zero, because a crashed check produces exactly the same report — the
+> refusal is the whole point, and it is what caught the very first reseed. The evidence
+> that this zero was real: the candidate recorded `skipped: false`, and both of
+> `mrdocsFingerprints()`'s failure paths (a non-zero exit, and the `error` key
+> `mrdocs-warnings.mjs` emits when it cannot find the binary) set `skipped: true`. So the
+> script ran, located MrDocs, and returned an empty `findings`. The 44 retired
+> fingerprints also match the two commits exactly: `dispatch` x18, the awaitable
+> constructors, `reset_peer_impl`, and the two `native_tcp`/`native_udp` broken refs.
+> Confirmed with `--allow-emptied mrdocs_warnings`, which the workflow now exposes as a
+> `workflow_dispatch` input so the acknowledgement is recorded in the run log rather than
+> applied by hand.
+>
+> Note the local number is **8**, not 0: those are the unattributed `<tt>` findings below,
+> and this reseed proves they never reach CI — the committed baseline has never contained
+> one, in any of the six. `doc_lint` and
 > `sentence_length` measured **identically** in both environments (3 and 71), which is what
 > makes them safe to gate; every other difference above is environment drift.
 

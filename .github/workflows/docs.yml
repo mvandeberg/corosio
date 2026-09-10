@@ -39,6 +39,16 @@ on:
   # steps (they are additionally guarded on github.event_name), and they only
   # upload an artifact for a human to review and commit.
   workflow_dispatch:
+    inputs:
+      allow_emptied:
+        description: >-
+          Space-separated gated checks whose backlog is genuinely closed.
+          baseline-diff.mjs refuses a candidate where a gated check drops to
+          zero, because a crashed check looks identical -- this is how you say
+          the zero is real. Verify first, then name the check here so the
+          decision is recorded in the run log.
+        required: false
+        default: ''
 
 jobs:
   antora:
@@ -424,6 +434,8 @@ jobs:
       - name: "Reseed: report changes"
         if: always() && github.event_name == 'workflow_dispatch'
         working-directory: boost-root/libs/corosio/doc
+        env:
+          ALLOW_EMPTIED: ${{ inputs.allow_emptied }}
         run: |
           set -uo pipefail
           out="$RUNNER_TEMP/baseline-candidate"
@@ -455,9 +467,26 @@ jobs:
           fi
           echo "gate spec extracted from $workflow: ${gate_args[*]}"
 
+          # A gated check dropping to zero is refused by default, because that is
+          # indistinguishable from a crash. Naming it here is the acknowledgement,
+          # and it lands in the run log next to the report it authorised.
+          # ALLOW_EMPTIED arrives via env, not `${{ }}` interpolation: the value is
+          # attacker-chosen text and would otherwise be pasted into this script.
+          # Unquoted on purpose -- word splitting is what turns the space-separated
+          # input into separate checks. An empty value splits to zero words, so the
+          # loop simply does not run.
+          allow_args=()
+          for check in ${ALLOW_EMPTIED:-}; do
+            allow_args+=(--allow-emptied "$check")
+          done
+          if [ "${#allow_args[@]}" -gt 0 ]; then
+            echo "::warning title=Emptied gated check accepted::${ALLOW_EMPTIED}"
+          fi
+
           status=0
           node lint/baseline-diff.mjs lint/baseline.json "$out/baseline.json" \
-            "${gate_args[@]}" | tee "$out/baseline-diff.txt" || status=$?
+            "${gate_args[@]}" "${allow_args[@]+"${allow_args[@]}"}" \
+            | tee "$out/baseline-diff.txt" || status=$?
           diff -u lint/baseline.json "$out/baseline.json" > "$out/baseline.json.diff" || true
           # GitHub rejects a step summary over 1 MiB, so cap it and point at the
           # artifact for the full text.
