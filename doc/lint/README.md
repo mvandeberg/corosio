@@ -117,11 +117,11 @@ local-vs-CI drift fingerprints.
 >
 > | Check | Local seed | CI baseline |
 > |---|---|---|
-> | `vale_adoc` | 466 | 67 |
+> | `vale_adoc` | 466 | 66 |
 > | `vale_docstrings` | 785 | 55 |
 > | `sentence_length` | 204 | 71 (hard 1, advisory 70) |
 > | `doc_lint` | 93 | 3 (all D2, the documented carve-out) |
-> | `mrdocs_warnings` | 460 | 66 |
+> | `mrdocs_warnings` | 460 | 44 |
 >
 > Four reseeds were needed. The first was refused because the MrDocs version pin made
 > `mrdocs_warnings` report SKIPPED, which would have wiped a 460-fingerprint gated backlog.
