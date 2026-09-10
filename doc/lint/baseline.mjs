@@ -32,8 +32,26 @@ const cliArgs = process.argv.slice(2);
 const wantDetails = cliArgs.includes('--details');
 const outArg = cliArgs.find((a) => !a.startsWith('--'));
 
+// Vale does not parse AsciiDoc itself: it shells out to `asciidoctor` and lints
+// the HTML. With none on PATH it exits 2 with a runtime error, valeFingerprints()
+// reports the check SKIPPED, and check-no-new-violations.mjs still exits 0 — a
+// local run then passes while linting no prose at all.
+//
+// Antora already installs Asciidoctor.js at doc/node_modules/.bin/asciidoctor for
+// the site build, so the fallback costs nothing. It is APPENDED, not prepended: CI
+// apt-installs the Ruby asciidoctor, the committed baseline is authored against
+// that one, and the two produce different HTML and therefore different findings
+// (the drift the reseed table records). Whatever PATH already offers keeps winning.
+const VALE_PATH = [
+  process.env.PATH || '',
+  path.join(DOC_DIR, 'node_modules', '.bin'),
+].filter(Boolean).join(path.delimiter);
+
 function run(cmd, args, opts = {}) {
-  const r = spawnSync(cmd, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, ...opts });
+  const env = { ...process.env, PATH: VALE_PATH, ...(opts.env || {}) };
+  const r = spawnSync(cmd, args, {
+    encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, ...opts, env,
+  });
   return r;
 }
 

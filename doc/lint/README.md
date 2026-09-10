@@ -33,6 +33,14 @@ Vale must run from `doc/`, with `node_modules/.bin` on `PATH`: it shells out to
 `asciidoctor` to parse AsciiDoc, and without it Vale exits 2 having printed **nothing**,
 which greps identical to a clean run.
 
+`baseline.mjs` — and so `check-no-new-violations.mjs`, which spawns it — **appends** that
+directory to `PATH` itself, so the wrapper scripts need no `export`. Appended, not
+prepended, on purpose: CI apt-installs the Ruby asciidoctor, the committed baseline is
+authored against it, and the two produce different HTML and so different findings. A stub
+`asciidoctor` placed first on `PATH` still wins, which is how that is tested.
+
+The `export` below is only for invoking `vale` by hand.
+
 ```sh
 cd doc
 export PATH="$PWD/node_modules/.bin:$PATH"
@@ -56,6 +64,12 @@ cache scan.
 
 A `0` in the output is not evidence of a clean run by itself — it is at least as often
 evidence the run never happened. Confirm a non-zero total somewhere before trusting a zero.
+
+The same trap has a second mouth, and it bit: `check-no-new-violations.mjs` reports a
+missing asciidoctor as `SKIPPED: vale_adoc` / `SKIPPED: vale_docstrings` and **still exits
+0**, because a skipped check has nothing to compare. Read the SKIPPED lines before reading
+the exit code. The `PATH` fallback above closes this for the wrapper scripts.
+
 Vale does not enforce C2 either way; its authority is `sentence-length.mjs`.
 
 ## How the gate works
