@@ -366,7 +366,9 @@ public:
     native_local_datagram_socket&
     operator=(native_local_datagram_socket&&) noexcept = default;
 
+    /// Copy construction is disabled; the handle is uniquely owned.
     native_local_datagram_socket(native_local_datagram_socket const&) = delete;
+    /// Copy assignment is disabled; the handle is uniquely owned.
     native_local_datagram_socket&
     operator=(native_local_datagram_socket const&) = delete;
 

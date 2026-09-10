@@ -154,7 +154,9 @@ public:
         return *this;
     }
 
-    stream_file(stream_file const&)            = delete;
+    /// Copy construction is disabled; the handle is uniquely owned.
+    stream_file(stream_file const&) = delete;
+    /// Copy assignment is disabled; the handle is uniquely owned.
     stream_file& operator=(stream_file const&) = delete;
 
     // read_some() inherited from io_read_stream

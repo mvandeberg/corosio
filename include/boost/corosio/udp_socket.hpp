@@ -489,7 +489,9 @@ public:
         return *this;
     }
 
-    udp_socket(udp_socket const&)            = delete;
+    /// Copy construction is disabled; the handle is uniquely owned.
+    udp_socket(udp_socket const&) = delete;
+    /// Copy assignment is disabled; the handle is uniquely owned.
     udp_socket& operator=(udp_socket const&) = delete;
 
     /** Open the socket.

@@ -351,9 +351,12 @@ public:
         apply_options_post_(opts, eff);
     }
 
+    /// Destroy the context; stops the loop and destroys every service.
     ~io_context();
 
-    io_context(io_context const&)            = delete;
+    /// Copy construction is disabled; the context owns its services.
+    io_context(io_context const&) = delete;
+    /// Copy assignment is disabled; the context owns its services.
     io_context& operator=(io_context const&) = delete;
 
     /** Return an executor for this context.

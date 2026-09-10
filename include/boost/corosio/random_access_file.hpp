@@ -164,6 +164,11 @@ public:
         }
 
     public:
+        /** Return whether the operation completed without suspending.
+
+            @return `true` when the initiator already failed or the
+            operation was canceled before dispatch.
+        */
         bool await_ready() const noexcept
         {
             // A pre-set ec_ means the initiator failed before
@@ -171,6 +176,10 @@ public:
             return static_cast<bool>(ec_) || token_.stop_requested();
         }
 
+        /** Return the result of the completed operation.
+
+            @return The error code and the number of bytes transferred.
+        */
         [[nodiscard]] capy::io_result<std::size_t> await_resume() const noexcept
         {
             if (token_.stop_requested())
@@ -178,6 +187,15 @@ public:
             return {ec_, bytes_};
         }
 
+        /** Dispatch the operation and suspend the awaiting coroutine.
+
+            @param h The coroutine to resume on completion.
+
+            @param env The environment supplying the executor and
+            stop token.
+
+            @return The coroutine to resume immediately.
+        */
         auto await_suspend(std::coroutine_handle<> h, capy::io_env const* env)
             -> std::coroutine_handle<>
         {
@@ -218,6 +236,11 @@ public:
         }
 
     public:
+        /** Return whether the operation completed without suspending.
+
+            @return `true` when the initiator already failed or the
+            operation was canceled before dispatch.
+        */
         bool await_ready() const noexcept
         {
             // A pre-set ec_ means the initiator failed before
@@ -225,6 +248,10 @@ public:
             return static_cast<bool>(ec_) || token_.stop_requested();
         }
 
+        /** Return the result of the completed operation.
+
+            @return The error code and the number of bytes transferred.
+        */
         [[nodiscard]] capy::io_result<std::size_t> await_resume() const noexcept
         {
             if (token_.stop_requested())
@@ -232,6 +259,15 @@ public:
             return {ec_, bytes_};
         }
 
+        /** Dispatch the operation and suspend the awaiting coroutine.
+
+            @param h The coroutine to resume on completion.
+
+            @param env The environment supplying the executor and
+            stop token.
+
+            @return The coroutine to resume immediately.
+        */
         auto await_suspend(std::coroutine_handle<> h, capy::io_env const* env)
             -> std::coroutine_handle<>
         {
@@ -292,7 +328,9 @@ public:
         return *this;
     }
 
-    random_access_file(random_access_file const&)            = delete;
+    /// Copy construction is disabled; the handle is uniquely owned.
+    random_access_file(random_access_file const&) = delete;
+    /// Copy assignment is disabled; the handle is uniquely owned.
     random_access_file& operator=(random_access_file const&) = delete;
 
     /** Open a file.

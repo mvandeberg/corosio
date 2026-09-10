@@ -301,7 +301,9 @@ public:
         return *this;
     }
 
-    resolver(resolver const&)            = delete;
+    /// Copy construction is disabled; the handle is uniquely owned.
+    resolver(resolver const&) = delete;
+    /// Copy assignment is disabled; the handle is uniquely owned.
     resolver& operator=(resolver const&) = delete;
 
     /** Initiate an asynchronous resolve operation.
@@ -455,6 +457,10 @@ public:
     };
 
 protected:
+    /** Adopt an existing handle.
+
+        @param h The handle the resolver takes ownership of.
+    */
     explicit resolver(handle h) noexcept : io_object(std::move(h)) {}
 
 private:

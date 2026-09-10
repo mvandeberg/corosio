@@ -229,7 +229,9 @@ public:
     native_local_stream_acceptor&
     operator=(native_local_stream_acceptor&&) noexcept = default;
 
+    /// Copy construction is disabled; the handle is uniquely owned.
     native_local_stream_acceptor(native_local_stream_acceptor const&) = delete;
+    /// Copy assignment is disabled; the handle is uniquely owned.
     native_local_stream_acceptor&
     operator=(native_local_stream_acceptor const&) = delete;
 

@@ -271,7 +271,9 @@ public:
     */
     native_tcp_socket& operator=(native_tcp_socket&&) noexcept = default;
 
-    native_tcp_socket(native_tcp_socket const&)            = delete;
+    /// Copy construction is disabled; the handle is uniquely owned.
+    native_tcp_socket(native_tcp_socket const&) = delete;
+    /// Copy assignment is disabled; the handle is uniquely owned.
     native_tcp_socket& operator=(native_tcp_socket const&) = delete;
 
     /** Asynchronously read data from the socket.

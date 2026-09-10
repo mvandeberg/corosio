@@ -289,7 +289,9 @@ public:
         return *this;
     }
 
-    tcp_socket(tcp_socket const&)            = delete;
+    /// Copy construction is disabled; the handle is uniquely owned.
+    tcp_socket(tcp_socket const&) = delete;
+    /// Copy assignment is disabled; the handle is uniquely owned.
     tcp_socket& operator=(tcp_socket const&) = delete;
 
     /** Open the socket.
@@ -613,8 +615,13 @@ public:
     endpoint remote_endpoint() const noexcept;
 
 protected:
+    /// Default construct a closed socket for a derived class to open.
     tcp_socket() noexcept = default;
 
+    /** Adopt an existing handle.
+
+        @param h The handle the socket takes ownership of.
+    */
     explicit tcp_socket(handle h) noexcept : io_object(std::move(h)) {}
 
 private:

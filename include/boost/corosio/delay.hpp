@@ -131,13 +131,16 @@ public:
     {
     }
 
-    /// Construct by transferring state from `other`.
     // Only moved before await_suspend; wait_ is engaged after.
+    /// Construct by transferring state from `other`.
     delay_awaitable(delay_awaitable&&) = default;
 
-    delay_awaitable(delay_awaitable const&)            = delete;
+    /// Copy construction is disabled; an awaitable owns its timer.
+    delay_awaitable(delay_awaitable const&) = delete;
+    /// Copy assignment is disabled; an awaitable owns its timer.
     delay_awaitable& operator=(delay_awaitable const&) = delete;
-    delay_awaitable& operator=(delay_awaitable&&)      = delete;
+    /// Move assignment is disabled; an awaitable is moved only before it is awaited.
+    delay_awaitable& operator=(delay_awaitable&&) = delete;
 
     /// Return false unconditionally; see await_suspend.
     // The elapsed-deadline fast path must run after the stop-token
@@ -260,16 +263,19 @@ public:
     {
     }
 
-    /// Construct by transferring the deadline from `other`.
     // Only moved before await_suspend; w_ is quiescent until then.
+    /// Construct by transferring the deadline from `other`.
     clock_delay_awaitable(clock_delay_awaitable&& other) noexcept
         : deadline_(other.deadline_)
     {
     }
 
-    clock_delay_awaitable(clock_delay_awaitable const&)            = delete;
+    /// Copy construction is disabled; an awaitable owns its timer.
+    clock_delay_awaitable(clock_delay_awaitable const&) = delete;
+    /// Copy assignment is disabled; an awaitable owns its timer.
     clock_delay_awaitable& operator=(clock_delay_awaitable const&) = delete;
-    clock_delay_awaitable& operator=(clock_delay_awaitable&&)      = delete;
+    /// Move assignment is disabled; an awaitable is moved only before it is awaited.
+    clock_delay_awaitable& operator=(clock_delay_awaitable&&) = delete;
 
     /// Return false unconditionally; see await_suspend.
     // The elapsed-deadline fast path must run after the stop-token

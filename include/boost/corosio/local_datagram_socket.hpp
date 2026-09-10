@@ -537,7 +537,9 @@ public:
         return *this;
     }
 
-    local_datagram_socket(local_datagram_socket const&)            = delete;
+    /// Copy construction is disabled; the handle is uniquely owned.
+    local_datagram_socket(local_datagram_socket const&) = delete;
+    /// Copy assignment is disabled; the handle is uniquely owned.
     local_datagram_socket& operator=(local_datagram_socket const&) = delete;
 
     /** Open the socket.

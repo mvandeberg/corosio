@@ -180,7 +180,9 @@ public:
     */
     native_resolver& operator=(native_resolver&&) noexcept = default;
 
-    native_resolver(native_resolver const&)            = delete;
+    /// Copy construction is disabled; the handle is uniquely owned.
+    native_resolver(native_resolver const&) = delete;
+    /// Copy assignment is disabled; the handle is uniquely owned.
     native_resolver& operator=(native_resolver const&) = delete;
 
     /** Asynchronously resolve a host and service to endpoints.

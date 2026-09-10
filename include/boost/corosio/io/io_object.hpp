@@ -52,6 +52,7 @@ public:
     */
     struct implementation
     {
+        /// Destroy the implementation; called only through @ref io_service.
         virtual ~implementation() = default;
     };
 
@@ -63,6 +64,7 @@ public:
     */
     struct BOOST_COROSIO_DECL io_service
     {
+        /// Destroy the service; the execution context outlives it.
         virtual ~io_service() = default;
 
         /// Construct a new implementation instance.
@@ -133,7 +135,9 @@ public:
             return *this;
         }
 
-        handle(handle const&)            = delete;
+        /// Copy construction is disabled; the implementation is uniquely owned.
+        handle(handle const&) = delete;
+        /// Copy assignment is disabled; the implementation is uniquely owned.
         handle& operator=(handle const&) = delete;
 
         /// Return true if the handle owns an implementation.
@@ -182,6 +186,7 @@ public:
     }
 
 protected:
+    /// Destroy the object; protected, so only a derived type destroys one.
     virtual ~io_object() = default;
 
     /// Default construct for virtual base initialization.
@@ -220,7 +225,9 @@ protected:
         return *this;
     }
 
-    io_object(io_object const&)            = delete;
+    /// Copy construction is disabled; the handle is uniquely owned.
+    io_object(io_object const&) = delete;
+    /// Copy assignment is disabled; the handle is uniquely owned.
     io_object& operator=(io_object const&) = delete;
 
     /// The platform I/O handle owned by this object.

@@ -195,7 +195,9 @@ public:
     native_random_access_file&
     operator=(native_random_access_file&&) noexcept = default;
 
+    /// Copy construction is disabled; the handle is uniquely owned.
     native_random_access_file(native_random_access_file const&) = delete;
+    /// Copy assignment is disabled; the handle is uniquely owned.
     native_random_access_file&
     operator=(native_random_access_file const&) = delete;
 

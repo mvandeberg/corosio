@@ -205,10 +205,12 @@ public:
     std::string_view alpn_protocol() const noexcept override;
 
 protected:
+    /// @copydoc tls_stream::do_read_some
     capy::io_task<std::size_t> do_read_some(
         capy::detail::mutable_buffer_array<capy::detail::max_iovec_> buffers)
         override;
 
+    /// @copydoc tls_stream::do_write_some
     capy::io_task<std::size_t> do_write_some(
         capy::detail::const_buffer_array<capy::detail::max_iovec_> buffers)
         override;

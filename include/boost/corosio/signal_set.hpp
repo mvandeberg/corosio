@@ -278,7 +278,9 @@ public:
     */
     signal_set& operator=(signal_set&& other) noexcept;
 
-    signal_set(signal_set const&)            = delete;
+    /// Copy construction is disabled; the handle is uniquely owned.
+    signal_set(signal_set const&) = delete;
+    /// Copy assignment is disabled; the handle is uniquely owned.
     signal_set& operator=(signal_set const&) = delete;
 
     /** Add a signal to the signal set.
@@ -342,6 +344,10 @@ public:
     [[nodiscard]] std::error_code clear();
 
 protected:
+    /** Adopt an existing handle.
+
+        @param h The handle the signal set takes ownership of.
+    */
     explicit signal_set(handle h) noexcept : io_signal_set(std::move(h)) {}
 
 private:

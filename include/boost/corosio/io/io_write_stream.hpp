@@ -90,12 +90,17 @@ protected:
         std::error_code* ec,
         std::size_t* bytes) = 0;
 
+    /// Default construct; the handle is supplied through @ref io_object.
     io_write_stream() noexcept = default;
 
-    io_write_stream(io_write_stream&&) noexcept            = default;
+    /// Move construct; the handle moves with @ref io_object.
+    io_write_stream(io_write_stream&&) noexcept = default;
+    /// Move assignment is disabled; reseating a live stream is not supported.
     io_write_stream& operator=(io_write_stream&&) noexcept = delete;
-    io_write_stream(io_write_stream const&)                = delete;
-    io_write_stream& operator=(io_write_stream const&)     = delete;
+    /// Copy construction is disabled; the handle is uniquely owned.
+    io_write_stream(io_write_stream const&) = delete;
+    /// Copy assignment is disabled; the handle is uniquely owned.
+    io_write_stream& operator=(io_write_stream const&) = delete;
 
 public:
     /** Asynchronously write data to the stream.

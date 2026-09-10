@@ -100,7 +100,9 @@ public:
     }
 
     // Non-copyable, non-movable
-    native_io_context(native_io_context const&)            = delete;
+    /// Copy construction is disabled; the context owns its services.
+    native_io_context(native_io_context const&) = delete;
+    /// Copy assignment is disabled; the context owns its services.
     native_io_context& operator=(native_io_context const&) = delete;
 
     /// Signal the context to stop processing.

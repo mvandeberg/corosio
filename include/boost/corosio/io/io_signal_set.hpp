@@ -139,6 +139,10 @@ protected:
     /** Dispatch cancel to the concrete implementation. */
     virtual void do_cancel() noexcept = 0;
 
+    /** Adopt an existing handle.
+
+        @param h The handle the signal set takes ownership of.
+    */
     explicit io_signal_set(handle h) noexcept : io_object(std::move(h)) {}
 
     /// Move construct.
@@ -154,7 +158,9 @@ protected:
         return *this;
     }
 
-    io_signal_set(io_signal_set const&)            = delete;
+    /// Copy construction is disabled; the handle is uniquely owned.
+    io_signal_set(io_signal_set const&) = delete;
+    /// Copy assignment is disabled; the handle is uniquely owned.
     io_signal_set& operator=(io_signal_set const&) = delete;
 
 private:

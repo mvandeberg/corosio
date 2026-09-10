@@ -228,7 +228,9 @@ public:
     */
     native_tcp_acceptor& operator=(native_tcp_acceptor&&) noexcept = default;
 
-    native_tcp_acceptor(native_tcp_acceptor const&)            = delete;
+    /// Copy construction is disabled; the handle is uniquely owned.
+    native_tcp_acceptor(native_tcp_acceptor const&) = delete;
+    /// Copy assignment is disabled; the handle is uniquely owned.
     native_tcp_acceptor& operator=(native_tcp_acceptor const&) = delete;
 
     /** Asynchronously accept an incoming connection.

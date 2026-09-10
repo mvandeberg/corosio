@@ -292,7 +292,9 @@ public:
         return *this;
     }
 
-    local_stream_acceptor(local_stream_acceptor const&)            = delete;
+    /// Copy construction is disabled; the handle is uniquely owned.
+    local_stream_acceptor(local_stream_acceptor const&) = delete;
+    /// Copy assignment is disabled; the handle is uniquely owned.
     local_stream_acceptor& operator=(local_stream_acceptor const&) = delete;
 
     /** Create the acceptor socket.
@@ -652,12 +654,24 @@ public:
     };
 
 protected:
+    /** Adopt an existing handle bound to a context.
+
+        @param h The handle the acceptor takes ownership of.
+
+        @param ctx The context the acceptor draws its service from.
+    */
     local_stream_acceptor(handle h, capy::execution_context& ctx) noexcept
         : io_object(std::move(h))
         , ctx_(ctx)
     {
     }
 
+    /** Move construct, rebinding to a context.
+
+        @param ctx The context the acceptor draws its service from.
+
+        @param other The acceptor to take the handle from.
+    */
     local_stream_acceptor(
         capy::execution_context& ctx, local_stream_acceptor&& other) noexcept
         : io_object(std::move(other))
@@ -665,6 +679,16 @@ protected:
     {
     }
 
+    /** Install an accepted implementation into the peer socket.
+
+        Derived acceptors call this to hand the accepted connection to
+        the caller's socket, which cannot reach @ref io_object::handle
+        itself.
+
+        @param peer The socket receiving the accepted connection.
+
+        @param impl The accepted implementation, or `nullptr` on failure.
+    */
     static void reset_peer_impl(
         local_stream_socket& peer, io_object::implementation* impl) noexcept
     {

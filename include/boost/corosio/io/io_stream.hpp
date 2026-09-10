@@ -109,6 +109,7 @@ public:
     };
 
 protected:
+    /// Default construct; the handle is supplied through @ref io_object.
     io_stream() noexcept = default;
 
     /// Construct stream from a handle.

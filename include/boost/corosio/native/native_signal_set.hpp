@@ -138,7 +138,9 @@ public:
     */
     native_signal_set& operator=(native_signal_set&&) noexcept = default;
 
-    native_signal_set(native_signal_set const&)            = delete;
+    /// Copy construction is disabled; the handle is uniquely owned.
+    native_signal_set(native_signal_set const&) = delete;
+    /// Copy assignment is disabled; the handle is uniquely owned.
     native_signal_set& operator=(native_signal_set const&) = delete;
 
     /** Wait for a signal to be delivered.

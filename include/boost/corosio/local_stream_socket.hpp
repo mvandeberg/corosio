@@ -293,7 +293,9 @@ public:
         return *this;
     }
 
-    local_stream_socket(local_stream_socket const&)            = delete;
+    /// Copy construction is disabled; the handle is uniquely owned.
+    local_stream_socket(local_stream_socket const&) = delete;
+    /// Copy assignment is disabled; the handle is uniquely owned.
     local_stream_socket& operator=(local_stream_socket const&) = delete;
 
     /** Open the socket.
@@ -530,8 +532,13 @@ public:
     corosio::local_endpoint remote_endpoint() const noexcept;
 
 protected:
+    /// Default construct a closed socket for a derived class to open.
     local_stream_socket() noexcept = default;
 
+    /** Adopt an existing handle.
+
+        @param h The handle the socket takes ownership of.
+    */
     explicit local_stream_socket(handle h) noexcept : io_object(std::move(h)) {}
 
 private:

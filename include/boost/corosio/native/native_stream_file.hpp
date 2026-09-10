@@ -181,7 +181,9 @@ public:
     /// Move assign.
     native_stream_file& operator=(native_stream_file&&) noexcept = default;
 
-    native_stream_file(native_stream_file const&)            = delete;
+    /// Copy construction is disabled; the handle is uniquely owned.
+    native_stream_file(native_stream_file const&) = delete;
+    /// Copy assignment is disabled; the handle is uniquely owned.
     native_stream_file& operator=(native_stream_file const&) = delete;
 
     /** Asynchronously read data from the file.

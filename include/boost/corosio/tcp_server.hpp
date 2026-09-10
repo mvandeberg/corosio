@@ -469,14 +469,22 @@ public:
                 srv_->push_sync(*w_);
         }
 
+        /** Move construct, transferring the borrowed worker.
+
+            @param o The launcher to take the worker from. It is left
+            holding none, so only one of the two returns it.
+        */
         launcher(launcher&& o) noexcept
             : srv_(o.srv_)
             , w_(std::exchange(o.w_, nullptr))
         {
         }
-        launcher(launcher const&)            = delete;
+        /// Copy construction is disabled; a launcher holds a borrowed worker it must return exactly once.
+        launcher(launcher const&) = delete;
+        /// Copy assignment is disabled; a launcher holds a borrowed worker it must return exactly once.
         launcher& operator=(launcher const&) = delete;
-        launcher& operator=(launcher&&)      = delete;
+        /// Move assignment is disabled; a launcher is moved, never reassigned.
+        launcher& operator=(launcher&&) = delete;
 
         /** Start the connection-handling coroutine.
 
@@ -546,7 +554,9 @@ public:
     /// Destroy the server, stopping all accept loops.
     ~tcp_server();
 
-    tcp_server(tcp_server const&)            = delete;
+    /// Copy construction is disabled; the server owns its worker storage.
+    tcp_server(tcp_server const&) = delete;
+    /// Copy assignment is disabled; the server owns its worker storage.
     tcp_server& operator=(tcp_server const&) = delete;
 
     /** Move construct from another server.

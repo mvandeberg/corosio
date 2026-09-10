@@ -261,7 +261,9 @@ public:
     native_local_stream_socket&
     operator=(native_local_stream_socket&&) noexcept = default;
 
+    /// Copy construction is disabled; the handle is uniquely owned.
     native_local_stream_socket(native_local_stream_socket const&) = delete;
+    /// Copy assignment is disabled; the handle is uniquely owned.
     native_local_stream_socket&
     operator=(native_local_stream_socket const&) = delete;
 

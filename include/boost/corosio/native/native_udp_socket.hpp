@@ -356,7 +356,9 @@ public:
     /// Move assign.
     native_udp_socket& operator=(native_udp_socket&&) noexcept = default;
 
-    native_udp_socket(native_udp_socket const&)            = delete;
+    /// Copy construction is disabled; the handle is uniquely owned.
+    native_udp_socket(native_udp_socket const&) = delete;
+    /// Copy assignment is disabled; the handle is uniquely owned.
     native_udp_socket& operator=(native_udp_socket const&) = delete;
 
     /** Send a datagram to the specified destination.

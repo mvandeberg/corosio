@@ -70,7 +70,9 @@ public:
     /// Destroy the TLS stream.
     virtual ~tls_stream() = default;
 
-    tls_stream(tls_stream const&)            = delete;
+    /// Copy construction is disabled; copying a stream would slice the derived session.
+    tls_stream(tls_stream const&) = delete;
+    /// Copy assignment is disabled; copying a stream would slice the derived session.
     tls_stream& operator=(tls_stream const&) = delete;
 
     /** Initiate an asynchronous read operation.
@@ -268,6 +270,7 @@ public:
     } // LCOV_EXCL_LINE every concrete stream overrides this; the base default is never called
 
 protected:
+    /// Default construct; a derived class supplies the session.
     tls_stream() = default;
 
     /** Virtual read implementation.

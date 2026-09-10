@@ -279,7 +279,9 @@ public:
         return *this;
     }
 
-    tcp_acceptor(tcp_acceptor const&)            = delete;
+    /// Copy construction is disabled; the handle is uniquely owned.
+    tcp_acceptor(tcp_acceptor const&) = delete;
+    /// Copy assignment is disabled; the handle is uniquely owned.
     tcp_acceptor& operator=(tcp_acceptor const&) = delete;
 
     /** Create the acceptor socket without binding or listening.
@@ -704,6 +706,10 @@ public:
     };
 
 protected:
+    /** Adopt an existing handle.
+
+        @param h The handle the acceptor takes ownership of.
+    */
     explicit tcp_acceptor(handle h) noexcept : io_object(std::move(h)) {}
 
     /// Transfer accepted peer impl to the peer socket.
