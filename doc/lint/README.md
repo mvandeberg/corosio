@@ -132,7 +132,13 @@ local-vs-CI drift fingerprints.
 > (`io_uring_t::construct` -> `uring_t::construct`) and was fixed rather than grandfathered,
 > so that baseline was briefly stale-high by 4 in `mrdocs_warnings`. A fifth reseed retired
 > 71 more (the parameter and return-value documentation pass) and grandfathered none, and is
-> what is installed now. `doc_lint` and
+> what is installed now.
+>
+> A reseed is **due**: the awaitable encapsulation and the special-member documentation
+> pass took `mrdocs_warnings` from 111 to 8 locally, and the 8 that remain are the
+> unattributed `<tt>` findings below. Because those fingerprint as `?:#N`, retiring the
+> 103 above them renumbers all 8, so they report as NEW until the baseline is reseeded —
+> an artifact of index-based fingerprints, not a regression. `doc_lint` and
 > `sentence_length` measured **identically** in both environments (3 and 71), which is what
 > makes them safe to gate; every other difference above is environment drift.
 
@@ -265,24 +271,58 @@ Note `@see` lists render as plain text in this generator regardless: on `tcp.htm
 `tcp_socket` and `tcp_acceptor` are unlinked there too, and both have pages. That is
 generator behaviour, not a missing symbol.
 
-## Awaitable protocol members: what Capy does, and why Corosio differs
+## Awaitable protocol members: encapsulated, not excluded
 
-Corosio's `mrdocs_warnings` carries 42 "function is undocumented" findings on the
+Corosio's `mrdocs_warnings` once carried 42 "function is undocumented" findings on the
 awaitables — `dispatch` (18), the awaitable constructors (8), `await_ready` /
-`await_suspend` / `await_resume`, and a few others. **Capy does not document its
-equivalents.** Checked directly: its `await_*` members carry plain `//` comments or
-nothing at all.
+`await_suspend` / `await_resume`, and a few others — plus 61 on their data members, which
+`mrdocs.yml` silenced with 31 lines of `exclude-symbols`.
 
-The difference is scope, not diligence. Capy's awaiters are nested inside promise types
-at non-public scope (`quitter_return_base::promise_type::awaiter`), so
-`extract-private`'s defaults never surface them. Where one *does* surface, Capy leaves it
-undocumented and grandfathers it: `task.hpp:#1:await_resume: function is undocumented` is
-in Capy's own baseline.
+**Capy does not document its equivalents**, and the reason is scope, not diligence.
+Capy's awaiters are nested inside promise types at non-public scope
+(`quitter_return_base::promise_type::awaiter`), so `extract-private`'s defaults never
+surface them. Where one *does* surface, Capy leaves it undocumented and grandfathers it:
+`task.hpp:#1:await_resume: function is undocumented` is in Capy's own baseline.
 
-Corosio's awaitables are public nested types of the socket and file classes, because a
-user sees them as return types. So there is no Capy precedent to copy here, and the
-choice is Corosio's: exclude them the way the awaitables' data members already are, or
-document 42 members of machinery no user calls.
+Corosio had no such excuse: its awaitables were `struct`s whose captured arguments,
+out-parameters, constructor, and CRTP `dispatch` hook were all public. That was an
+unintended API commitment, so the answer was encapsulation rather than a documentation
+filter. Only `await_ready`, `await_suspend`, and `await_resume` are the interface, and
+the compiler is what calls them:
+
+- The 22 awaitables deriving from a `detail::*_op_base` inherit all three through a
+  public base, so nothing declared in the derived struct needs to be public.
+- The seven that implement `await_*` themselves — `random_access_file`'s two, the four
+  acceptor ones, and `io_signal_set::wait_awaitable` — keep those public and privatise
+  the rest.
+- Each takes `friend <enclosing class>;`. The initiator constructs the awaitable and, on
+  those seven, pre-sets `ec_` when the object is closed. Friending the CRTP base exposes
+  nothing new: the public header already names it in the base clause, and the base
+  already declares `friend Derived;` in the other direction.
+
+`exclude-symbols` is down to the two `protected:` `sched_` entries. `delay_awaitable`
+and `clock_delay_awaitable` keep public constructors — they sit at namespace scope and
+`test/unit/delay.cpp` builds them directly — and are documented instead.
+
+The native layer needed nothing: `native_tcp_socket` and its siblings declare their
+awaitables before any access specifier in a `class`, so they were already private, which
+is why MrDocs never extracted them.
+
+## A `//` between the `///` and the declaration hides the docstring
+
+`delay_awaitable`'s and `clock_delay_awaitable`'s move constructors read as undocumented
+while carrying a perfectly good `///` brief, because a plain `//` implementation note sat
+between the brief and the declaration:
+
+```cpp
+/// Construct by transferring state from `other`.
+// Only moved before await_suspend; wait_ is engaged after.
+delay_awaitable(delay_awaitable&&) = default;   // <-- undocumented
+```
+
+MrDocs attaches a docstring only to the declaration that immediately follows it. Put the
+non-doc comment **above** the `///` and both survive. Worth knowing before assuming a
+`warn-if-undocumented` finding means no one wrote the docs.
 
 ## The 8 `unsupported HTML tag <tt>` warnings are not ours
 
