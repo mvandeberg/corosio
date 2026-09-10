@@ -69,10 +69,10 @@ public:
         virtual implementation* construct() = 0;
 
         /// Destroy the implementation, closing kernel resources and freeing memory.
-        virtual void destroy(implementation*) = 0;
+        virtual void destroy(implementation* impl) = 0;
 
         /// Close the I/O object, releasing kernel resources without deallocating.
-        virtual void close(handle&) {}
+        virtual void close([[maybe_unused]] handle& h) {}
     };
 
     /** RAII wrapper for I/O object implementation lifetime.

@@ -235,6 +235,25 @@ CI there (`continue-on-error: true`, in no gate spec). A check that cannot fail 
 so neither it nor `pa11y-ci` was ported. `baseline.mjs` and `baseline-diff.mjs` had their
 `a11y` branches removed rather than left dangling.
 
+## Awaitable protocol members: what Capy does, and why Corosio differs
+
+Corosio's `mrdocs_warnings` carries 42 "function is undocumented" findings on the
+awaitables — `dispatch` (18), the awaitable constructors (8), `await_ready` /
+`await_suspend` / `await_resume`, and a few others. **Capy does not document its
+equivalents.** Checked directly: its `await_*` members carry plain `//` comments or
+nothing at all.
+
+The difference is scope, not diligence. Capy's awaiters are nested inside promise types
+at non-public scope (`quitter_return_base::promise_type::awaiter`), so
+`extract-private`'s defaults never surface them. Where one *does* surface, Capy leaves it
+undocumented and grandfathers it: `task.hpp:#1:await_resume: function is undocumented` is
+in Capy's own baseline.
+
+Corosio's awaitables are public nested types of the socket and file classes, because a
+user sees them as return types. So there is no Capy precedent to copy here, and the
+choice is Corosio's: exclude them the way the awaitables' data members already are, or
+document 42 members of machinery no user calls.
+
 ## The 8 `unsupported HTML tag <tt>` warnings are not ours
 
 `mrdocs_warnings` carries eight `unsupported HTML tag <tt>` findings with **no file

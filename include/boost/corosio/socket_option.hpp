@@ -238,8 +238,11 @@ public:
         return sizeof(value_);
     }
 
-    /// Storage is already one byte; no normalization needed.
-    void resize(std::size_t) noexcept {}
+    /** Storage is already one byte; no normalization needed.
+
+        @param n The byte count `getsockopt` reported; ignored.
+    */
+    void resize([[maybe_unused]] std::size_t n) noexcept {}
 };
 
 /** Base class for concrete integer socket options with single-byte storage.
@@ -296,8 +299,11 @@ public:
         return sizeof(value_);
     }
 
-    /// Storage is already one byte; no normalization needed.
-    void resize(std::size_t) noexcept {}
+    /** Storage is already one byte; no normalization needed.
+
+        @param n The byte count `getsockopt` reported; ignored.
+    */
+    void resize([[maybe_unused]] std::size_t n) noexcept {}
 };
 
 /** Disable Nagle's algorithm (TCP_NODELAY).
@@ -542,8 +548,9 @@ public:
 
         No-op — `struct linger` is always returned at full size, so the
         byte count `getsockopt` reports is ignored.
+        @param n The byte count `getsockopt` reported; ignored.
     */
-    void resize(std::size_t) noexcept {}
+    void resize([[maybe_unused]] std::size_t n) noexcept {}
 };
 
 /** Enable loopback of outgoing multicast on IPv4 (IP_MULTICAST_LOOP).
@@ -696,8 +703,11 @@ public:
     /// Return the size of the underlying storage.
     std::size_t size() const noexcept;
 
-    /// No-op resize.
-    void resize(std::size_t) noexcept {}
+    /** No-op resize.
+
+        @param n The byte count `getsockopt` reported; ignored.
+    */
+    void resize([[maybe_unused]] std::size_t n) noexcept {}
 };
 
 /** Leave an IPv4 multicast group (IP_DROP_MEMBERSHIP).
@@ -743,8 +753,11 @@ public:
     /// Return the size of the underlying storage.
     std::size_t size() const noexcept;
 
-    /// No-op resize.
-    void resize(std::size_t) noexcept {}
+    /** No-op resize.
+
+        @param n The byte count `getsockopt` reported; ignored.
+    */
+    void resize([[maybe_unused]] std::size_t n) noexcept {}
 };
 
 /** Join an IPv6 multicast group (IPV6_JOIN_GROUP).
@@ -789,8 +802,11 @@ public:
     /// Return the size of the underlying storage.
     std::size_t size() const noexcept;
 
-    /// No-op resize.
-    void resize(std::size_t) noexcept {}
+    /** No-op resize.
+
+        @param n The byte count `getsockopt` reported; ignored.
+    */
+    void resize([[maybe_unused]] std::size_t n) noexcept {}
 };
 
 /** Leave an IPv6 multicast group (IPV6_LEAVE_GROUP).
@@ -835,8 +851,11 @@ public:
     /// Return the size of the underlying storage.
     std::size_t size() const noexcept;
 
-    /// No-op resize.
-    void resize(std::size_t) noexcept {}
+    /** No-op resize.
+
+        @param n The byte count `getsockopt` reported; ignored.
+    */
+    void resize([[maybe_unused]] std::size_t n) noexcept {}
 };
 
 /** Set the outgoing interface for IPv4 multicast (IP_MULTICAST_IF).
@@ -883,8 +902,11 @@ public:
     /// Return the size of the underlying storage.
     std::size_t size() const noexcept;
 
-    /// No-op resize.
-    void resize(std::size_t) noexcept {}
+    /** No-op resize.
+
+        @param n The byte count `getsockopt` reported; ignored.
+    */
+    void resize([[maybe_unused]] std::size_t n) noexcept {}
 };
 
 } // namespace boost::corosio::socket_option

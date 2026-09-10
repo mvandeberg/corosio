@@ -400,32 +400,45 @@ public:
 
             @param host The host name or address literal to resolve.
             @param service The service name or port number.
+            @param h Coroutine handle to resume on completion.
+            @param ex Executor for dispatching the completion.
             @param flags Flags controlling the lookup.
+            @param token Stop token for cancellation.
+            @param ec Output error code.
+            @param results Output resolver results.
 
             @return Coroutine handle to resume immediately.
         */
         virtual std::coroutine_handle<> resolve(
-            std::coroutine_handle<>,
-            capy::executor_ref,
+            std::coroutine_handle<> h,
+            capy::executor_ref ex,
             std::string_view host,
             std::string_view service,
             resolve_flags flags,
-            std::stop_token,
-            std::error_code*,
-            resolver_results*) = 0;
+            std::stop_token token,
+            std::error_code* ec,
+            resolver_results* results) = 0;
 
         /** Initiate an asynchronous reverse DNS resolution.
+
+            @param h Coroutine handle to resume on completion.
+            @param ex Executor for dispatching the completion.
+            @param ep The endpoint to resolve.
+            @param flags Flags controlling the lookup.
+            @param token Stop token for cancellation.
+            @param ec Output error code.
+            @param result Output reverse-resolution result.
 
             @return Coroutine handle to resume immediately.
         */
         virtual std::coroutine_handle<> reverse_resolve(
-            std::coroutine_handle<>,
-            capy::executor_ref,
+            std::coroutine_handle<> h,
+            capy::executor_ref ex,
             endpoint const& ep,
             reverse_flags flags,
-            std::stop_token,
-            std::error_code*,
-            reverse_resolver_result*) = 0;
+            std::stop_token token,
+            std::error_code* ec,
+            reverse_resolver_result* result) = 0;
 
         /// Cancel pending resolve operations.
         virtual void cancel() noexcept = 0;

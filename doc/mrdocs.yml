@@ -64,6 +64,21 @@ multipage: true
 # Sorting
 sort-members-relational-last: false
 
+# Warnings. These feed doc/lint/mrdocs-warnings.mjs, which parses the build log.
+# Adopted for parity with Capy, whose config enables the same set. MrDocs turns
+# warn-if-undocumented and warn-no-paramdoc on by default, so those were already
+# in force here; warn-unnamed-param, warn-broken-ref and warn-if-doc-error were
+# not, and each surfaces a class of finding Corosio was previously blind to.
+# Deliberately not warn-as-error: the mrdocs_warnings gate reports rather than
+# blocks (see .github/workflows/docs.yml), because MrDocs is a rolling
+# develop-release build whose output moves on its own.
+warnings: true
+warn-if-undocumented: true
+warn-no-paramdoc: true
+warn-unnamed-param: true
+warn-broken-ref: true
+warn-if-doc-error: true
+
 # Reference examples are injected by addons/extensions/reference-snippets.lua.
 # MrDocs loads extensions from <install>/share/mrdocs/addons/extensions, so the
 # doc build installs it there (see doc/build_antora.sh). Setting

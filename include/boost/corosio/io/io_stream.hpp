@@ -71,27 +71,41 @@ public:
     {
         /** Initiate platform read operation.
 
+            @param h Coroutine handle to resume on completion.
+            @param ex Executor for dispatching the completion.
+            @param buffers Target buffer sequence.
+            @param token Stop token for cancellation.
+            @param ec Output error code.
+            @param bytes Output bytes transferred.
+
             @return Coroutine handle to resume immediately.
         */
         virtual std::coroutine_handle<> read_some(
-            std::coroutine_handle<>,
-            capy::executor_ref,
-            buffer_param,
-            std::stop_token,
-            std::error_code*,
-            std::size_t*) = 0;
+            std::coroutine_handle<> h,
+            capy::executor_ref ex,
+            buffer_param buffers,
+            std::stop_token token,
+            std::error_code* ec,
+            std::size_t* bytes) = 0;
 
         /** Initiate platform write operation.
+
+            @param h Coroutine handle to resume on completion.
+            @param ex Executor for dispatching the completion.
+            @param buffers Source buffer sequence.
+            @param token Stop token for cancellation.
+            @param ec Output error code.
+            @param bytes Output bytes transferred.
 
             @return Coroutine handle to resume immediately.
         */
         virtual std::coroutine_handle<> write_some(
-            std::coroutine_handle<>,
-            capy::executor_ref,
-            buffer_param,
-            std::stop_token,
-            std::error_code*,
-            std::size_t*) = 0;
+            std::coroutine_handle<> h,
+            capy::executor_ref ex,
+            buffer_param buffers,
+            std::stop_token token,
+            std::error_code* ec,
+            std::size_t* bytes) = 0;
     };
 
 protected:
