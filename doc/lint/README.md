@@ -235,6 +235,36 @@ CI there (`continue-on-error: true`, in no gate spec). A check that cannot fail 
 so neither it nor `pa11y-ci` was ported. `baseline.mjs` and `baseline-diff.mjs` had their
 `a11y` branches removed rather than left dangling.
 
+## MrDocs parses one synthetic TU, and that is what "unreachable header" means
+
+`corosio_setup_mrdocs()` in `cmake/CorosioBuild.cmake` writes a single translation unit
+and MrDocs documents whatever that TU pulls in:
+
+```cpp
+#include <boost/corosio.hpp>
+#include <boost/corosio/native/native.hpp>
+#include <boost/corosio/native/native_tcp.hpp>
+#include <boost/corosio/native/native_udp.hpp>
+```
+
+A public header absent from that TU produces no reference pages at all, however
+`input:` and `include-symbols:` are configured. That is what caused
+`tcp.hpp`'s `@ref native_tcp` and `udp.hpp`'s `@ref native_udp` to fail: those two
+headers are deliberately not part of `native/native.hpp` — they include the platform
+socket headers so their members can be `constexpr`, and the aggregate must not push
+`<winsock2.h>` onto every consumer. The last two lines above are the fix: the
+documentation TU includes them directly, widening what MrDocs parses without widening
+the public aggregate.
+
+A `@ref` that fails does not render as a broken link. It renders as **nothing** — the
+symbol name disappears from the page, leaving prose that says "use" and then omits what
+to use. Check `Failed to resolve reference` findings against the rendered HTML, not just
+the warning count.
+
+Note `@see` lists render as plain text in this generator regardless: on `tcp.html`,
+`tcp_socket` and `tcp_acceptor` are unlinked there too, and both have pages. That is
+generator behaviour, not a missing symbol.
+
 ## Awaitable protocol members: what Capy does, and why Corosio differs
 
 Corosio's `mrdocs_warnings` carries 42 "function is undocumented" findings on the

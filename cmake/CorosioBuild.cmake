@@ -54,9 +54,17 @@ endmacro()
 # Create boost_corosio_mrdocs, a synthetic translation unit that includes
 # all public headers for MrDocs documentation generation.
 function(corosio_setup_mrdocs)
+    # native_tcp.hpp and native_udp.hpp are deliberately NOT part of
+    # native/native.hpp: they include the platform socket headers so their
+    # members can be constexpr, and the aggregate must not push <winsock2.h>
+    # onto every consumer. They are still public API that tcp.hpp and udp.hpp
+    # point at with @ref, so the documentation TU includes them directly --
+    # widening what MrDocs parses without widening the aggregate.
     file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/mrdocs.cpp"
         "#include <boost/corosio.hpp>\n"
-        "#include <boost/corosio/native/native.hpp>\n")
+        "#include <boost/corosio/native/native.hpp>\n"
+        "#include <boost/corosio/native/native_tcp.hpp>\n"
+        "#include <boost/corosio/native/native_udp.hpp>\n")
     add_library(boost_corosio_mrdocs "${CMAKE_CURRENT_BINARY_DIR}/mrdocs.cpp")
     target_link_libraries(boost_corosio_mrdocs PUBLIC boost_corosio)
     target_compile_definitions(boost_corosio_mrdocs PUBLIC BOOST_COROSIO_MRDOCS)
