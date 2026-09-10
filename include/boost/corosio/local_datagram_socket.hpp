@@ -299,11 +299,6 @@ public:
     */
     struct send_to_awaitable : detail::bytes_op_base<send_to_awaitable>
     {
-        local_datagram_socket& s_;
-        buffer_param buf_;
-        corosio::local_endpoint dest_;
-        int flags_;
-
         send_to_awaitable(
             local_datagram_socket& s,
             buffer_param buf,
@@ -315,6 +310,14 @@ public:
             , flags_(flags)
         {
         }
+
+    private:
+        friend detail::bytes_op_base<send_to_awaitable>;
+
+        local_datagram_socket& s_;
+        buffer_param buf_;
+        corosio::local_endpoint dest_;
+        int flags_;
 
         std::coroutine_handle<>
         dispatch(std::coroutine_handle<> h, capy::executor_ref ex) const
@@ -331,11 +334,6 @@ public:
     */
     struct recv_from_awaitable : detail::bytes_op_base<recv_from_awaitable>
     {
-        local_datagram_socket& s_;
-        buffer_param buf_;
-        corosio::local_endpoint& source_;
-        int flags_;
-
         recv_from_awaitable(
             local_datagram_socket& s,
             buffer_param buf,
@@ -347,6 +345,14 @@ public:
             , flags_(flags)
         {
         }
+
+    private:
+        friend detail::bytes_op_base<recv_from_awaitable>;
+
+        local_datagram_socket& s_;
+        buffer_param buf_;
+        corosio::local_endpoint& source_;
+        int flags_;
 
         std::coroutine_handle<>
         dispatch(std::coroutine_handle<> h, capy::executor_ref ex) const
@@ -363,15 +369,18 @@ public:
     */
     struct connect_awaitable : detail::void_op_base<connect_awaitable>
     {
-        local_datagram_socket& s_;
-        corosio::local_endpoint endpoint_;
-
         connect_awaitable(
             local_datagram_socket& s, corosio::local_endpoint ep) noexcept
             : s_(s)
             , endpoint_(ep)
         {
         }
+
+    private:
+        friend detail::void_op_base<connect_awaitable>;
+
+        local_datagram_socket& s_;
+        corosio::local_endpoint endpoint_;
 
         std::coroutine_handle<>
         dispatch(std::coroutine_handle<> h, capy::executor_ref ex) const
@@ -383,14 +392,17 @@ public:
     /// Represent the awaitable returned by @ref wait.
     struct wait_awaitable : detail::void_op_base<wait_awaitable>
     {
-        local_datagram_socket& s_;
-        wait_type w_;
-
         wait_awaitable(local_datagram_socket& s, wait_type w) noexcept
             : s_(s)
             , w_(w)
         {
         }
+
+    private:
+        friend detail::void_op_base<wait_awaitable>;
+
+        local_datagram_socket& s_;
+        wait_type w_;
 
         std::coroutine_handle<>
         dispatch(std::coroutine_handle<> h, capy::executor_ref ex) const
@@ -406,10 +418,6 @@ public:
     */
     struct send_awaitable : detail::bytes_op_base<send_awaitable>
     {
-        local_datagram_socket& s_;
-        buffer_param buf_;
-        int flags_;
-
         send_awaitable(
             local_datagram_socket& s, buffer_param buf, int flags = 0) noexcept
             : s_(s)
@@ -417,6 +425,13 @@ public:
             , flags_(flags)
         {
         }
+
+    private:
+        friend detail::bytes_op_base<send_awaitable>;
+
+        local_datagram_socket& s_;
+        buffer_param buf_;
+        int flags_;
 
         std::coroutine_handle<>
         dispatch(std::coroutine_handle<> h, capy::executor_ref ex) const
@@ -432,10 +447,6 @@ public:
     */
     struct recv_awaitable : detail::bytes_op_base<recv_awaitable>
     {
-        local_datagram_socket& s_;
-        buffer_param buf_;
-        int flags_;
-
         recv_awaitable(
             local_datagram_socket& s, buffer_param buf, int flags = 0) noexcept
             : s_(s)
@@ -443,6 +454,13 @@ public:
             , flags_(flags)
         {
         }
+
+    private:
+        friend detail::bytes_op_base<recv_awaitable>;
+
+        local_datagram_socket& s_;
+        buffer_param buf_;
+        int flags_;
 
         std::coroutine_handle<>
         dispatch(std::coroutine_handle<> h, capy::executor_ref ex) const

@@ -72,14 +72,17 @@ class BOOST_COROSIO_DECL local_stream_acceptor : public io_object
 {
     struct wait_awaitable : detail::void_op_base<wait_awaitable>
     {
-        local_stream_acceptor& acc_;
-        wait_type w_;
-
         wait_awaitable(local_stream_acceptor& acc, wait_type w) noexcept
             : acc_(acc)
             , w_(w)
         {
         }
+
+    private:
+        friend detail::void_op_base<wait_awaitable>;
+
+        local_stream_acceptor& acc_;
+        wait_type w_;
 
         std::coroutine_handle<>
         dispatch(std::coroutine_handle<> h, capy::executor_ref ex) const

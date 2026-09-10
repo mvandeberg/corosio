@@ -179,11 +179,6 @@ class BOOST_COROSIO_DECL resolver : public io_object
     struct resolve_awaitable
         : detail::value_op_base<resolve_awaitable, resolver_results>
     {
-        resolver& r_;
-        std::string host_;
-        std::string service_;
-        resolve_flags flags_;
-
         resolve_awaitable(
             resolver& r,
             std::string_view host,
@@ -195,6 +190,13 @@ class BOOST_COROSIO_DECL resolver : public io_object
             , flags_(flags)
         {
         }
+
+    private:
+        friend detail::value_op_base<resolve_awaitable, resolver_results>;
+        resolver& r_;
+        std::string host_;
+        std::string service_;
+        resolve_flags flags_;
 
         std::coroutine_handle<>
         dispatch(std::coroutine_handle<> h, capy::executor_ref ex) const
@@ -208,10 +210,6 @@ class BOOST_COROSIO_DECL resolver : public io_object
         : detail::
               value_op_base<reverse_resolve_awaitable, reverse_resolver_result>
     {
-        resolver& r_;
-        endpoint ep_;
-        reverse_flags flags_;
-
         reverse_resolve_awaitable(
             resolver& r, endpoint const& ep, reverse_flags flags) noexcept
             : r_(r)
@@ -219,6 +217,14 @@ class BOOST_COROSIO_DECL resolver : public io_object
             , flags_(flags)
         {
         }
+
+    private:
+        friend detail::
+            value_op_base<reverse_resolve_awaitable, reverse_resolver_result>;
+
+        resolver& r_;
+        endpoint ep_;
+        reverse_flags flags_;
 
         std::coroutine_handle<>
         dispatch(std::coroutine_handle<> h, capy::executor_ref ex) const

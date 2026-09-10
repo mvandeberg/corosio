@@ -182,15 +182,18 @@ public:
     /// Represent the awaitable returned by @ref connect.
     struct connect_awaitable : detail::void_op_base<connect_awaitable>
     {
-        local_stream_socket& s_;
-        corosio::local_endpoint endpoint_;
-
         connect_awaitable(
             local_stream_socket& s, corosio::local_endpoint ep) noexcept
             : s_(s)
             , endpoint_(ep)
         {
         }
+
+    private:
+        friend detail::void_op_base<connect_awaitable>;
+
+        local_stream_socket& s_;
+        corosio::local_endpoint endpoint_;
 
         std::coroutine_handle<>
         dispatch(std::coroutine_handle<> h, capy::executor_ref ex) const
@@ -202,14 +205,17 @@ public:
     /// Represent the awaitable returned by @ref wait.
     struct wait_awaitable : detail::void_op_base<wait_awaitable>
     {
-        local_stream_socket& s_;
-        wait_type w_;
-
         wait_awaitable(local_stream_socket& s, wait_type w) noexcept
             : s_(s)
             , w_(w)
         {
         }
+
+    private:
+        friend detail::void_op_base<wait_awaitable>;
+
+        local_stream_socket& s_;
+        wait_type w_;
 
         std::coroutine_handle<>
         dispatch(std::coroutine_handle<> h, capy::executor_ref ex) const

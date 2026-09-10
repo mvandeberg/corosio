@@ -147,13 +147,6 @@ public:
     template<class MutableBufferSequence>
     struct read_some_at_awaitable
     {
-        random_access_file& f_;
-        std::uint64_t offset_;
-        MutableBufferSequence buffers_;
-        std::stop_token token_;
-        mutable std::error_code ec_;
-        mutable std::size_t bytes_ = 0;
-
         read_some_at_awaitable(
             random_access_file& f,
             std::uint64_t offset,
@@ -188,19 +181,23 @@ public:
             return f_.get().read_some_at(
                 offset_, h, env->executor, buffers_, token_, &ec_, &bytes_);
         }
+
+    private:
+        // read_some_at/write_some_at pre-set ec_ when the file is closed.
+        friend random_access_file;
+
+        random_access_file& f_;
+        std::uint64_t offset_;
+        MutableBufferSequence buffers_;
+        std::stop_token token_;
+        mutable std::error_code ec_;
+        mutable std::size_t bytes_ = 0;
     };
 
     /** Awaitable for async write-at operations. */
     template<class ConstBufferSequence>
     struct write_some_at_awaitable
     {
-        random_access_file& f_;
-        std::uint64_t offset_;
-        ConstBufferSequence buffers_;
-        std::stop_token token_;
-        mutable std::error_code ec_;
-        mutable std::size_t bytes_ = 0;
-
         write_some_at_awaitable(
             random_access_file& f,
             std::uint64_t offset,
@@ -235,6 +232,17 @@ public:
             return f_.get().write_some_at(
                 offset_, h, env->executor, buffers_, token_, &ec_, &bytes_);
         }
+
+    private:
+        // read_some_at/write_some_at pre-set ec_ when the file is closed.
+        friend random_access_file;
+
+        random_access_file& f_;
+        std::uint64_t offset_;
+        ConstBufferSequence buffers_;
+        std::stop_token token_;
+        mutable std::error_code ec_;
+        mutable std::size_t bytes_ = 0;
     };
 
 public:

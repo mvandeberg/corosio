@@ -49,15 +49,18 @@ protected:
     struct read_some_awaitable
         : detail::bytes_op_base<read_some_awaitable<MutableBufferSequence>>
     {
-        io_read_stream& ios_;
-        MutableBufferSequence buffers_;
-
         read_some_awaitable(
             io_read_stream& ios, MutableBufferSequence buffers) noexcept
             : ios_(ios)
             , buffers_(std::move(buffers))
         {
         }
+
+    private:
+        friend detail::bytes_op_base<
+            read_some_awaitable<MutableBufferSequence>>;
+        io_read_stream& ios_;
+        MutableBufferSequence buffers_;
 
         std::coroutine_handle<>
         dispatch(std::coroutine_handle<> h, capy::executor_ref ex) const

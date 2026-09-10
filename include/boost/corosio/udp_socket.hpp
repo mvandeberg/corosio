@@ -275,11 +275,6 @@ public:
     */
     struct send_to_awaitable : detail::bytes_op_base<send_to_awaitable>
     {
-        udp_socket& s_;
-        buffer_param buf_;
-        endpoint dest_;
-        int flags_;
-
         send_to_awaitable(
             udp_socket& s,
             buffer_param buf,
@@ -291,6 +286,14 @@ public:
             , flags_(flags)
         {
         }
+
+    private:
+        friend detail::bytes_op_base<send_to_awaitable>;
+
+        udp_socket& s_;
+        buffer_param buf_;
+        endpoint dest_;
+        int flags_;
 
         std::coroutine_handle<>
         dispatch(std::coroutine_handle<> h, capy::executor_ref ex) const
@@ -307,11 +310,6 @@ public:
     */
     struct recv_from_awaitable : detail::bytes_op_base<recv_from_awaitable>
     {
-        udp_socket& s_;
-        buffer_param buf_;
-        endpoint& source_;
-        int flags_;
-
         recv_from_awaitable(
             udp_socket& s,
             buffer_param buf,
@@ -324,6 +322,14 @@ public:
         {
         }
 
+    private:
+        friend detail::bytes_op_base<recv_from_awaitable>;
+
+        udp_socket& s_;
+        buffer_param buf_;
+        endpoint& source_;
+        int flags_;
+
         std::coroutine_handle<>
         dispatch(std::coroutine_handle<> h, capy::executor_ref ex) const
         {
@@ -335,14 +341,17 @@ public:
     /// Represent the awaitable returned by @ref connect.
     struct connect_awaitable : detail::void_op_base<connect_awaitable>
     {
-        udp_socket& s_;
-        endpoint endpoint_;
-
         connect_awaitable(udp_socket& s, endpoint ep) noexcept
             : s_(s)
             , endpoint_(ep)
         {
         }
+
+    private:
+        friend detail::void_op_base<connect_awaitable>;
+
+        udp_socket& s_;
+        endpoint endpoint_;
 
         std::coroutine_handle<>
         dispatch(std::coroutine_handle<> h, capy::executor_ref ex) const
@@ -354,10 +363,13 @@ public:
     /// Represent the awaitable returned by @ref wait.
     struct wait_awaitable : detail::void_op_base<wait_awaitable>
     {
+        wait_awaitable(udp_socket& s, wait_type w) noexcept : s_(s), w_(w) {}
+
+    private:
+        friend detail::void_op_base<wait_awaitable>;
+
         udp_socket& s_;
         wait_type w_;
-
-        wait_awaitable(udp_socket& s, wait_type w) noexcept : s_(s), w_(w) {}
 
         std::coroutine_handle<>
         dispatch(std::coroutine_handle<> h, capy::executor_ref ex) const
@@ -369,16 +381,19 @@ public:
     /// Represent the awaitable returned by @ref send.
     struct send_awaitable : detail::bytes_op_base<send_awaitable>
     {
-        udp_socket& s_;
-        buffer_param buf_;
-        int flags_;
-
         send_awaitable(udp_socket& s, buffer_param buf, int flags = 0) noexcept
             : s_(s)
             , buf_(buf)
             , flags_(flags)
         {
         }
+
+    private:
+        friend detail::bytes_op_base<send_awaitable>;
+
+        udp_socket& s_;
+        buffer_param buf_;
+        int flags_;
 
         std::coroutine_handle<>
         dispatch(std::coroutine_handle<> h, capy::executor_ref ex) const
@@ -390,16 +405,19 @@ public:
     /// Represent the awaitable returned by @ref recv.
     struct recv_awaitable : detail::bytes_op_base<recv_awaitable>
     {
-        udp_socket& s_;
-        buffer_param buf_;
-        int flags_;
-
         recv_awaitable(udp_socket& s, buffer_param buf, int flags = 0) noexcept
             : s_(s)
             , buf_(buf)
             , flags_(flags)
         {
         }
+
+    private:
+        friend detail::bytes_op_base<recv_awaitable>;
+
+        udp_socket& s_;
+        buffer_param buf_;
+        int flags_;
 
         std::coroutine_handle<>
         dispatch(std::coroutine_handle<> h, capy::executor_ref ex) const

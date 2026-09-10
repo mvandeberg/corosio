@@ -10,35 +10,11 @@ file-patterns:
 # Filters
 include-symbols:
   - 'boost::corosio::**'
-# The awaitables' captured state. Each `*_awaitable` is a nested `struct`, so its
-# data members are PUBLIC by C++ default -- they are not private and
-# `extract-private` has nothing to filter. They are storage for one in-flight
-# operation on a type the user only ever `co_await`s, never constructs or
-# inspects, so they are internals in every sense but the language's.
-#
-# Excluding rather than making them private is deliberate: reaching them from
-# `detail::bytes_op_base<>` would need a friend declaration naming a detail
-# template in a public header, which is exactly what the compilation firewall in
-# doc/design/physical-structure.md exists to prevent.
-exclude-symbols:
-  - 'boost::corosio::**::*_awaitable::s_'
-  - 'boost::corosio::**::*_awaitable::f_'
-  - 'boost::corosio::**::*_awaitable::w_'
-  - 'boost::corosio::**::*_awaitable::ios_'
-  - 'boost::corosio::**::*_awaitable::buf_'
-  - 'boost::corosio::**::*_awaitable::buffers_'
-  - 'boost::corosio::**::*_awaitable::dest_'
-  - 'boost::corosio::**::*_awaitable::source_'
-  - 'boost::corosio::**::*_awaitable::endpoint_'
-  - 'boost::corosio::**::*_awaitable::flags_'
-  - 'boost::corosio::**::*_awaitable::offset_'
-  - 'boost::corosio::**::*_awaitable::token_'
-  - 'boost::corosio::**::*_awaitable::bytes_'
-  - 'boost::corosio::**::*_awaitable::ec_'
 # `io_context::sched_` and the copy its executor holds are `protected:`, which
 # `extract-private` does not filter -- protected members are part of the
 # interface a derived class sees. This one is not: it is the scheduler pointer
 # the backend installs during construction.
+exclude-symbols:
   - 'boost::corosio::io_context::sched_'
   - 'boost::corosio::io_context::executor_type::sched_'
 implementation-defined:

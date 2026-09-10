@@ -49,15 +49,17 @@ protected:
     struct write_some_awaitable
         : detail::bytes_op_base<write_some_awaitable<ConstBufferSequence>>
     {
-        io_write_stream& ios_;
-        ConstBufferSequence buffers_;
-
         write_some_awaitable(
             io_write_stream& ios, ConstBufferSequence buffers) noexcept
             : ios_(ios)
             , buffers_(std::move(buffers))
         {
         }
+
+    private:
+        friend detail::bytes_op_base<write_some_awaitable<ConstBufferSequence>>;
+        io_write_stream& ios_;
+        ConstBufferSequence buffers_;
 
         std::coroutine_handle<>
         dispatch(std::coroutine_handle<> h, capy::executor_ref ex) const
