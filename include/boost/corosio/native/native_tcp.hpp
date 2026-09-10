@@ -47,8 +47,8 @@ namespace boost::corosio {
 /** Inline TCP protocol type with platform constants.
 
     Same shape as @ref boost::corosio::tcp but with inline
-    `family()`, `type()`, and `protocol()` methods that
-    resolve to compile-time constants.
+    `family()`, `type()`, and `protocol()` methods; `type()`
+    and `protocol()` resolve to compile-time constants.
 
     @see boost::corosio::tcp
 */

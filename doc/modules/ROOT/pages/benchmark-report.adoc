@@ -18,7 +18,7 @@ Corosio *outperforms Asio coroutines* in handler dispatch (9-50% faster) and *sc
 * *Multi-threaded handler scaling:* Best scaling of all three — maintains 89% throughput at 8 threads vs 58% (Asio coroutines) and 53% (Asio callbacks)
 * *Concurrent post and run:* 46% faster than Asio coroutines (2.35 Mops/s vs 1.61 Mops/s)
 * *Interleaved post/run:* 34% faster than Asio coroutines (2.14 Mops/s vs 1.60 Mops/s)
-* *HTTP concurrent connections:* 5-7% higher throughput than Asio coroutines
+* *HTTP concurrent connections:* 2-7% higher throughput than Asio coroutines
 
 === Where Asio Callbacks Leads
 
@@ -391,7 +391,7 @@ Single direction transfer with varying buffer sizes.
 | *2.31 GB/s*
 |===
 
-*Observation:* Unidirectional throughput is within 10% across all three implementations. Corosio has a slight edge at the smallest buffer size. All three are bounded by the same kernel socket path.
+*Observation:* Unidirectional throughput is within 13% across all three implementations. Corosio has a slight edge at the smallest buffer size. All three are bounded by the same kernel socket path.
 
 === Bidirectional Throughput
 
@@ -487,7 +487,7 @@ A single socket pair exchanges messages for 3 seconds.
 | *927.80 μs*
 |===
 
-*Observation:* All three implementations deliver latency within 5% of each other. Asio callbacks has marginally better tail latency. The differences are small enough to be within measurement noise.
+*Observation:* All three implementations deliver mean, p50, p90, and p99 latency within 5% of each other. Those differences are small enough to be within measurement noise. The far tail spreads wider: p99.9 varies by 16% and max by more than 2×. Asio callbacks has the lowest p99.9 and max.
 
 === Concurrent Socket Pairs
 
@@ -594,7 +594,7 @@ Multiple socket pairs operating concurrently (64-byte messages).
 | *391.54 μs*
 |===
 
-*Observation:* Corosio consistently outperforms Asio coroutines by 5-7% in concurrent connection throughput. Corosio and Asio callbacks trade the lead depending on connection count.
+*Observation:* Corosio consistently outperforms Asio coroutines by 2-7% in concurrent connection throughput. The gap narrows at higher connection counts. Corosio and Asio callbacks trade the lead depending on connection count.
 
 === Multi-Threaded HTTP (32 Connections)
 
@@ -775,7 +775,7 @@ Multiple timers firing at 15 ms intervals concurrently.
 | 18.17 ms
 |===
 
-*Observation:* Concurrent timer latency is identical across all three implementations. Mean latency stays within 0.06 ms of the 15 ms target regardless of concurrency level. Corosio has the best p99 at 1000 concurrent timers.
+*Observation:* Concurrent timer latency is identical across all three implementations. Mean latency stays within 0.06 ms across implementations and concurrency levels. Every mean sits about 0.4 ms above the nominal 15 ms interval. Corosio has the best p99 at 1000 concurrent timers.
 
 == Connection Churn Benchmark
 

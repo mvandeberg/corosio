@@ -95,11 +95,20 @@ Available flags:
 | Only return addresses if configured on the system
 
 | `v4_mapped`
-| Return IPv4-mapped IPv6 addresses if no IPv6 found
+| Intended to return IPv4-mapped IPv6 addresses if no IPv6 found. Has no effect
+in the current implementation (see note below).
 
 | `all_matching`
-| With `v4_mapped`, return all matching addresses
+| Intended to combine with `v4_mapped` to return all matching addresses. Has no
+effect in the current implementation (see note below).
 |===
+
+[NOTE]
+====
+`v4_mapped` and `all_matching` are currently inert. The resolver always
+queries with `ai_family = AF_UNSPEC`, but the underlying `AI_V4MAPPED` and
+`AI_ALL` behavior only takes effect for `AF_INET6`-family queries.
+====
 
 == Connecting to Resolved Addresses
 
@@ -140,9 +149,10 @@ Resolver operations support cancellation via `std::stop_token`:
 include::example$snippets/3c_dns_lookup.cpp[tag=resolver_cancel,indent=0]
 ----
 
-A cancelled resolution completes with `capy::cond::canceled` (the
-underlying value is `capy::error::canceled`), so test for it with
-`ec == capy::cond::canceled`.
+A cancelled resolution completes with `capy::cond::canceled`, so test for it
+with `ec == capy::cond::canceled`. The underlying value depends on the path:
+`cancel()` reports `capy::error::canceled`, and a stop-token request reports
+the generic `std::errc::operation_canceled`.
 
 Or through the affine awaitable protocol, which propagates the stop token from `capy::run_async` to every awaitable in the chain.
 

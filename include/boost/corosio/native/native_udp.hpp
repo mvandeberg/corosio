@@ -46,8 +46,8 @@ namespace boost::corosio {
 /** Inline UDP protocol type with platform constants.
 
     Same shape as @ref boost::corosio::udp but with inline
-    `family()`, `type()`, and `protocol()` methods that
-    resolve to compile-time constants.
+    `family()`, `type()`, and `protocol()` methods; `type()`
+    and `protocol()` resolve to compile-time constants.
 
     @see boost::corosio::udp
 */

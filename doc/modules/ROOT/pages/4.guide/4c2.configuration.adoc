@@ -81,6 +81,29 @@ include::example$snippets/4c2_configuration.cpp[tag=options_native,indent=0]
   `unsafe_io` (per-descriptor I/O locks off), or `unsafe` (all locks
   off).  Governs the thread-safety contract.  See
   <<single-threaded-mode>> for the tiers and their restrictions.
+
+| cpp:io_context_options::enable_sqpoll[enable_sqpoll]
+| false
+| io_uring
+| Enable `IORING_SETUP_SQPOLL`.  The kernel busy-polls the submission
+  ring, so submitting becomes a userspace-only memory store and the
+  `io_uring_enter` syscall leaves the submit path.  Most useful for
+  sustained traffic.
+
+| cpp:io_context_options::sq_thread_idle_ms[sq_thread_idle_ms]
+| 0
+| io_uring
+| Idle timeout of the SQ-poll kernel thread, in milliseconds.  After
+  that many milliseconds without submissions the thread sleeps, and the
+  next submit re-wakes it.  `0` selects the kernel default (1ms).
+  Ignored unless `enable_sqpoll` is true.
+
+| cpp:io_context_options::sq_thread_cpu[sq_thread_cpu]
+| -1
+| io_uring
+| CPU to pin the SQ-poll kernel thread to; `-1` leaves it unpinned for
+  the kernel scheduler to place.  Ignored unless `enable_sqpoll` is
+  true.
 |===
 
 Options that do not apply to the active backend are silently ignored.
@@ -182,8 +205,9 @@ Violating them is undefined behavior.
 * **Posting work from another thread** is undefined behavior.
 * **Signal sets** should not be shared across contexts.
 * **Delay and timeout cancellation via `stop_token`** from another thread
-  is not permitted: the cancel path posts into the scheduler, whose locking
-  these tiers disable. Cross-thread cancellation requires the `safe` tier.
+  is not permitted. The cancel path posts into the scheduler, and these
+  tiers permit no cross-thread posting. Cross-thread cancellation requires
+  the `safe` tier.
 
 The `unsafe` tier additionally makes:
 

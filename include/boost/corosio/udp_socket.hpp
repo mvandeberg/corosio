@@ -670,7 +670,7 @@ public:
 
         @param buf The buffer containing data to send.
         @param dest The destination endpoint.
-        @param flags Message flags (e.g. message_flags::dont_route).
+        @param flags Message flags (e.g. message_flags::do_not_route).
 
         @return An awaitable that completes with
             `io_result<std::size_t>`.

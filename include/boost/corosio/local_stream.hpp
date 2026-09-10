@@ -31,7 +31,7 @@ class local_stream_acceptor;
     @par Example
     @par !example open_with_protocol
 
-    @see native_local_stream, local_stream_socket, local_stream_acceptor
+    @see local_stream_socket, local_stream_acceptor
 */
 class BOOST_COROSIO_DECL local_stream
 {

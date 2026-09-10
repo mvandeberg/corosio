@@ -379,7 +379,7 @@ public:
 
         @param buffers The buffer data to send.
         @param dest The destination endpoint.
-        @param flags Message flags (e.g. `message_flags::dont_route`).
+        @param flags Message flags (e.g. `message_flags::do_not_route`).
 
         @return An awaitable yielding the error code and the byte count sent.
     */
@@ -460,7 +460,7 @@ public:
         dispatch. Otherwise identical to @ref local_datagram_socket::send.
 
         @param buffers The buffer data to send.
-        @param flags Message flags (e.g. `message_flags::dont_route`).
+        @param flags Message flags (e.g. `message_flags::do_not_route`).
 
         @return An awaitable yielding the error code and the byte count sent.
     */

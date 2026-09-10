@@ -675,8 +675,9 @@ public:
     /** Post a bare coroutine handle for deferred execution.
 
         Heap-allocates a `scheduler_op` to wrap the handle. A caller
-        that already owns a `scheduler_op` can post it directly via
-        the `post(scheduler_op*)` overload to avoid the allocation.
+        that already owns a `capy::continuation` can post it directly
+        via the `post(capy::continuation&)` overload to avoid the
+        allocation.
 
         @param h The coroutine handle to post.
 

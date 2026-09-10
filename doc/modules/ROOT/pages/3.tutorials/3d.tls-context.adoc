@@ -55,6 +55,11 @@ A cpp:tls_context[] is a shared handle to an opaque implementation. Copies share
 the same underlying state, making it easy to pass contexts by value and share
 them across multiple TLS streams.
 
+IMPORTANT: Don't modify a context after creating a stream from it. The
+configuration is captured when the first stream is constructed, so later
+changes reach neither existing nor new streams. If you need a different
+configuration, create a separate context.
+
 [source,cpp]
 ----
 include::example$snippets/3d_tls_context.cpp[tag=construction,indent=0]

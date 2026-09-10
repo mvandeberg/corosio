@@ -38,7 +38,8 @@ enum class tls_role
     server
 };
 
-/** Abstract base class for TLS streams.
+/** Reads, writes, and manages the handshake lifecycle of a TLS
+    session over an underlying stream.
 
     This class provides a runtime-polymorphic interface for TLS
     implementations. Derived classes (`openssl_stream`, `wolfssl_stream`)
@@ -103,8 +104,8 @@ public:
     /** Initiate an asynchronous write operation.
 
         Encrypts and writes data from the provided buffer sequence.
-        The operation completes when it reads at least one byte
-        written, or an error occurs.
+        The operation completes when it writes at least one byte,
+        or an error occurs.
 
         This non-virtual template wrapper satisfies the `capy::Stream`
         concept by delegating to the virtual `do_write_some`.

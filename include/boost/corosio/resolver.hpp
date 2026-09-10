@@ -410,10 +410,10 @@ public:
     {
         /** Initiate an asynchronous forward DNS resolution.
 
-            @param host The host name or address literal to resolve.
-            @param service The service name or port number.
             @param h Coroutine handle to resume on completion.
             @param ex Executor for dispatching the completion.
+            @param host The host name or address literal to resolve.
+            @param service The service name or port number.
             @param flags Flags controlling the lookup.
             @param token Stop token for cancellation.
             @param ec Output error code.
