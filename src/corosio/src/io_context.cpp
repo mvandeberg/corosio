@@ -31,6 +31,7 @@
 #if BOOST_COROSIO_HAS_URING
 #include <boost/corosio/native/detail/uring/uring_acceptor_ops.hpp>
 #include <boost/corosio/native/detail/uring/uring_buffer.hpp>
+#include <boost/corosio/native/detail/uring/uring_descriptor_service.hpp>
 #include <boost/corosio/native/detail/uring/uring_dgram_ops.hpp>
 #include <boost/corosio/native/detail/uring/uring_multishot_acceptor.hpp>
 #include <boost/corosio/native/detail/uring/uring_random_access_file.hpp>
@@ -64,6 +65,7 @@ epoll_t::construct(capy::execution_context& ctx, unsigned concurrency_hint)
     ctx.make_service<detail::epoll_local_stream_service>();
     ctx.make_service<detail::epoll_local_stream_acceptor_service>();
     ctx.make_service<detail::epoll_local_datagram_service>();
+    ctx.make_service<detail::epoll_descriptor_service>();
 
     return sched;
 }
@@ -82,6 +84,7 @@ select_t::construct(capy::execution_context& ctx, unsigned concurrency_hint)
     ctx.make_service<detail::select_local_stream_service>();
     ctx.make_service<detail::select_local_stream_acceptor_service>();
     ctx.make_service<detail::select_local_datagram_service>();
+    ctx.make_service<detail::select_descriptor_service>();
 
     return sched;
 }
@@ -100,6 +103,7 @@ kqueue_t::construct(capy::execution_context& ctx, unsigned concurrency_hint)
     ctx.make_service<detail::kqueue_local_stream_service>();
     ctx.make_service<detail::kqueue_local_stream_acceptor_service>();
     ctx.make_service<detail::kqueue_local_datagram_service>();
+    ctx.make_service<detail::kqueue_descriptor_service>();
 
     return sched;
 }
@@ -139,6 +143,7 @@ uring_t::construct(capy::execution_context& ctx, unsigned concurrency_hint)
     ctx.make_service<detail::uring_local_stream_acceptor_service>();
     ctx.make_service<detail::uring_udp_service>();
     ctx.make_service<detail::uring_local_datagram_service>();
+    ctx.make_service<detail::uring_descriptor_service>(sched);
     ctx.make_service<detail::uring_stream_file_service>(sched);
     ctx.make_service<detail::uring_random_access_file_service>(sched);
 

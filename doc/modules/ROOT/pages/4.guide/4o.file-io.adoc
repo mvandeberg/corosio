@@ -137,6 +137,20 @@ file object is already associated and cannot be re-adopted there. On
 POSIX platforms no such restriction exists.
 ====
 
+On POSIX, `assign()` accepts only what a file object can position:
+regular files, block devices and character devices. A pipe or socket is
+rejected with `errc::operation_not_supported` — adopt those into a
+xref:4.guide/4s.native-descriptors.adoc[`posix_descriptor`] instead; a
+directory is not adoptable by either type.
+
+A character device that cannot seek, such as a tty, passes adoption on
+every backend, but what happens next is backend-specific: the POSIX
+backends issue `preadv`/`pwritev` and fail at the first read or write
+with `ESPIPE`, while io_uring submits `READV`/`WRITEV` at offset `-1`
+for a `stream_file` and reads the tty successfully. Adopt one into a
+xref:4.guide/4s.native-descriptors.adoc[`posix_descriptor`] if you want
+the same behavior everywhere.
+
 == Error Handling
 
 File operations follow the same error model as sockets. Reads past
