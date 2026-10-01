@@ -389,6 +389,15 @@ public:
 
         The file object becomes not-open. The caller is
         responsible for closing the returned handle.
+        On Windows the handle is detached from this context's
+        completion port only if no operation is pending. Windows
+        refuses to detach a handle while a cancelled operation's
+        completion is still queued. A handle released with I/O in
+        flight therefore stays bound, and adopting it into another
+        `io_context` fails with `errc::invalid_argument`. Such a
+        handle must not be used for overlapped I/O that posts to a
+        completion port while this `io_context` lives. Release an
+        idle handle to move it between contexts.
 
         @return The native file descriptor or handle.
 
@@ -409,16 +418,15 @@ public:
 
         @param handle The native file descriptor or handle.
 
-        @return An error code describing the outcome. The codes
-            that follow are those of the POSIX and io_uring
-            backends. `errc::invalid_argument` if @p handle is the
-            one this object already holds.
-            `errc::bad_file_descriptor` if it is invalid.
-            `errc::operation_not_supported` if it names something a
-            file object cannot position. Otherwise, the `errno`
-            reported by the kernel, or an empty code. The Windows
-            backend validates nothing and reports the Win32 error
-            from IOCP registration.
+        @return An error code describing the outcome.
+            `errc::invalid_argument` if @p handle is the one this
+            object already holds. `errc::bad_file_descriptor` if it
+            is invalid. `errc::operation_not_supported` if it names
+            something a file object cannot position. On Windows,
+            that means a pipe, a console, a directory, or a handle
+            opened without `FILE_FLAG_OVERLAPPED`. On POSIX and
+            io_uring only, any other failure is the `errno` reported
+            by the kernel. Otherwise, the code is empty.
 
         @par Exception Safety
         Throws nothing. Strong guarantee.
@@ -427,12 +435,6 @@ public:
             means, in practice, a pipe, a socket, or any other
             anonymous inode. Adopt those into a @ref posix_descriptor
             instead.
-
-        @note The strong guarantee above holds on the POSIX and
-            io_uring backends. On Windows (IOCP), a failed @p handle
-            can still close the file this object held. That backend's
-            file services are unified in a later stage, which is
-            where this gap is closed.
 
         @see release
     */

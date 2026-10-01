@@ -1,0 +1,269 @@
+//
+// Copyright (c) 2026 Michael Vandeberg
+//
+// Distributed under the Boost Software License, Version 1.0. (See accompanying
+// file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+//
+// Official repository: https://github.com/cppalliance/corosio
+//
+
+#ifndef BOOST_COROSIO_WIN_STREAM_HANDLE_HPP
+#define BOOST_COROSIO_WIN_STREAM_HANDLE_HPP
+
+#include <boost/corosio/detail/config.hpp>
+#include <boost/corosio/detail/platform.hpp>
+
+#if BOOST_COROSIO_HAS_IOCP || defined(BOOST_COROSIO_MRDOCS)
+
+#include <boost/corosio/detail/except.hpp>
+#include <boost/corosio/detail/native_handle.hpp>
+#include <boost/corosio/io/io_stream.hpp>
+#include <boost/capy/ex/executor_ref.hpp>
+#include <boost/capy/ex/execution_context.hpp>
+#include <boost/capy/concept/executor.hpp>
+
+#include <concepts>
+#include <coroutine>
+#include <stop_token>
+#include <system_error>
+#include <type_traits>
+
+namespace boost::corosio {
+/** Drives an already-open overlapped Windows handle from an `io_context`.
+
+    Wraps a handle with an implicit position: the server or client
+    end of a named pipe opened with `FILE_FLAG_OVERLAPPED`, a COM
+    port, or a mailslot. The handle must come from the caller; this
+    type never creates one.
+
+    The type name is deliberately platform-qualified. Portability
+    comes from the interfaces it implements, not from the name. A
+    `win_stream_handle` is an @ref io_stream, so `capy::read`,
+    `capy::write`, other `capy::Stream`-constrained algorithms and
+    TLS layering work on it exactly as they do on a socket.
+
+    There is no `wait()`. IOCP has no readiness primitive for
+    arbitrary handles, which is the reason this type is not a
+    portable one.
+
+    @par Ownership
+    `assign()` takes ownership and `close()` closes the handle.
+    `release()` hands it back. The handle is detached from this
+    context's completion port only if no operation is pending.
+    Windows refuses to detach a handle while a cancelled operation's
+    completion is still queued. A handle released with I/O in flight
+    therefore stays bound, and adopting it into another `io_context`
+    fails with `errc::invalid_argument`. Such a handle must not be
+    used for overlapped I/O that posts to a completion port while
+    this `io_context` lives. Release an idle handle to move it
+    between contexts.
+
+    @par Rejected Handles
+    Console handles, handles opened without `FILE_FLAG_OVERLAPPED`
+    (including both ends of an anonymous `CreatePipe` pipe), disk
+    files and directories are rejected with
+    `errc::operation_not_supported`. A named pipe created with
+    `FILE_FLAG_OVERLAPPED` is the substitute for `CreatePipe`;
+    @ref stream_file adopts disk files. A handle already bound to
+    another completion port fails with `errc::invalid_argument`.
+
+    @par Transfers
+    Each `read_some()` and `write_some()` transfers at most the first
+    buffer of the sequence. On a message-mode pipe, a message longer
+    than the buffer is returned across successive reads. A read that
+    finds the peer closed completes with `capy::error::eof`; a write
+    completes with `errc::broken_pipe`.
+
+    @par Thread Safety
+    Distinct objects: Safe.@n
+    Shared objects: Unsafe. One read and one write may be in flight
+    simultaneously; two reads (or two writes) may not.
+
+    @par Example
+    @par !example win_stream_handle
+
+    @see io_stream, stream_file, win_random_access_handle
+*/
+class BOOST_COROSIO_DECL win_stream_handle : public io_stream
+{
+public:
+    /** Define backend hooks for handle operations.
+
+        The IOCP backend derives from this to implement handle I/O.
+    */
+    struct implementation : io_stream::implementation
+    {
+        /// Return the platform handle, or `INVALID_HANDLE_VALUE` when not open.
+        virtual native_handle_type native_handle() const noexcept = 0;
+
+        /** Release ownership of the native handle.
+
+            Cancels pending operations and detaches the handle from
+            the completion port without closing it. The caller takes
+            ownership.
+
+            @return The native handle.
+        */
+        virtual native_handle_type release_handle() noexcept = 0;
+
+        /** Request cancellation of pending asynchronous operations.
+
+            All outstanding operations complete with a code that
+            compares equal to `capy::cond::canceled`.
+        */
+        virtual void cancel() noexcept = 0;
+    };
+
+    /** Destructor.
+
+        Closes the handle if open, cancelling pending operations.
+    */
+    ~win_stream_handle() override;
+
+    /** Construct from an execution context.
+
+        @param ctx The execution context that owns this object.
+    */
+    explicit win_stream_handle(capy::execution_context& ctx);
+
+    /** Construct from an executor.
+
+        The overload excludes `win_stream_handle` itself so that it
+        cannot displace the move constructor.
+
+        @tparam Ex A type satisfying `capy::Executor`.
+        @param ex The executor whose context owns this object.
+    */
+    template<class Ex>
+        requires(!std::same_as<std::remove_cvref_t<Ex>, win_stream_handle>) &&
+        capy::Executor<Ex>
+    explicit win_stream_handle(Ex const& ex) : win_stream_handle(ex.context())
+    {
+    }
+
+    /** Move constructor.
+
+        @param other The object to move from.
+        @pre No awaitables returned by @p other's methods exist.
+    */
+    win_stream_handle(win_stream_handle&& other) noexcept
+        : io_object(std::move(other))
+    {
+    }
+
+    /** Move assignment.
+
+        @param other The object to move from.
+        @return `*this`.
+        @pre No awaitables returned by either object's methods exist.
+    */
+    win_stream_handle& operator=(win_stream_handle&& other) noexcept
+    {
+        io_object::operator=(std::move(other));
+        return *this;
+    }
+
+    /// Copy construction is disabled; the handle is uniquely owned.
+    win_stream_handle(win_stream_handle const&) = delete;
+    /// Copy assignment is disabled; the handle is uniquely owned.
+    win_stream_handle& operator=(win_stream_handle const&) = delete;
+
+    /** Adopt an existing overlapped handle.
+
+        Validation and completion-port registration run before
+        anything is mutated or closed. On any failure the object
+        still holds whatever handle and pending operations it held
+        before, and the caller still owns @p h.
+
+        @param h The native handle to adopt.
+
+        @return `errc::invalid_argument` when @p h is the handle this
+            object already holds or is bound to another completion
+            port. `errc::bad_file_descriptor` when @p h is null,
+            invalid or closed. `errc::operation_not_supported` when
+            @p h is a console, a synchronous-mode handle, a disk file
+            or a directory. Otherwise the error reported by the
+            kernel, or an empty code.
+
+        @par Exception Safety
+        Throws nothing. Strong guarantee.
+
+        @see release
+    */
+    [[nodiscard]] std::error_code assign(native_handle_type h) noexcept;
+
+    /** Release ownership of the native handle.
+
+        The object becomes not-open and pending operations are
+        cancelled. The handle is detached from this context's
+        completion port only if no operation is pending. Windows
+        refuses to detach a handle while a cancelled operation's
+        completion is still queued. A handle released with I/O in
+        flight therefore stays bound, and adopting it into another
+        `io_context` fails with `errc::invalid_argument`. Such a
+        handle must not be used for overlapped I/O that posts to a
+        completion port while this `io_context` lives. Release an
+        idle handle to move it between contexts. The caller is
+        responsible for closing the result.
+
+        @return The native handle.
+
+        @throws std::system_error `errc::bad_file_descriptor` if the
+            object is not open.
+
+        @post `is_open() == false`
+    */
+    native_handle_type release();
+
+    /** Close the handle.
+
+        Pending operations complete with a code that compares equal
+        to `capy::cond::canceled`. Does nothing when not open.
+    */
+    void close() noexcept;
+
+    /** Check whether a handle is held.
+
+        @return `true` if a handle is held and ready for I/O.
+    */
+    bool is_open() const noexcept
+    {
+        return h_ && get().native_handle() != ~native_handle_type{};
+    }
+
+    /** Get the native handle.
+
+        @return The native handle, or `INVALID_HANDLE_VALUE` when not open.
+    */
+    native_handle_type native_handle() const noexcept;
+
+    /** Cancel pending asynchronous operations.
+
+        Outstanding operations complete with a code that compares
+        equal to `capy::cond::canceled`.
+    */
+    void cancel() noexcept;
+
+protected:
+    /// Default-construct (for derived types that initialize `io_object` directly).
+    win_stream_handle() noexcept = default;
+
+    /** Construct from a handle.
+
+        @param h The handle this object takes ownership of.
+    */
+    explicit win_stream_handle(handle h) noexcept : io_object(std::move(h)) {}
+
+private:
+    /// Return the implementation downcast to this type's interface.
+    implementation& get() const noexcept
+    {
+        return *static_cast<implementation*>(h_.get());
+    }
+};
+
+} // namespace boost::corosio
+
+#endif // BOOST_COROSIO_HAS_IOCP || BOOST_COROSIO_MRDOCS
+
+#endif

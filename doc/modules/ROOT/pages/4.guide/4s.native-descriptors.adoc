@@ -12,7 +12,8 @@
 
 cpp:posix_descriptor[] adopts a file descriptor you already have and
 drives it from an `io_context`, giving it `read_some()`, `write_some()`
-and `wait()`. It exists on POSIX platforms only.
+and `wait()`. It exists on POSIX platforms only. On Windows, three
+handle types fill the same role; see <<windows-handles>>.
 
 [NOTE]
 ====
@@ -217,8 +218,244 @@ adopted descriptor. The write then fails with `EPIPE` instead.
 Asio's `posix::stream_descriptor` behaves the same way, for the same
 reason. Code ported from it needs no change here.
 
+[#windows-handles]
+== Windows Handles
+
+Windows has no single descriptor type, so the counterpart of
+cpp:posix_descriptor[] is three types. Each adopts a handle you already
+have and drives it from an `io_context`. None of them creates a handle.
+
+[NOTE]
+====
+The Windows snippets assume:
+[source,cpp]
+----
+include::example$snippets/4s_native_handles_win.cpp[tag=assume_win]
+----
+====
+
+[cols="2,3,2,2"]
+|===
+| Type | Adopts | Operations | In flight at once
+
+| cpp:win_stream_handle[]
+| Overlapped handles with an implicit position: named pipes, COM ports, mailslots
+| `read_some()`, `write_some()`
+| One read and one write
+
+| cpp:win_random_access_handle[]
+| Overlapped handles addressed by offset: volumes, physical drives, files
+| `read_some_at()`, `write_some_at()`
+| Any number
+
+| cpp:win_object_handle[]
+| Waitable kernel objects: processes, threads, events, semaphores, waitable timers
+| `wait()`
+| One wait
+|===
+
+=== Why the Names Say Windows
+
+The overlapped types have no `wait()`. A reactor asks the kernel when a
+descriptor is ready, and then does the I/O itself. IOCP works the other
+way round. The kernel performs the I/O and reports when it is finished.
+IOCP has no readiness notification for an arbitrary handle, so no
+readiness wait can be built on it.
+
+That gap is the reason for the platform-qualified names. A portable type
+would have to drop `wait()` on POSIX, or promise it on Windows and fail.
+
+Portability lives one layer up, as it does for cpp:posix_descriptor[]. A
+cpp:win_stream_handle[] is an cpp:io_stream[] and satisfies
+`capy::Stream`. `capy::read`, `capy::write`, and TLS layering work on it
+exactly as they do on a socket.
+
+=== The Overlapped Requirement
+
+IOCP completes I/O only on a handle opened for overlapped I/O. Both
+overlapped types therefore reject a handle opened without
+`FILE_FLAG_OVERLAPPED`, called a synchronous-mode handle. Console
+handles are rejected for the same reason. So are both ends of an
+anonymous `CreatePipe` pipe, which are always synchronous:
+
+[source,cpp]
+----
+include::example$snippets/4s_native_handles_win.cpp[tag=rejected_handles,indent=0]
+----
+
+Corosio does not emulate those handles on a thread. The substitute for
+`CreatePipe` is a named pipe whose server end is created with
+`FILE_FLAG_OVERLAPPED`. Opening the client end connects the pipe. The
+client end can stay synchronous. Passing it to a child process requires
+opening it inheritable, with a `SECURITY_ATTRIBUTES` whose
+`bInheritHandle` is `TRUE`. The read loop is an ordinary `capy::read`:
+
+[source,cpp]
+----
+include::example$snippets/4s_native_handles_win.cpp[tag=overlapped_pipe,indent=0]
+----
+
+cpp:win_random_access_handle[] accepts any overlapped handle that is
+not a console, a directory, or a synchronous-mode handle. Each operation
+names its own offset, so any number can be in flight:
+
+[source,cpp]
+----
+include::example$snippets/4s_native_handles_win.cpp[tag=random_access,indent=0]
+----
+
+For regular files, prefer cpp:random_access_file[]. It also offers
+`size()`, `resize()`, and the sync operations. Volume and drive handles
+need sector-aligned offsets, lengths, and buffers. A misaligned request
+fails with the kernel's error.
+
+=== What Is Rejected
+
+Each type checks a handle before `assign()` changes anything. The file
+types column covers cpp:stream_file[] and cpp:random_access_file[],
+which apply the same checks on Windows.
+
+[cols="3,1,1,1,1"]
+|===
+| Handle | `win_stream_handle` | `win_random_access_handle` | File types | `win_object_handle`
+
+| Console
+| Rejected
+| Rejected
+| Rejected
+| —
+
+| Opened without `FILE_FLAG_OVERLAPPED`, including `CreatePipe`
+| Rejected
+| Rejected
+| Rejected
+| —
+
+| Directory
+| Rejected
+| Rejected
+| Rejected
+| —
+
+| Disk file, volume, or physical drive
+| Rejected
+| Accepted
+| Accepted
+| —
+
+| Overlapped pipe
+| Accepted
+| Accepted
+| Rejected
+| —
+
+| Mutex
+| —
+| —
+| —
+| Rejected
+
+| Handle without `SYNCHRONIZE` access
+| —
+| —
+| —
+| Rejected
+|===
+
+Every rejection in the table fails with a code comparing equal to
+`errc::operation_not_supported`. A null, invalid, or closed handle fails
+with `errc::bad_file_descriptor`. Re-assigning the handle the object
+already holds fails with `errc::invalid_argument`. For the overlapped types,
+so does a handle already bound to another completion port.
+
+The overlapped types register a new handle with the completion port
+before they close the old one. Every failure therefore leaves the object
+as it was, pending operations included, and leaves you owning the
+handle. This is stronger than the POSIX guarantee, where a kernel
+refusal leaves the object closed.
+
+=== Transfers
+
+Each `read_some()`, `write_some()`, `read_some_at()`, and
+`write_some_at()` transfers at most the first buffer of a buffer
+sequence. `ReadFile` and `WriteFile` take a single buffer, unlike
+`readv()` and `writev()`. `capy::read` and `capy::write` loop over the
+whole sequence, so the difference shows only when you call the
+operations directly.
+
+On a message-mode pipe, a message longer than the buffer is not an
+error. The read returns the bytes that fit, and the rest of the message
+arrives on the next read.
+
+A read that finds the peer closed completes with `capy::error::eof`. A
+write to a pipe whose reader has closed completes with
+`errc::broken_pipe`. Windows raises no signal here, so there is nothing
+like `SIGPIPE` to suppress.
+
+=== Releasing a Handle
+
+`release()` cancels pending operations and hands the handle back
+without closing it. On the overlapped types, it also detaches the
+handle from the context's completion port, but only if no operation is
+pending. Windows refuses to detach a handle while a cancelled
+operation's completion is still queued. A handle released with I/O in
+flight therefore stays bound. Adopting it into another `io_context`
+then fails with `errc::invalid_argument`. Such a handle must not be used
+for overlapped I/O that posts to a completion port while the
+`io_context` lives. Release an idle handle to move it between contexts.
+
+cpp:win_object_handle[] never binds to the completion port, so its
+released handle has no such restriction.
+
+=== Waiting on Kernel Objects
+
+cpp:win_object_handle[] awaits the signaled state of a process, a
+thread, an event, a semaphore, or a waitable timer. The Windows thread
+pool carries the wait. The awaiting coroutine resumes on its executor as
+usual.
+
+A process handle becomes signaled when the process exits:
+
+[source,cpp]
+----
+include::example$snippets/4s_native_handles_win.cpp[tag=wait_for_process,indent=0]
+----
+
+`assign()` rejects a mutex. A satisfied mutex wait acquires the mutex on
+a pool thread, and the resuming coroutine would not own it. A handle
+without `SYNCHRONIZE` access cannot be waited on, so it is rejected too.
+`assign()` never waits on the handle, so it never consumes a signal.
+
+Only one wait may be pending. While the first is pending, a second
+`wait()` completes with `errc::operation_in_progress` and leaves the
+first undisturbed. Calling `wait()` concurrently on a shared object is
+unsafe.
+
+[IMPORTANT]
+====
+A wait the kernel satisfied always reports success, even when it raced
+`cancel()`, `close()`, `release()`, or a timeout. For an auto-reset
+event, a semaphore, or a waitable timer, a satisfied wait has already
+changed the object's state. Reporting it as cancelled would lose that
+change for good.
+====
+
+`wait()` has no timeout parameter. Compose it with cpp:timeout[] or a
+stop token instead:
+
+[source,cpp]
+----
+include::example$snippets/4s_native_handles_win.cpp[tag=wait_with_timeout,indent=0]
+----
+
+A wait cancelled before the kernel satisfied it consumed nothing. The
+object stays open and accepts the next `wait()`.
+
 == See Also
 
 * xref:4.guide/4r.wait.adoc[Readiness Wait]
 * xref:4.guide/4o.file-io.adoc[File I/O]
 * xref:reference:boost/corosio/posix_descriptor.adoc[`posix_descriptor` reference]
+* xref:reference:boost/corosio/win_stream_handle.adoc[`win_stream_handle` reference]
+* xref:reference:boost/corosio/win_random_access_handle.adoc[`win_random_access_handle` reference]
+* xref:reference:boost/corosio/win_object_handle.adoc[`win_object_handle` reference]

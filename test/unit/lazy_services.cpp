@@ -25,11 +25,15 @@
 #include <boost/corosio/tcp_acceptor.hpp>
 #include <boost/corosio/tcp_socket.hpp>
 #include <boost/corosio/udp_socket.hpp>
+#include <boost/corosio/win_object_handle.hpp>
+#include <boost/corosio/win_random_access_handle.hpp>
+#include <boost/corosio/win_stream_handle.hpp>
 
 #include <boost/corosio/detail/platform.hpp>
 #include <boost/corosio/detail/timer_service.hpp>
 
 #if BOOST_COROSIO_HAS_IOCP
+#include <boost/corosio/detail/win_handle_service.hpp>
 #include <boost/corosio/native/detail/iocp/win_file_service.hpp>
 #include <boost/corosio/native/detail/iocp/win_local_stream_acceptor_service.hpp>
 #include <boost/corosio/native/detail/iocp/win_local_stream_service.hpp>
@@ -76,6 +80,9 @@ using signal_service_t   = detail::win_signals;
 using file_service_t     = detail::win_file_service;
 using random_access_file_service_t =
     detail::win_random_access_file_service;
+using stream_handle_service_t        = detail::stream_handle_service;
+using random_access_handle_service_t = detail::random_access_handle_service;
+using object_handle_service_t        = detail::object_handle_service;
 #else
 using tcp_service_t          = detail::tcp_service;
 using tcp_acceptor_service_t = detail::tcp_acceptor_service;
@@ -114,6 +121,14 @@ struct lazy_services_test
             ioc.template find_service<local_datagram_service_t>() == nullptr);
         BOOST_TEST(
             ioc.template find_service<descriptor_service_t>() == nullptr);
+#else
+        BOOST_TEST(
+            ioc.template find_service<stream_handle_service_t>() == nullptr);
+        BOOST_TEST(
+            ioc.template find_service<random_access_handle_service_t>() ==
+            nullptr);
+        BOOST_TEST(
+            ioc.template find_service<object_handle_service_t>() == nullptr);
 #endif
         BOOST_TEST(ioc.template find_service<resolver_service_t>() == nullptr);
         BOOST_TEST(ioc.template find_service<signal_service_t>() == nullptr);
@@ -166,6 +181,17 @@ struct lazy_services_test
         posix_descriptor pd(ioc);
         BOOST_TEST(
             ioc.template find_service<descriptor_service_t>() != nullptr);
+#else
+        win_stream_handle sh(ioc);
+        BOOST_TEST(
+            ioc.template find_service<stream_handle_service_t>() != nullptr);
+        win_random_access_handle rah(ioc);
+        BOOST_TEST(
+            ioc.template find_service<random_access_handle_service_t>() !=
+            nullptr);
+        win_object_handle oh(ioc);
+        BOOST_TEST(
+            ioc.template find_service<object_handle_service_t>() != nullptr);
 #endif
 
         resolver res(ioc);

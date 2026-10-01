@@ -53,6 +53,10 @@
 #include <boost/corosio/native/detail/iocp/win_windows.hpp>
 #endif
 
+#if BOOST_COROSIO_HAS_IOCP
+#include "win_test_handles.hpp"
+#endif
+
 namespace boost::corosio {
 
 using test::temp_file;
@@ -750,8 +754,8 @@ struct stream_file_test
         stream_file f(ioc);
 
         BOOST_TEST(!f.open(tmp1.path, file_base::read_only));
-        // Only read back under the POSIX guard below; IOCP's assign()
-        // is close-first and does not offer the property being pinned.
+        // Only read back under the POSIX guard below: fcntl has no
+        // equivalent probe for a closed Windows handle.
         [[maybe_unused]] auto held = f.native_handle();
 
 #if BOOST_COROSIO_HAS_IOCP
@@ -783,10 +787,8 @@ struct stream_file_test
 #endif
     }
 
-#if BOOST_COROSIO_POSIX
-    // These validate assign()'s new fail-before-mutate contract, which so
-    // far is POSIX/uring-only -- IOCP's file services are unified (and
-    // gated) in a later stage.
+    // These validate assign()'s fail-before-mutate contract on every
+    // backend.
     void testFailedAssignLeavesFileOpen()
     {
         io_context ioc(Backend);
@@ -798,7 +800,7 @@ struct stream_file_test
         auto held = f.native_handle();
 
         // A rejected assign must not close the file we already hold.
-        BOOST_TEST(f.assign(-1) == std::errc::bad_file_descriptor);
+        BOOST_TEST(f.assign(static_cast<native_handle_type>(-1)) == std::errc::bad_file_descriptor);
         BOOST_TEST_EQ(f.is_open(), true);
         BOOST_TEST_EQ(f.native_handle(), held);
     }
@@ -823,7 +825,13 @@ struct stream_file_test
         // surfacing a runtime error on an adopted pipe fd.
         io_context ioc(Backend);
         stream_file f(ioc);
-
+#if BOOST_COROSIO_HAS_IOCP
+        auto p = test::make_pipe_pair();
+        BOOST_TEST(
+            f.assign(test::as_native(p.server.get())) ==
+            std::errc::operation_not_supported);
+        BOOST_TEST(!f.is_open());
+#else
         int fds[2];
         BOOST_TEST(::pipe(fds) == 0);
         BOOST_TEST(
@@ -832,6 +840,78 @@ struct stream_file_test
         BOOST_TEST(!f.is_open());
         ::close(fds[0]);
         ::close(fds[1]);
+#endif
+    }
+
+#if BOOST_COROSIO_HAS_IOCP
+    void testAssignRejectsSynchronousHandle()
+    {
+        test::temp_path t("sf_sync");
+        auto h = test::open_file(t.path, false);
+        io_context ioc(Backend);
+        stream_file f(ioc);
+        BOOST_TEST(
+            f.assign(test::as_native(h.get())) ==
+            std::errc::operation_not_supported);
+        BOOST_TEST(!f.is_open());
+    }
+
+    void testFailedAssignKeepsHeldFileIocp()
+    {
+        temp_file tmp("sf_keep_", "hello");
+        io_context ioc(Backend);
+        stream_file f(ioc);
+        BOOST_TEST(!f.open(tmp.path, file_base::read_only));
+        auto const held = f.native_handle();
+
+        auto p = test::make_pipe_pair();
+        BOOST_TEST(
+            f.assign(test::as_native(p.server.get())) ==
+            std::errc::operation_not_supported);
+        BOOST_TEST_EQ(f.native_handle(), held);
+
+        std::error_code ec;
+        std::size_t n = 0;
+        char buf[8]{};
+        auto reader = [&]() -> capy::task<> {
+            auto [rec, rn] =
+                co_await f.read_some(capy::mutable_buffer(buf, sizeof(buf)));
+            ec = rec;
+            n  = rn;
+        };
+        capy::run_async(ioc.get_executor())(reader());
+        ioc.run();
+        BOOST_TEST(!ec);
+        BOOST_TEST_EQ(n, 5u);
+    }
+
+    void testReleaseDetachesForReadoption()
+    {
+        temp_file tmp("sf_readopt_", "again");
+        native_handle_type raw{};
+        {
+            io_context ioc1(Backend);
+            stream_file f1(ioc1);
+            BOOST_TEST(!f1.open(tmp.path, file_base::read_only));
+            raw = f1.release();
+        }
+        io_context ioc2(Backend);
+        stream_file f2(ioc2);
+        BOOST_TEST(!f2.assign(raw));
+
+        std::error_code ec;
+        std::size_t n = 0;
+        char buf[8]{};
+        auto reader = [&]() -> capy::task<> {
+            auto [rec, rn] =
+                co_await f2.read_some(capy::mutable_buffer(buf, sizeof(buf)));
+            ec = rec;
+            n  = rn;
+        };
+        capy::run_async(ioc2.get_executor())(reader());
+        ioc2.run();
+        BOOST_TEST(!ec);
+        BOOST_TEST_EQ(n, 5u);
     }
 #endif
 
@@ -1185,14 +1265,15 @@ struct stream_file_test
         testAssign();
         testClosedFileErrors();
         testResizeReadOnlyFails();
-#if BOOST_COROSIO_POSIX
         testAssignPipeRejected();
-#endif
         testWrongDirectionIoFails();
         testAssignOverOpenAdopts();
-#if BOOST_COROSIO_POSIX
         testFailedAssignLeavesFileOpen();
         testSelfAssignRejected();
+#if BOOST_COROSIO_HAS_IOCP
+        testAssignRejectsSynchronousHandle();
+        testFailedAssignKeepsHeldFileIocp();
+        testReleaseDetachesForReadoption();
 #endif
         testSeekNegative();
         testCancelWithStoppedToken();

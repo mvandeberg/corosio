@@ -104,6 +104,11 @@ iocp_make_err(DWORD dwError, bool accept_path) noexcept
     case WSAEBADF:
     case ERROR_INVALID_HANDLE: // 10009 / 6
         return std::make_error_code(std::errc::bad_file_descriptor);
+    // A write to a pipe whose reader closed. The server end of a named
+    // pipe reports ERROR_NO_DATA ("the pipe is being closed").
+    case ERROR_BROKEN_PIPE:
+    case ERROR_NO_DATA: // 109 / 232
+        return std::make_error_code(std::errc::broken_pipe);
     default:
         break;
     }

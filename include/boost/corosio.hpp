@@ -37,6 +37,9 @@
 #include <boost/corosio/udp_socket.hpp>
 #include <boost/corosio/wait_traits.hpp>
 #include <boost/corosio/wait_type.hpp>
+#include <boost/corosio/win_object_handle.hpp> // Windows-only; self-guarded
+#include <boost/corosio/win_random_access_handle.hpp> // Windows-only; self-guarded
+#include <boost/corosio/win_stream_handle.hpp> // Windows-only; self-guarded
 
 #include <boost/corosio/local_connect_pair.hpp>
 #include <boost/corosio/local_endpoint.hpp>

@@ -488,6 +488,15 @@ class win_file_service;
 class win_random_access_file;
 class win_random_access_file_service;
 
+class win_random_access_handle_impl;
+class win_random_access_handle_service;
+
+class win_stream_handle_impl;
+class win_stream_handle_service;
+
+class win_object_handle_impl;
+class win_object_handle_service;
+
 } // namespace detail
 
 /** Selects the Windows I/O Completion Ports multiplexer as the backend.
@@ -542,6 +551,22 @@ struct iocp_t
     /// The service that owns the random-access file implementations.
     using random_access_file_service_type =
         detail::win_random_access_file_service;
+
+    /// The concrete overlapped stream handle type.
+    using stream_handle_type = detail::win_stream_handle_impl;
+    /// The service that owns the overlapped stream handle implementations.
+    using stream_handle_service_type = detail::win_stream_handle_service;
+
+    /// The concrete overlapped random-access handle type.
+    using random_access_handle_type = detail::win_random_access_handle_impl;
+    /// The service that owns the overlapped random-access handle implementations.
+    using random_access_handle_service_type =
+        detail::win_random_access_handle_service;
+
+    /// The concrete waitable kernel object handle type.
+    using object_handle_type = detail::win_object_handle_impl;
+    /// The service that owns the waitable kernel object handle implementations.
+    using object_handle_service_type = detail::win_object_handle_service;
 
     /** Create the scheduler and services for this backend.
 

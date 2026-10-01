@@ -29,5 +29,8 @@
 #include <boost/corosio/native/native_tcp_acceptor.hpp>
 #include <boost/corosio/native/native_tcp_socket.hpp>
 #include <boost/corosio/native/native_udp_socket.hpp>
+#include <boost/corosio/native/native_win_object_handle.hpp>
+#include <boost/corosio/native/native_win_random_access_handle.hpp>
+#include <boost/corosio/native/native_win_stream_handle.hpp>
 
 #endif
