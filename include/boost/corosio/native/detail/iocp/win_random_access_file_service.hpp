@@ -176,27 +176,27 @@ win_random_access_file::close_internal() noexcept
 inline std::coroutine_handle<>
 win_random_access_file::read_some_at(
     std::uint64_t offset,
-    std::coroutine_handle<> h,
+    capy::continuation& cont,
     capy::executor_ref d,
     buffer_param buf,
     std::stop_token token,
     std::error_code* ec,
     std::size_t* bytes)
 {
-    return internal_->read_some_at(offset, h, d, buf, token, ec, bytes);
+    return internal_->read_some_at(offset, cont, d, buf, token, ec, bytes);
 }
 
 inline std::coroutine_handle<>
 win_random_access_file::write_some_at(
     std::uint64_t offset,
-    std::coroutine_handle<> h,
+    capy::continuation& cont,
     capy::executor_ref d,
     buffer_param buf,
     std::stop_token token,
     std::error_code* ec,
     std::size_t* bytes)
 {
-    return internal_->write_some_at(offset, h, d, buf, token, ec, bytes);
+    return internal_->write_some_at(offset, cont, d, buf, token, ec, bytes);
 }
 
 inline native_handle_type

@@ -69,7 +69,7 @@ public:
 
     std::coroutine_handle<> read_some_at(
         std::uint64_t offset,
-        std::coroutine_handle<> h,
+        capy::continuation& cont,
         capy::executor_ref d,
         buffer_param buf,
         std::stop_token token,
@@ -78,7 +78,7 @@ public:
 
     std::coroutine_handle<> write_some_at(
         std::uint64_t offset,
-        std::coroutine_handle<> h,
+        capy::continuation& cont,
         capy::executor_ref d,
         buffer_param buf,
         std::stop_token token,

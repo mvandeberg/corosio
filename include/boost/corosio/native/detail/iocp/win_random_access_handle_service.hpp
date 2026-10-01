@@ -52,7 +52,7 @@ public:
 
     std::coroutine_handle<> read_some_at(
         std::uint64_t offset,
-        std::coroutine_handle<> h,
+        capy::continuation& cont,
         capy::executor_ref ex,
         buffer_param buf,
         std::stop_token token,
@@ -60,12 +60,12 @@ public:
         std::size_t* bytes) override
     {
         return internal_->read_some_at(
-            offset, h, ex, buf, std::move(token), ec, bytes);
+            offset, cont, ex, buf, std::move(token), ec, bytes);
     }
 
     std::coroutine_handle<> write_some_at(
         std::uint64_t offset,
-        std::coroutine_handle<> h,
+        capy::continuation& cont,
         capy::executor_ref ex,
         buffer_param buf,
         std::stop_token token,
@@ -73,7 +73,7 @@ public:
         std::size_t* bytes) override
     {
         return internal_->write_some_at(
-            offset, h, ex, buf, std::move(token), ec, bytes);
+            offset, cont, ex, buf, std::move(token), ec, bytes);
     }
 
     native_handle_type native_handle() const noexcept override

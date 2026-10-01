@@ -38,6 +38,7 @@
 #include <filesystem>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <stop_token>
 #include <system_error>
@@ -103,6 +104,12 @@ public:
         // Buffer data (copied from buffer_param at submission time)
         iovec iovecs[max_buffers];
         int iovec_count = 0;
+
+        // Snapshotted at submission: assign() may replace fd_ and
+        // offset_ while the worker runs.
+        int fd                   = -1;
+        std::uint64_t offset     = 0;
+        std::uint64_t generation = 0;
 
         // Result storage (populated by worker thread)
         int errn                      = 0;
@@ -190,10 +197,18 @@ private:
     int fd_               = -1;
     std::uint64_t offset_ = 0;
 
+    // Bumped whenever the held file changes. A worker advances offset_
+    // only if this still matches its op's snapshot; the mutex makes the
+    // check and the advance one step against a concurrent assign().
+    std::mutex offset_mutex_;
+    std::uint64_t generation_ = 0;
+
     file_op read_op_;
     file_op write_op_;
     pool_op read_pool_op_;
     pool_op write_pool_op_;
+
+    void bump_generation() noexcept;
 
     static void do_read_work(pool_work_item*) noexcept;
     static void do_write_work(pool_work_item*) noexcept;
@@ -268,8 +283,16 @@ posix_stream_file::open_file(
 }
 
 inline void
+posix_stream_file::bump_generation() noexcept
+{
+    std::lock_guard<std::mutex> lock(offset_mutex_);
+    ++generation_;
+}
+
+inline void
 posix_stream_file::close_file() noexcept
 {
+    bump_generation();
     if (fd_ >= 0)
     {
         ::close(fd_);
@@ -320,6 +343,7 @@ posix_stream_file::sync_all() noexcept
 inline native_handle_type
 posix_stream_file::release()
 {
+    bump_generation();
     int fd  = fd_;
     fd_     = -1;
     offset_ = 0;
@@ -339,12 +363,13 @@ posix_stream_file::assign(native_handle_type handle) noexcept
     if (auto ec = validate_file_fd(handle))
         return ec;
 
-    // cancel() first: an in-flight read/write's pool-thread completion
-    // reads fd_/offset_ at execution time, not at post time, so without
-    // this a pending op silently completes against the newly adopted
-    // file instead of being cancelled. The service's close(handle) /
-    // destroy() normally pair cancel()+close_file(); assign() bypasses
-    // that path and must do the same pairing itself.
+    // cancel() first, so a queued read/write completes canceled rather
+    // than running against the newly adopted file. A worker already past
+    // its cancelled check uses its op's fd and offset snapshot, and
+    // close_file()'s generation bump stops it advancing the new file's
+    // offset. The service's close(handle) / destroy() normally pair
+    // cancel()+close_file(); assign() bypasses that path and must do the
+    // same pairing itself.
     cancel();
     close_file();
     fd_     = handle;

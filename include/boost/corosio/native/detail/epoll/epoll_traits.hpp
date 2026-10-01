@@ -42,7 +42,7 @@ struct epoll_traits
     using scheduler_type  = epoll_scheduler;
     using desc_state_type = reactor_descriptor_state;
 
-    static constexpr bool needs_write_notification = false;
+    static constexpr bool needs_park_notification = false;
 
     // No extra per-socket state or lifecycle hooks needed for epoll.
     struct stream_socket_hook

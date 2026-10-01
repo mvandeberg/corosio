@@ -86,14 +86,14 @@ make_probe_coro(bool& resumed)
 struct uring_descriptor_continue_test
 {
     // What uring_descriptor::arm_slot does at submission time; the
-    // epochs it snapshots are the whole subject of these tests.
+    // epoch it snapshots is the whole subject of these tests.
     template<class Op>
     static void arm(detail::uring_descriptor& d, Op& op)
     {
-        op.desc         = &d;
-        op.polling      = false;
-        op.cancel_epoch = d.cancel_epoch();
-        op.desc_epoch   = d.desc_epoch();
+        op.desc      = &d;
+        op.polling   = false;
+        op.abandoned = false;
+        op.epoch     = d.epoch();
     }
 
     // The handler's tail, so an assertion reads the same two values a
@@ -170,7 +170,7 @@ struct uring_descriptor_continue_test
         // Still the transfer phase: nothing was submitted, so nothing
         // is parked.
         BOOST_TEST(!op.polling);
-        BOOST_TEST_EQ(op.res, -EAGAIN);
+        BOOST_TEST_EQ(op.res, -ECANCELED);
     }
 
     void testRecycledFdNumberStopsTheRearm()
@@ -195,14 +195,14 @@ struct uring_descriptor_continue_test
         BOOST_TEST_EQ(d->native_handle(), op.fd); // the fd check would pass
 
         BOOST_TEST(!detail::uring_descriptor_continue(op));
-        BOOST_TEST_EQ(op.res, -EBADF);
+        BOOST_TEST_EQ(op.res, -ECANCELED);
 
         std::error_code ec;
         std::size_t bytes = 99;
         decode(op, ec, bytes);
         // Without the terminal result: no error at all, and a
         // one-byte read of an untouched buffer.
-        BOOST_TEST(ec == std::errc::bad_file_descriptor);
+        BOOST_TEST(ec == capy::cond::canceled);
         BOOST_TEST_EQ(bytes, 0u);
 
         ::close(fds[1]);
@@ -282,6 +282,84 @@ struct uring_descriptor_continue_test
         ::close(fds[1]);
     }
 
+    void testPrepAfterCancelSubmitsNop()
+    {
+        // The re-arm decision is made in do_prep, under ring_mutex_: a
+        // cancel that bumped the epoch before the prep must turn the
+        // SQE into a NOP, never a transfer on the descriptor.
+        uring_descriptor_test_context ctx;
+        auto d = std::make_shared<detail::uring_descriptor>(ctx.scheduler());
+
+        detail::uring_descriptor_read_op op;
+        arm(*d, op);
+        d->cancel();
+
+        ::io_uring_sqe sqe{};
+        detail::uring_descriptor_read_op::do_prep(&op, &sqe);
+        BOOST_TEST_EQ(sqe.opcode, IORING_OP_NOP);
+        BOOST_TEST(op.abandoned);
+
+        op.res = 0; // the NOP's CQE
+        BOOST_TEST(!detail::uring_descriptor_continue(op));
+        BOOST_TEST_EQ(op.res, -ECANCELED);
+    }
+
+    void testPrepAfterDescriptorChangeSubmitsNop()
+    {
+        int fds[2];
+        BOOST_TEST_EQ(::pipe(fds), 0);
+
+        uring_descriptor_test_context ctx;
+        auto d = std::make_shared<detail::uring_descriptor>(ctx.scheduler());
+        d->set_descriptor(fds[0]);
+
+        detail::uring_descriptor_write_op op;
+        arm(*d, op);
+        op.fd = fds[0];
+        d->close_descriptor(); // closes fds[0]; the number may be reused
+
+        ::io_uring_sqe sqe{};
+        detail::uring_descriptor_write_op::do_prep(&op, &sqe);
+        BOOST_TEST_EQ(sqe.opcode, IORING_OP_NOP);
+
+        ::close(fds[1]);
+    }
+
+    void testBytesBeatCancel()
+    {
+        // A stop landing after the transfer's CQE abandons nothing: the
+        // transfer is done, and its byte count is the answer.
+        uring_descriptor_test_context ctx;
+        auto d = std::make_shared<detail::uring_descriptor>(ctx.scheduler());
+
+        detail::uring_descriptor_read_op op;
+        arm(*d, op);
+        op.res = 5;
+        op.cancelled.store(true, std::memory_order_release);
+        d->cancel();
+
+        BOOST_TEST(!detail::uring_descriptor_continue(op));
+        BOOST_TEST_EQ(op.res, 5);
+    }
+
+    void testSqFullPollAfterCancelReportsCanceled()
+    {
+        // The re-arming poll found the SQ full, so it never reached the
+        // kernel and came back with the full-SQ path's -EAGAIN. A cancel
+        // that landed meanwhile is owed canceled, not try-again.
+        uring_descriptor_test_context ctx;
+        auto d = std::make_shared<detail::uring_descriptor>(ctx.scheduler());
+
+        detail::uring_descriptor_read_op op;
+        arm(*d, op);
+        op.polling = true;
+        op.res     = -EAGAIN;
+        d->cancel();
+
+        BOOST_TEST(!detail::uring_descriptor_continue(op));
+        BOOST_TEST_EQ(op.res, -ECANCELED);
+    }
+
     void run()
     {
         testCancelledMidPollDoesNotReportRevents();
@@ -290,6 +368,10 @@ struct uring_descriptor_continue_test
         testRecycledFdNumberStopsTheRearm();
         testTerminalResultsAreLeftAlone();
         testEagainArmsPollThenRetriesTransfer();
+        testPrepAfterCancelSubmitsNop();
+        testPrepAfterDescriptorChangeSubmitsNop();
+        testBytesBeatCancel();
+        testSqFullPollAfterCancelReportsCanceled();
     }
 };
 

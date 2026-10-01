@@ -65,9 +65,9 @@ protected:
     }
 
 public:
-    /// True when a parked write-direction op must wake the reactor.
-    static constexpr bool needs_write_notification =
-        Traits::needs_write_notification;
+    /// True when any parked op must wake the reactor.
+    static constexpr bool needs_park_notification =
+        Traits::needs_park_notification;
 
     ~reactor_descriptor_service() override = default;
 
@@ -158,6 +158,14 @@ reactor_descriptor_service<Derived, Traits, DescFinal>::assign_descriptor(
     // must leave the object unchanged and the caller owning the fd.
     if (auto ec = validate_descriptor_fd(fd))
         return ec;
+
+    if constexpr (requires { Traits::max_descriptor; })
+    {
+        // Checked here, not left to register_descriptor, so the
+        // refusal precedes close_descriptor() and keeps the old fd.
+        if (fd >= Traits::max_descriptor)
+            return make_err(EMFILE);
+    }
 
     impl->close_descriptor();
 

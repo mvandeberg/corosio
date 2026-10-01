@@ -19,18 +19,23 @@
 #include <boost/capy/concept/read_stream.hpp>
 #include <boost/capy/concept/write_stream.hpp>
 #include <boost/capy/cond.hpp>
+#include <boost/capy/read.hpp>
 #include <boost/capy/ex/run_async.hpp>
 #include <boost/capy/task.hpp>
 
 #include <array>
 #include <csignal>
 #include <cstring>
+#include <ctime>
 #include <filesystem>
+#include <stop_token>
 #include <string>
+#include <thread>
 #include <type_traits>
 #include <typeinfo>
 
 #include <fcntl.h>
+#include <sys/socket.h>
 #include <unistd.h>
 
 #include "context.hpp"
@@ -273,6 +278,17 @@ struct posix_descriptor_test
         int fds[2];
         make_pipe(fds);
         BOOST_TEST(!d.assign(fds[1]));
+
+        // Run the reactor once while the pipe is still empty, so the
+        // registration's writable edge is consumed with nothing parked
+        // and write_ready is latched.
+        auto settle = [&]() -> capy::task<> {
+            auto [e] = co_await delay(std::chrono::milliseconds(1));
+            (void)e;
+        };
+        capy::run_async(ioc.get_executor())(settle());
+        ioc.run();
+        ioc.restart();
 
         // Fill the pipe. The write end must be nonblocking to do this
         // without deadlocking, and this is the caller's own fd, so the
@@ -764,6 +780,536 @@ struct posix_descriptor_test
         BOOST_TEST(ec == std::errc::bad_file_descriptor);
     }
 
+    void testConcurrentFirstReadAndWrite()
+    {
+        // One read and one write may be in flight at once; their first
+        // calls both arm O_NONBLOCK, from different threads.
+        int sv[2];
+        BOOST_TEST_EQ(::socketpair(AF_UNIX, SOCK_STREAM, 0, sv), 0);
+
+        io_context ioc(Backend, 2);
+        posix_descriptor d(ioc);
+        BOOST_TEST(!d.assign(sv[0]));
+
+        std::error_code rec, wec;
+        char rbuf[1];
+        auto reader = [&]() -> capy::task<> {
+            auto [e, n] = co_await d.read_some(capy::mutable_buffer(rbuf, 1));
+            rec         = e;
+            (void)n;
+        };
+        auto writer = [&]() -> capy::task<> {
+            auto [e, n] = co_await d.write_some(capy::const_buffer("x", 1));
+            wec         = e;
+            (void)n;
+            BOOST_TEST_EQ(::write(sv[1], "y", 1), 1);
+        };
+        capy::run_async(ioc.get_executor())(reader());
+        capy::run_async(ioc.get_executor())(writer());
+        std::thread t([&] { ioc.run(); });
+        ioc.run();
+        t.join();
+
+        BOOST_TEST(!rec);
+        BOOST_TEST(!wec);
+        BOOST_TEST(::fcntl(sv[0], F_GETFL) & O_NONBLOCK);
+        ::close(sv[1]);
+    }
+
+    void testUnpollableCharDeviceAdoptsEverywhere()
+    {
+        // epoll (EPERM) and kqueue (EINVAL) cannot watch these, but
+        // their I/O never blocks; every backend adopts them.
+        io_context ioc(Backend);
+        posix_descriptor zero(ioc);
+        posix_descriptor null(ioc);
+        int zfd = ::open("/dev/zero", O_RDONLY);
+        int nfd = ::open("/dev/null", O_WRONLY);
+        BOOST_TEST(zfd >= 0);
+        BOOST_TEST(nfd >= 0);
+        BOOST_TEST(!zero.assign(zfd));
+        BOOST_TEST(!null.assign(nfd));
+
+        std::error_code rec, wec, waitec;
+        std::size_t rn = 0, wn = 0;
+        char buf[16];
+        std::memset(buf, 'x', sizeof(buf));
+        auto t = [&]() -> capy::task<> {
+            auto [e1, n1] =
+                co_await zero.read_some(capy::mutable_buffer(buf, sizeof(buf)));
+            rec = e1;
+            rn  = n1;
+            auto [e2, n2] =
+                co_await null.write_some(capy::const_buffer(buf, sizeof(buf)));
+            wec       = e2;
+            wn        = n2;
+            auto [e3] = co_await zero.wait(wait_type::read);
+            waitec    = e3;
+        };
+        capy::run_async(ioc.get_executor())(t());
+        ioc.run();
+
+        BOOST_TEST(!rec);
+        BOOST_TEST_EQ(rn, sizeof(buf));
+        BOOST_TEST_EQ(buf[0], '\0');
+        BOOST_TEST(!wec);
+        BOOST_TEST_EQ(wn, sizeof(buf));
+        BOOST_TEST(!waitec);
+    }
+
+    void testUnpollableWaitThatWouldParkIsNotSupported()
+    {
+        // epoll adopts /dev/zero unwatched, so a wait the readiness
+        // probe cannot satisfy would park forever. kqueue, select and
+        // io_uring all watch /dev/zero, where this wait does park.
+#if BOOST_COROSIO_HAS_EPOLL
+        if constexpr (
+            std::is_same_v<std::remove_const_t<decltype(Backend)>, epoll_t>)
+        {
+            io_context ioc(Backend);
+            posix_descriptor zero(ioc);
+            BOOST_TEST(!zero.assign(::open("/dev/zero", O_RDONLY)));
+
+            std::error_code ec;
+            auto t = [&]() -> capy::task<> {
+                auto [e] = co_await zero.wait(wait_type::error);
+                ec       = e;
+            };
+            capy::run_async(ioc.get_executor())(t());
+            ioc.run();
+
+            BOOST_TEST(ec == std::errc::operation_not_supported);
+        }
+#endif
+    }
+
+    void testSelectFdSetsizeKeepsPriorState()
+    {
+#if BOOST_COROSIO_HAS_SELECT
+        if constexpr (
+            std::is_same_v<std::remove_const_t<decltype(Backend)>, select_t>)
+        {
+            io_context ioc(Backend);
+            posix_descriptor d(ioc);
+            int fds[2];
+            make_pipe(fds);
+            BOOST_TEST(!d.assign(fds[0]));
+
+            int high = ::fcntl(fds[1], F_DUPFD, FD_SETSIZE);
+            if (high < 0)
+            {
+                ::close(fds[1]); // RLIMIT_NOFILE too low to test
+                return;
+            }
+            BOOST_TEST(d.assign(high) == std::errc::too_many_files_open);
+            BOOST_TEST_EQ(d.native_handle(), fds[0]); // still held
+            BOOST_TEST(::fcntl(high, F_GETFD) != -1); // caller still owns it
+            ::close(high);
+            ::close(fds[1]);
+        }
+#endif
+    }
+
+    void testWaitErrorOnHungUpReadEnd()
+    {
+        // Hangup first, then wait: every backend completes with a code.
+        io_context ioc(Backend);
+        posix_descriptor d(ioc);
+        int fds[2];
+        make_pipe(fds);
+        BOOST_TEST(!d.assign(fds[0]));
+        ::close(fds[1]);
+
+        std::error_code ec;
+        bool done = false;
+        auto t    = [&]() -> capy::task<> {
+            auto [e] = co_await d.wait(wait_type::error);
+            ec       = e;
+            done     = true;
+        };
+        capy::run_async(ioc.get_executor())(t());
+        ioc.run();
+
+        BOOST_TEST(done);
+        BOOST_TEST(ec == std::errc::io_error);
+    }
+
+    void testWaitErrorParksOnReadEndThenNamesCode()
+    {
+        waitErrorParksOnReadEnd(false);
+        // Data still unread when the writer closes: epoll reports
+        // EPOLLIN|EPOLLHUP, which must reach the error wait too.
+        waitErrorParksOnReadEnd(true);
+    }
+
+    void waitErrorParksOnReadEnd(bool leave_data)
+    {
+        // The read-end twin of testWaitErrorParksThenNamesRealCode:
+        // epoll reports a writer close on the read end as EPOLLHUP
+        // alone, which must still reach the parked error wait. select
+        // and kqueue raise no event for it, as described there.
+        io_context ioc(Backend);
+        posix_descriptor d(ioc);
+        int fds[2];
+        make_pipe(fds);
+        BOOST_TEST(!d.assign(fds[0]));
+
+        bool done = false;
+        std::error_code ec;
+        auto waiter = [&]() -> capy::task<> {
+            auto [wec] = co_await d.wait(wait_type::error);
+            ec         = wec;
+            done       = true;
+        };
+        auto closer = [&]() -> capy::task<> {
+            co_await delay(std::chrono::milliseconds(10));
+            BOOST_TEST_EQ(done, false); // still parked, no error yet
+            if (leave_data)
+                BOOST_TEST_EQ(::write(fds[1], "x", 1), 1);
+            ::close(fds[1]);
+
+            for (int i = 0; i < 20 && !done; ++i)
+                co_await delay(std::chrono::milliseconds(10));
+            if (!done)
+                d.cancel();
+        };
+
+        auto ex = ioc.get_executor();
+        capy::run_async(ex)(waiter());
+        capy::run_async(ex)(closer());
+        ioc.run();
+
+        BOOST_TEST(done);
+#if BOOST_COROSIO_HAS_SELECT
+        constexpr bool is_select =
+            std::is_same_v<std::remove_const_t<decltype(Backend)>, select_t>;
+#else
+        constexpr bool is_select = false;
+#endif
+#if BOOST_COROSIO_HAS_KQUEUE
+        constexpr bool is_kqueue =
+            std::is_same_v<std::remove_const_t<decltype(Backend)>, kqueue_t>;
+#else
+        constexpr bool is_kqueue = false;
+#endif
+        if constexpr (!is_select && !is_kqueue)
+        {
+            BOOST_TEST(ec != capy::cond::canceled);
+            BOOST_TEST(ec == std::errc::io_error);
+        }
+    }
+
+    void testSelectDoesNotSpinOnReadableIdleFd()
+    {
+        // An adopted, always-readable fd with nothing parked on it must
+        // not keep the reactor busy while a timer is outstanding.
+        io_context ioc(Backend);
+        posix_descriptor d(ioc);
+        int fd = ::open("/dev/zero", O_RDONLY);
+        BOOST_TEST(!d.assign(fd));
+
+        std::clock_t const c0 = std::clock();
+        auto t                = [&]() -> capy::task<> {
+            auto [e] = co_await delay(std::chrono::milliseconds(200));
+            (void)e;
+        };
+        capy::run_async(ioc.get_executor())(t());
+        ioc.run();
+        double const cpu_ms =
+            1000.0 * double(std::clock() - c0) / CLOCKS_PER_SEC;
+        BOOST_TEST(cpu_ms < 100.0);
+    }
+
+    void testFailedAssignKeepsPendingRead()
+    {
+        // "Pending operations included": a rejected assign() must not
+        // cancel or disturb a read already parked on the held fd.
+        io_context ioc(Backend);
+        posix_descriptor d(ioc);
+        int fds[2];
+        make_pipe(fds);
+        BOOST_TEST(!d.assign(fds[0]));
+
+        auto path = temp_path("reject_pending");
+        int reg   = ::open(path.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0600);
+        BOOST_TEST(reg >= 0);
+
+        char buf[8]{};
+        std::size_t n = 0;
+        std::error_code ec;
+        bool done   = false;
+        auto reader = [&]() -> capy::task<> {
+            auto [rec, rn] =
+                co_await d.read_some(capy::mutable_buffer(buf, sizeof(buf)));
+            ec   = rec;
+            n    = rn;
+            done = true;
+        };
+        auto rejecter = [&]() -> capy::task<> {
+            auto [e] = co_await delay(std::chrono::milliseconds(10));
+            (void)e;
+            BOOST_TEST_EQ(done, false); // the read is parked
+            BOOST_TEST(d.assign(reg) == std::errc::operation_not_supported);
+            BOOST_TEST_EQ(::write(fds[1], "x", 1), 1);
+        };
+
+        auto ex = ioc.get_executor();
+        capy::run_async(ex)(reader());
+        capy::run_async(ex)(rejecter());
+        ioc.run();
+
+        BOOST_TEST(done);
+        BOOST_TEST(!ec);
+        BOOST_TEST_EQ(n, 1u);
+
+        ::close(reg);
+        std::filesystem::remove(path);
+        ::close(fds[1]);
+    }
+
+    void testWriteSomeArmsNonblocking()
+    {
+        io_context ioc(Backend);
+        posix_descriptor d(ioc);
+        int fds[2];
+        make_pipe(fds);
+        BOOST_TEST(!d.assign(fds[1]));
+        BOOST_TEST(!(::fcntl(fds[1], F_GETFL) & O_NONBLOCK));
+
+        std::error_code ec;
+        auto writer = [&]() -> capy::task<> {
+            auto [wec, wn] = co_await d.write_some(capy::const_buffer("y", 1));
+            ec             = wec;
+            (void)wn;
+        };
+        capy::run_async(ioc.get_executor())(writer());
+        ioc.run();
+
+        BOOST_TEST(!ec);
+        BOOST_TEST(::fcntl(fds[1], F_GETFL) & O_NONBLOCK);
+        ::close(fds[0]);
+    }
+
+    void testStopTokenCancelsRead()
+    {
+        io_context ioc(Backend);
+        posix_descriptor d(ioc);
+        int fds[2];
+        make_pipe(fds);
+        BOOST_TEST(!d.assign(fds[0]));
+
+        std::stop_source stop;
+        std::error_code ec;
+        char buf[4];
+        auto reader = [&]() -> capy::task<> {
+            auto [e, n] =
+                co_await d.read_some(capy::mutable_buffer(buf, sizeof(buf)));
+            ec = e;
+            (void)n;
+        };
+        auto stopper = [&]() -> capy::task<> {
+            auto [e] = co_await delay(std::chrono::milliseconds(10));
+            (void)e;
+            stop.request_stop();
+        };
+        capy::run_async(ioc.get_executor(), stop.get_token())(reader());
+        capy::run_async(ioc.get_executor())(stopper());
+        ioc.run();
+        BOOST_TEST(ec == capy::cond::canceled);
+        ::close(fds[1]);
+    }
+
+    void testZeroLength()
+    {
+        io_context ioc(Backend);
+        posix_descriptor d(ioc);
+        int fds[2];
+        make_pipe(fds);
+        BOOST_TEST(!d.assign(fds[0]));
+
+        std::error_code ec;
+        std::size_t n = 1;
+        auto t        = [&]() -> capy::task<> {
+            auto [e, rn] = co_await d.read_some(capy::mutable_buffer());
+            ec           = e;
+            n            = rn;
+        };
+        capy::run_async(ioc.get_executor())(t());
+        ioc.run();
+        BOOST_TEST(!ec);
+        BOOST_TEST_EQ(n, 0u);
+        ::close(fds[1]);
+    }
+
+    void testReleaseWhenClosedThrows()
+    {
+        io_context ioc(Backend);
+        posix_descriptor d(ioc);
+        BOOST_TEST_THROWS(d.release(), std::system_error);
+    }
+
+    void testReleaseThenReadoptElsewhere()
+    {
+        int fds[2];
+        make_pipe(fds);
+        io_context a(Backend);
+        io_context b(Backend);
+        posix_descriptor da(a);
+        posix_descriptor db(b);
+        BOOST_TEST(!da.assign(fds[0]));
+        int const fd = da.release();
+        BOOST_TEST(!db.assign(fd));
+
+        BOOST_TEST_EQ(::write(fds[1], "k", 1), 1);
+        char c = 0;
+        std::error_code ec;
+        auto t = [&]() -> capy::task<> {
+            auto [e, n] = co_await db.read_some(capy::mutable_buffer(&c, 1));
+            ec          = e;
+            (void)n;
+        };
+        capy::run_async(b.get_executor())(t());
+        b.run();
+        BOOST_TEST(!ec);
+        BOOST_TEST_EQ(c, 'k');
+        ::close(fds[1]);
+    }
+
+    void testComposedRead()
+    {
+        // The design's central claim: capy::read works on a descriptor.
+        io_context ioc(Backend);
+        posix_descriptor d(ioc);
+        int fds[2];
+        make_pipe(fds);
+        BOOST_TEST(!d.assign(fds[0]));
+
+        std::string got(10, '\0');
+        std::error_code ec;
+        auto reader = [&]() -> capy::task<> {
+            auto [e, n] = co_await capy::read(
+                d, capy::mutable_buffer(got.data(), got.size()));
+            ec = e;
+            (void)n;
+        };
+        auto writer = [&]() -> capy::task<> {
+            for (char const* part : {"hello", "world"})
+            {
+                auto [e] = co_await delay(std::chrono::milliseconds(5));
+                (void)e;
+                BOOST_TEST_EQ(::write(fds[1], part, 5), 5);
+            }
+        };
+        capy::run_async(ioc.get_executor())(reader());
+        capy::run_async(ioc.get_executor())(writer());
+        ioc.run();
+        BOOST_TEST(!ec);
+        BOOST_TEST_EQ(got, "helloworld");
+        ::close(fds[1]);
+    }
+
+    void testAdoptPipeWhosePeerIsGone()
+    {
+        // Draining an exited child's stdout: the writer is gone before
+        // assign(). FreeBSD's kqueue refuses EVFILT_WRITE on such a
+        // pipe with EPIPE, which must not refuse the adoption.
+        io_context ioc(Backend);
+        posix_descriptor rd(ioc);
+        posix_descriptor wr(ioc);
+        int fds[2];
+        make_pipe(fds);
+        BOOST_TEST_EQ(::write(fds[1], "hi", 2), 2);
+        ::close(fds[1]);
+        BOOST_TEST(!rd.assign(fds[0]));
+
+        int gone[2];
+        make_pipe(gone);
+        ::close(gone[0]);
+        BOOST_TEST(!wr.assign(gone[1]));
+
+        char buf[8]{};
+        std::size_t n = 0;
+        std::error_code ec, eof_ec;
+        auto reader = [&]() -> capy::task<> {
+            auto [e1, n1] =
+                co_await rd.read_some(capy::mutable_buffer(buf, sizeof(buf)));
+            ec = e1;
+            n  = n1;
+            auto [e2, n2] =
+                co_await rd.read_some(capy::mutable_buffer(buf, sizeof(buf)));
+            eof_ec = e2;
+            (void)n2;
+        };
+        capy::run_async(ioc.get_executor())(reader());
+        ioc.run();
+
+        BOOST_TEST(!ec);
+        BOOST_TEST_EQ(n, 2u);
+        BOOST_TEST(eof_ec == capy::cond::eof);
+    }
+
+    void waitWriteWithReaderGone(bool parked)
+    {
+        // A readiness wait reports the hangup as readiness, as asio does;
+        // the write that follows names broken_pipe.
+        io_context ioc(Backend);
+        posix_descriptor d(ioc);
+        int fds[2];
+        make_pipe(fds);
+        BOOST_TEST(!d.assign(fds[1]));
+        if (parked)
+        {
+            // Full, so the wait genuinely parks. The caller's own fd, so
+            // the test sets O_NONBLOCK itself.
+            int flags = ::fcntl(fds[1], F_GETFL);
+            BOOST_TEST_EQ(::fcntl(fds[1], F_SETFL, flags | O_NONBLOCK), 0);
+            char block[4096] = {};
+            while (::write(fds[1], block, sizeof(block)) > 0)
+            {
+            }
+        }
+        else
+        {
+            ::close(fds[0]);
+        }
+
+        std::error_code ec;
+        bool done   = false;
+        auto waiter = [&]() -> capy::task<> {
+            auto [e] = co_await d.wait(wait_type::write);
+            ec       = e;
+            done     = true;
+        };
+        auto closer = [&]() -> capy::task<> {
+            auto [e] = co_await delay(std::chrono::milliseconds(10));
+            (void)e;
+            if (parked)
+            {
+                BOOST_TEST_EQ(done, false);
+                ::close(fds[0]);
+            }
+            for (int i = 0; i < 20 && !done; ++i)
+            {
+                auto [e2] = co_await delay(std::chrono::milliseconds(10));
+                (void)e2;
+            }
+            if (!done)
+                d.cancel();
+        };
+        capy::run_async(ioc.get_executor())(waiter());
+        capy::run_async(ioc.get_executor())(closer());
+        ioc.run();
+
+        BOOST_TEST(done);
+        BOOST_TEST(!ec);
+    }
+
+    void testWaitWriteWithReaderGoneIsReadiness()
+    {
+        waitWriteWithReaderGone(false);
+        waitWriteWithReaderGone(true);
+    }
+
     void run()
     {
         testConstruction();
@@ -786,6 +1332,22 @@ struct posix_descriptor_test
         testParkedWriteOnBrokenPipeReportsEpipe();
         testWaitErrorParksThenNamesRealCode();
         testWaitOnClosedDescriptor();
+        testConcurrentFirstReadAndWrite();
+        testUnpollableCharDeviceAdoptsEverywhere();
+        testUnpollableWaitThatWouldParkIsNotSupported();
+        testSelectFdSetsizeKeepsPriorState();
+        testWaitErrorOnHungUpReadEnd();
+        testWaitErrorParksOnReadEndThenNamesCode();
+        testSelectDoesNotSpinOnReadableIdleFd();
+        testFailedAssignKeepsPendingRead();
+        testWriteSomeArmsNonblocking();
+        testStopTokenCancelsRead();
+        testZeroLength();
+        testReleaseWhenClosedThrows();
+        testReleaseThenReadoptElsewhere();
+        testComposedRead();
+        testAdoptPipeWhosePeerIsGone();
+        testWaitWriteWithReaderGoneIsReadiness();
     }
 };
 

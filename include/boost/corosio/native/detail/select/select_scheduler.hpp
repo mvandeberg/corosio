@@ -218,6 +218,7 @@ select_scheduler::register_descriptor(
         return make_err(EMFILE);
 
     desc->registered_events = reactor_event_read | reactor_event_write;
+    desc->unpollable        = false; // the state is reused across adoptions
     desc->fd                = fd;
     desc->scheduler_        = this;
     desc->mutex.set_enabled(reactor_io_locking_);
@@ -323,17 +324,17 @@ select_scheduler::run_task(lock_type& lock, context_type& ctx, long timeout_us)
         task_interrupted_ ? 0 : calculate_timeout(timeout_us);
 
     // Snapshot registered descriptors while holding lock.
-    // Record which fds need write monitoring to avoid a hot loop:
-    // select is level-triggered so writable sockets (nearly always
-    // writable) would cause select() to return immediately every
-    // iteration if unconditionally added to write_fds. Membership
-    // stays opt-in: a parked write wait opts in the same way a
-    // parked write or connect op does.
+    // Record which directions each fd needs monitored to avoid a hot
+    // loop: select is level-triggered, so a writable socket (nearly
+    // always writable) or an always-readable fd (/dev/zero, a pipe at
+    // EOF) would return select() immediately every iteration if
+    // unconditionally added. Membership in both sets is opt-in: a
+    // parked op or wait in a direction opts that direction in.
     struct fd_entry
     {
         int fd;
         reactor_descriptor_state* desc;
-        bool needs_write;
+        std::uint32_t want;
     };
     fd_entry snapshot[FD_SETSIZE];
     int snapshot_count = 0;
@@ -345,8 +346,12 @@ select_scheduler::run_task(lock_type& lock, context_type& ctx, long timeout_us)
             conditionally_enabled_mutex::scoped_lock desc_lock(desc->mutex);
             snapshot[snapshot_count].fd   = fd;
             snapshot[snapshot_count].desc = desc;
-            snapshot[snapshot_count].needs_write =
-                (desc->write_op || desc->connect_op || desc->wait_write_op);
+            snapshot[snapshot_count].want =
+                ((desc->read_op || desc->wait_read_op) ? reactor_event_read
+                                                       : 0) |
+                ((desc->write_op || desc->connect_op || desc->wait_write_op)
+                     ? reactor_event_write
+                     : 0);
             ++snapshot_count;
         }
     }
@@ -367,8 +372,9 @@ select_scheduler::run_task(lock_type& lock, context_type& ctx, long timeout_us)
     for (int i = 0; i < snapshot_count; ++i)
     {
         int fd = snapshot[i].fd;
-        FD_SET(fd, &read_fds);
-        if (snapshot[i].needs_write)
+        if (snapshot[i].want & reactor_event_read)
+            FD_SET(fd, &read_fds);
+        if (snapshot[i].want & reactor_event_write)
             FD_SET(fd, &write_fds);
         FD_SET(fd, &except_fds);
         if (fd > nfds)

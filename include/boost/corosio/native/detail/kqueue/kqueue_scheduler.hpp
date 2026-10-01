@@ -227,22 +227,94 @@ kqueue_scheduler::configure_reactor(
     event_buffer_.resize(max_events_per_poll_);
 }
 
+/// Per-filter outcome of kqueue_add_rw; 0 means added.
+struct kqueue_add_result
+{
+    int read_err;
+    int write_err;
+};
+
+/** Add edge-triggered EVFILT_READ and EVFILT_WRITE for @p fd.
+
+    All or nothing. Without EV_RECEIPT a refused filter stops the
+    changelist with the earlier filters still applied, leaving a knote
+    whose udata outlives the caller's state.
+*/
+inline kqueue_add_result
+kqueue_add_rw(int kq, int fd, void* udata) noexcept
+{
+    struct kevent changes[2];
+    EV_SET(
+        &changes[0], static_cast<uintptr_t>(fd), EVFILT_READ,
+        EV_ADD | EV_CLEAR | EV_RECEIPT, 0, 0, udata);
+    EV_SET(
+        &changes[1], static_cast<uintptr_t>(fd), EVFILT_WRITE,
+        EV_ADD | EV_CLEAR | EV_RECEIPT, 0, 0, udata);
+
+    struct kevent receipts[2];
+    int const n = ::kevent(kq, changes, 2, receipts, 2, nullptr);
+    if (n < 0)
+        return {errno, errno};
+
+    kqueue_add_result r{0, 0};
+    for (int i = 0; i < n; ++i)
+    {
+        if (!(receipts[i].flags & EV_ERROR) || receipts[i].data == 0)
+            continue;
+        int const err = static_cast<int>(receipts[i].data);
+        if (receipts[i].filter == EVFILT_READ)
+            r.read_err = err;
+        else
+            r.write_err = err;
+    }
+
+    // Exactly one filter failed: delete the one that was added.
+    if ((r.read_err == 0) != (r.write_err == 0))
+    {
+        struct kevent del;
+        short const added = r.read_err == 0 ? EVFILT_READ : EVFILT_WRITE;
+        EV_SET(
+            &del, static_cast<uintptr_t>(fd), added, EV_DELETE, 0, 0, nullptr);
+        ::kevent(kq, &del, 1, nullptr, 0, nullptr);
+    }
+    return r;
+}
+
 inline std::error_code
 kqueue_scheduler::register_descriptor(
     int fd, reactor_descriptor_state* desc) const
 {
-    struct kevent changes[2];
-    EV_SET(
-        &changes[0], static_cast<uintptr_t>(fd), EVFILT_READ, EV_ADD | EV_CLEAR,
-        0, 0, desc);
-    EV_SET(
-        &changes[1], static_cast<uintptr_t>(fd), EVFILT_WRITE,
-        EV_ADD | EV_CLEAR, 0, 0, desc);
+    auto r               = kqueue_add_rw(kq_fd_, fd, desc);
+    std::uint32_t events = reactor_event_read | reactor_event_write;
 
-    if (::kevent(kq_fd_, changes, 2, nullptr, 0, nullptr) < 0)
-        return make_err(errno);
+    // EPIPE on EVFILT_WRITE: a pipe or FIFO whose peer is gone (an
+    // exited child's stdout). A write on it fails at once and never
+    // parks, so watch reads alone rather than refuse the descriptor.
+    if (r.read_err == 0 && r.write_err == EPIPE)
+    {
+        struct kevent ch;
+        EV_SET(
+            &ch, static_cast<uintptr_t>(fd), EVFILT_READ, EV_ADD | EV_CLEAR, 0,
+            0, desc);
+        r.read_err =
+            ::kevent(kq_fd_, &ch, 1, nullptr, 0, nullptr) < 0 ? errno : 0;
+        r.write_err = 0;
+        events      = reactor_event_read;
+    }
 
-    desc->registered_events = reactor_event_read | reactor_event_write;
+    // EINVAL/ENODEV on EVFILT_READ: a device with no kqfilter. As on
+    // epoll's EPERM, adopt it unwatched. kqueue_add_rw left nothing
+    // registered.
+    bool const unpollable = r.read_err == EINVAL || r.read_err == ENODEV;
+    if (!unpollable)
+    {
+        if (r.read_err != 0)
+            return make_err(r.read_err);
+        if (r.write_err != 0)
+            return make_err(r.write_err);
+    }
+    desc->registered_events = unpollable ? 0 : events;
+    desc->unpollable        = unpollable;
     desc->fd                = fd;
     desc->scheduler_        = this;
     desc->mutex.set_enabled(reactor_io_locking_);

@@ -87,10 +87,16 @@ namespace boost::corosio {
     Regular files, block devices, and directories are rejected with
     `errc::operation_not_supported`. @ref stream_file and
     @ref random_access_file adopt regular files and block devices. A
-    directory is adoptable by no corosio type. Where a kernel refusal
-    surfaces depends on the backend. The epoll, kqueue, and select
-    backends register the descriptor during `assign()`, so a refusal
-    fails there. On select that is `EMFILE` for `fd >= FD_SETSIZE`.
+    directory is adoptable by no corosio type. A character device no
+    reactor can watch, such as `/dev/null`, is adopted on every
+    backend. An operation on it that would have to wait for readiness
+    completes with `errc::operation_not_supported`. On select, a
+    descriptor at or above `FD_SETSIZE` is rejected with
+    `errc::too_many_files_open` before anything changes. Where a
+    kernel refusal surfaces depends on the backend. The epoll and
+    kqueue backends register the descriptor during `assign()`, so a
+    refusal fails there. What remains to refuse is resource exhaustion
+    (`ENOMEM`, `ENOSPC`).
     The io_uring backend has no adopt-time registration, so
     `assign()` succeeds and takes ownership, and the refusal appears
     at the first `read_some()` or `write_some()`. An `assign()`-time
@@ -258,16 +264,18 @@ public:
             descriptor this object already holds.
             `errc::bad_file_descriptor` when @p fd is negative or
             closed. `errc::operation_not_supported` when @p fd names
-            a regular file, block device, or directory. Otherwise the
-            `errno` reported by the kernel, or an empty code.
+            a regular file, block device, or directory.
+            `errc::too_many_files_open` on select when @p fd is at or
+            above `FD_SETSIZE`. Otherwise the `errno` reported by the
+            kernel, or an empty code.
 
         @par Exception Safety
-        Throws nothing. The strong guarantee covers validation
-        failure only. A kernel registration refusal can occur only
-        after validation passes, and only on the backends that
-        register at adopt time (epoll, kqueue, select). The previous
-        descriptor is already closed by then, so the object is left
-        closed and @p fd stays with the caller.
+        Throws nothing. The strong guarantee covers every validation
+        failure, `FD_SETSIZE` on select included. A kernel
+        registration refusal can occur only after validation passes,
+        and only on the backends that register at adopt time (epoll,
+        kqueue). The previous descriptor is already closed by then,
+        so the object is left closed and @p fd stays with the caller.
 
         @see release
     */

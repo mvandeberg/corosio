@@ -39,8 +39,8 @@ namespace {
 capy::task<std::error_code>
 await_readable(corosio::io_context& ioc, int fd)
 {
-    // Adopt a duplicate: assign() takes ownership, and the caller's fd
-    // must outlive it.
+    // Adopt a duplicate: assign() takes ownership of the copy, so the
+    // caller's own fd stays independent of this object's lifetime.
     int copy = ::dup(fd);
     if (copy < 0)
         co_return std::error_code(errno, std::system_category());

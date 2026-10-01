@@ -253,10 +253,18 @@ epoll_scheduler::register_descriptor(
     ev.events   = EPOLLIN | EPOLLOUT | EPOLLET | EPOLLERR | EPOLLHUP;
     ev.data.ptr = desc;
 
+    bool unpollable = false;
     if (::epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &ev) < 0)
-        return make_err(errno);
+    {
+        // EPERM: a file type epoll cannot watch. Its I/O does not
+        // block, so adopt it unwatched, as asio does.
+        if (errno != EPERM)
+            return make_err(errno);
+        unpollable = true;
+    }
 
-    desc->registered_events = ev.events;
+    desc->registered_events = unpollable ? 0 : ev.events;
+    desc->unpollable        = unpollable;
     desc->fd                = fd;
     desc->scheduler_        = this;
     desc->mutex.set_enabled(reactor_io_locking_);
@@ -388,26 +396,23 @@ epoll_scheduler::run_task(lock_type& lock, context_type& ctx, long timeout_us)
         auto* desc =
             static_cast<reactor_descriptor_state*>(event_buffer_[i].data.ptr);
 
-        // A pipe or tty whose peer closed reports EPOLLHUP on its own --
-        // no EPOLLIN, no EPOLLERR -- and EPOLLHUP maps to no
-        // reactor_event_* bit, so invoke_deferred_io() would take no
-        // branch and, the registration being edge-triggered, never get
-        // another chance.
+        // EPOLLHUP maps to no reactor_event_* bit, so a HUP the widening
+        // below did not translate would take no branch in
+        // invoke_deferred_io() and, the registration being
+        // edge-triggered, never get another chance.
         //
-        // Sockets are unaffected because they never report EPOLLHUP
-        // alone. tcp_poll() and unix_poll() raise it only once
-        // sk_shutdown is SHUTDOWN_MASK (or the state is TCP_CLOSE), and
-        // both also report the socket readable and writable there --
-        // tcp_poll() takes an explicit `else mask |= EPOLLOUT` branch
-        // once SEND_SHUTDOWN is set, because a send on a shut-down
-        // socket fails fast rather than blocking. Measured on every
-        // state that produces EPOLLHUP -- peer close plus local
-        // SHUT_WR/SHUT_RDWR, RST, RST with the send buffer full, and
-        // the AF_UNIX equivalents -- the mask is always IN|OUT|HUP
-        // (0x15), or IN|OUT|ERR|HUP (0x1d) for a reset. The forced bits
-        // are therefore already set on every socket path.
+        // HUP without OUT means a non-socket: a pipe or tty whose peer
+        // closed, with or without data still unread (HUP alone, or
+        // IN|HUP). Treat it as readable, writable and faulted, the way
+        // poll() and io_uring report it, so a parked error wait
+        // completes too. Sockets carry at least OUT with HUP (a fresh
+        // unconnected stream socket reports HUP|OUT), so they take the
+        // plain widening, where forcing IN costs at most one spurious
+        // EAGAIN.
         std::uint32_t ev = event_buffer_[i].events;
-        if (ev & EPOLLHUP)
+        if ((ev & (EPOLLHUP | EPOLLOUT)) == EPOLLHUP)
+            ev |= EPOLLIN | EPOLLOUT | EPOLLERR;
+        else if (ev & EPOLLHUP)
             ev |= EPOLLIN | EPOLLOUT;
         desc->add_ready_events(ev);
 

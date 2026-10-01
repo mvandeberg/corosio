@@ -26,6 +26,7 @@
 #include <boost/corosio/native/detail/reactor/reactor_op_complete.hpp>
 #include <boost/capy/buffers.hpp>
 
+#include <atomic>
 #include <coroutine>
 #include <memory>
 #include <mutex>
@@ -105,6 +106,50 @@ template<class Traits, class Descriptor, class Acceptor>
 struct reactor_descriptor_wait_op final
     : reactor_wait_op<reactor_descriptor_base_op<Traits, Descriptor, Acceptor>>
 {
+    using base_type = reactor_wait_op<
+        reactor_descriptor_base_op<Traits, Descriptor, Acceptor>>;
+
+    /** Probe like reactor_wait_op::probe, but name a code for an error
+        wait that sees POLLERR or POLLHUP. A non-socket has no SO_ERROR
+        to consult, and success would claim no error condition exists.
+    */
+    static bool probe(int fd, std::uint32_t event, int& err) noexcept
+    {
+        if (event != reactor_event_error || fd < 0)
+            return base_type::probe(fd, event, err);
+
+        pollfd pfd{};
+        pfd.fd     = fd;
+        pfd.events = POLLPRI;
+        int r;
+        do
+        {
+            r = ::poll(&pfd, 1, 0);
+        }
+        while (r < 0 && errno == EINTR);
+        if (r < 0)
+        {
+            err = (errno == EAGAIN || errno == EWOULDBLOCK) ? ENOMEM : errno;
+            return true;
+        }
+        if (r == 0)
+            return false;
+        if (pfd.revents & POLLNVAL)
+            err = EBADF;
+        else if (pfd.revents & (POLLERR | POLLHUP))
+            err = EIO;
+        return true;
+    }
+
+    void perform_io() noexcept override
+    {
+        int err = 0;
+        if (probe(this->fd, this->wait_event, err))
+            this->complete(err, 0);
+        else
+            this->complete(EAGAIN, 0);
+    }
+
     void operator()() override;
 };
 
@@ -246,11 +291,13 @@ private:
     */
     int arm_nonblocking() noexcept
     {
-        if (nonblocking_)
+        // Relaxed: ensure_nonblocking is idempotent, so a duplicate
+        // fcntl from a racing first read and write is harmless.
+        if (nonblocking_.load(std::memory_order_relaxed))
             return 0;
         if (auto ec = ensure_nonblocking(fd_))
             return ec.value();
-        nonblocking_ = true;
+        nonblocking_.store(true, std::memory_order_relaxed);
         return 0;
     }
 
@@ -324,7 +371,7 @@ private:
 
     Service& svc_;
     int fd_           = -1;
-    bool nonblocking_ = false;
+    std::atomic<bool> nonblocking_{false};
 
     read_op rd_;
     write_op wr_;
@@ -446,7 +493,7 @@ reactor_descriptor<Derived, Traits, Service, Acceptor>::quiesce() noexcept
 
     desc_state_.registered_events = 0;
     // The next adopted fd starts from an unknown flag state.
-    nonblocking_ = false;
+    nonblocking_.store(false, std::memory_order_relaxed);
 }
 
 template<class Derived, class Traits, class Service, class Acceptor>
@@ -489,7 +536,7 @@ reactor_descriptor<Derived, Traits, Service, Acceptor>::register_op(
     Op& op,
     reactor_op_base*& desc_slot,
     bool& ready_flag,
-    bool is_write_direction) noexcept
+    [[maybe_unused]] bool is_write_direction) noexcept
 {
     svc_.work_started();
 
@@ -511,16 +558,21 @@ reactor_descriptor<Derived, Traits, Service, Acceptor>::register_op(
     }
     else
     {
+        if (desc_state_.unpollable)
+        {
+            // Nothing will ever report readiness for this fd.
+            op.complete(EOPNOTSUPP, 0);
+            svc_.post(&op);
+            svc_.work_finished();
+            return;
+        }
+
         desc_slot = &op;
 
-        // Select must rebuild its fd_sets when a write-direction op
-        // is parked, so select() watches for writability. Compiled
-        // away to nothing for epoll and kqueue.
-        if constexpr (Service::needs_write_notification)
-        {
-            if (is_write_direction)
-                svc_.scheduler().notify_reactor();
-        }
+        // Select rebuilds its fd_sets from parked ops only, so parking
+        // must wake it. Compiled away for epoll and kqueue.
+        if constexpr (Service::needs_park_notification)
+            svc_.scheduler().notify_reactor();
     }
 }
 

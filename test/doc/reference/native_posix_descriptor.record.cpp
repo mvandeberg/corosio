@@ -29,6 +29,7 @@
 #include <boost/corosio/native/native_io_context.hpp>
 #include <boost/corosio/native/native_posix_descriptor.hpp>
 
+#include <boost/capy/ex/run_async.hpp>
 #include <boost/capy/task.hpp>
 
 #if BOOST_COROSIO_HAS_EPOLL
@@ -43,13 +44,12 @@ namespace {
 #if BOOST_COROSIO_HAS_EPOLL
 // tag::assign_and_wait[]
 capy::task<std::error_code>
-await_readable_native(int fd)
+await_readable_native(corosio::native_io_context<corosio::epoll>& ctx, int fd)
 {
-    corosio::native_io_context<corosio::epoll> ctx;
     corosio::native_posix_descriptor<corosio::epoll> d(ctx);
 
-    // Adopt a duplicate: assign() takes ownership, and the caller's fd
-    // must outlive it.
+    // Adopt a duplicate: assign() takes ownership of the copy, so the
+    // caller's own fd stays independent of this object's lifetime.
     int copy = ::dup(fd);
     if (copy < 0)
         co_return std::error_code(errno, std::system_category());
@@ -62,6 +62,15 @@ await_readable_native(int fd)
 
     auto [ec] = co_await d.wait(corosio::wait_type::read);
     co_return ec;
+}
+
+void
+wait_until_readable(int fd)
+{
+    // The context outlives the coroutine, and run() is what drives it.
+    corosio::native_io_context<corosio::epoll> ctx;
+    capy::run_async(ctx.get_executor())(await_readable_native(ctx, fd));
+    ctx.run();
 }
 // end::assign_and_wait[]
 #endif // BOOST_COROSIO_HAS_EPOLL

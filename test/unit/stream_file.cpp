@@ -57,6 +57,14 @@
 #include "win_test_handles.hpp"
 #endif
 
+#if defined(__SANITIZE_THREAD__)
+#define COROSIO_TEST_HAS_TSAN 1
+#elif defined(__has_feature)
+#if __has_feature(thread_sanitizer)
+#define COROSIO_TEST_HAS_TSAN 1
+#endif
+#endif
+
 namespace boost::corosio {
 
 using test::temp_file;
@@ -1222,6 +1230,57 @@ struct stream_file_test
         // Must not have completed against the newly adopted file's data.
         BOOST_TEST(std::memcmp(buf, "NEWNEWNEW", 9) != 0);
     }
+
+    void testReassignDuringInFlightReadKeepsNewOffset()
+    {
+        // A read already running on the pool when assign() swaps the
+        // file must not advance the new file's position.
+#if BOOST_COROSIO_HAS_URING
+        // No pool on io_uring: the ring cancels the old fd's read.
+        if constexpr (
+            std::is_same_v<std::remove_const_t<decltype(Backend)>, uring_t>)
+            return;
+#endif
+#ifdef COROSIO_TEST_HAS_TSAN
+        // assign() closes the fd a worker may be mid-preadv on: the
+        // fd-number reuse hazard, which this test does not cover and
+        // TSan reports on every run.
+        return;
+#endif
+        temp_file tmp1("sf_reassign_offset_a_", std::string(4096, 'a'));
+        temp_file tmp2("sf_reassign_offset_b_", std::string(4096, 'b'));
+
+        // The race is timing-dependent; repeat to give it a chance.
+        int moved = 0;
+        for (int i = 0; i < 200; ++i)
+        {
+            io_context ioc(Backend);
+            stream_file f(ioc);
+            BOOST_TEST(!f.open(tmp1.path, file_base::read_only));
+
+            char buf[4096];
+            auto reader = [&]() -> capy::task<> {
+                auto [e, n] = co_await f.read_some(
+                    capy::mutable_buffer(buf, sizeof(buf)));
+                (void)e;
+                (void)n;
+            };
+            auto swapper = [&]() -> capy::task<> {
+                int fd2 = ::open(tmp2.path.c_str(), O_RDONLY);
+                BOOST_TEST(!f.assign(static_cast<native_handle_type>(fd2)));
+                co_return;
+            };
+            capy::run_async(ioc.get_executor())(reader());
+            capy::run_async(ioc.get_executor())(swapper());
+            ioc.run();
+
+            auto [sec, pos] = f.seek(0, file_base::seek_cur);
+            BOOST_TEST(!sec);
+            if (pos != 0u)
+                ++moved;
+        }
+        BOOST_TEST_EQ(moved, 0);
+    }
 #endif
 
     void run()
@@ -1284,6 +1343,7 @@ struct stream_file_test
         testDestroyWithPoolWorkQueued();
         testReadWriteAfterPoolShutdown();
         testAssignCancelsInFlightRead();
+        testReassignDuringInFlightReadKeepsNewOffset();
 #endif
 
 #if !COROSIO_TEST_HAS_ASAN

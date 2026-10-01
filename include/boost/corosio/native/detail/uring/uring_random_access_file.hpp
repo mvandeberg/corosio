@@ -84,7 +84,7 @@ public:
 
     std::coroutine_handle<> read_some_at(
         std::uint64_t,
-        std::coroutine_handle<>,
+        capy::continuation&,
         capy::executor_ref,
         buffer_param,
         std::stop_token,
@@ -93,7 +93,7 @@ public:
 
     std::coroutine_handle<> write_some_at(
         std::uint64_t,
-        std::coroutine_handle<>,
+        capy::continuation&,
         capy::executor_ref,
         buffer_param,
         std::stop_token,
@@ -237,7 +237,7 @@ public:
 inline std::coroutine_handle<>
 uring_random_access_file::read_some_at(
     std::uint64_t user_offset,
-    std::coroutine_handle<> h,
+    capy::continuation& cont,
     capy::executor_ref ex,
     buffer_param buffers,
     std::stop_token token,
@@ -246,8 +246,9 @@ uring_random_access_file::read_some_at(
 {
     auto op_guard = std::make_unique<uring_random_access_read_op>();
     op_guard->prepare(
-        h, ex, ec, bytes, fd_, static_cast<std::int64_t>(user_offset), sched_,
-        shared_from_this(), buffers, token);
+        cont.h, ex, ec, bytes, fd_, static_cast<std::int64_t>(user_offset),
+        sched_, shared_from_this(), buffers, token);
+    op_guard->awaiting = &cont;
     sched_->work_started();
 
     // Closed-object contract outranks the zero-length no-op.
@@ -275,7 +276,7 @@ uring_random_access_file::read_some_at(
 inline std::coroutine_handle<>
 uring_random_access_file::write_some_at(
     std::uint64_t user_offset,
-    std::coroutine_handle<> h,
+    capy::continuation& cont,
     capy::executor_ref ex,
     buffer_param buffers,
     std::stop_token token,
@@ -284,8 +285,9 @@ uring_random_access_file::write_some_at(
 {
     auto op_guard = std::make_unique<uring_random_access_write_op>();
     op_guard->prepare(
-        h, ex, ec, bytes, fd_, static_cast<std::int64_t>(user_offset), sched_,
-        shared_from_this(), buffers, token);
+        cont.h, ex, ec, bytes, fd_, static_cast<std::int64_t>(user_offset),
+        sched_, shared_from_this(), buffers, token);
+    op_guard->awaiting = &cont;
     sched_->work_started();
 
     // Closed-object contract outranks the zero-length no-op.

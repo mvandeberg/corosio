@@ -1,5 +1,6 @@
 //
 // Copyright (c) 2026 Steve Gerbino
+// Copyright (c) 2026 Michael Vandeberg
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -312,12 +313,13 @@ struct uring_teardown_test
         // longer earns that name. While the ends were stream_files the
         // flushed write ran against a broken pipe and the SIGPIPE had
         // to be absorbed -- deleting uring_stream_file::close_file()'s
-        // scoped_sigpipe_block kills the process. uring_descriptor
-        // transfers are two-phase, so after two run_one() calls what
-        // is in the ring is a poll_add, which flushes harmlessly;
-        // deleting uring_descriptor::close_descriptor()'s guard leaves
-        // this passing. The SIGPIPE coverage is gone, not relocated.
-        // What survives is the drain coverage named above.
+        // scoped_sigpipe_block kills the process. After two run_one()
+        // calls what is in the ring is a WRITEV parked in the kernel's
+        // internal poll, and the SIGPIPE cover for its flush comes from
+        // cancel_and_flush's own scoped_sigpipe_block, so deleting
+        // uring_descriptor::close_descriptor()'s guard leaves this
+        // passing. What this test pins is the drain coverage named
+        // above.
         int p[2];
         BOOST_TEST(::pipe2(p, O_NONBLOCK) == 0);
         fill_pipe(p[1]);

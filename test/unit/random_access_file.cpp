@@ -23,6 +23,7 @@
 #include <boost/capy/cond.hpp>
 #include <boost/capy/ex/io_env.hpp>
 #include <boost/capy/ex/run_async.hpp>
+#include <boost/capy/ex/strand.hpp>
 #include <boost/capy/task.hpp>
 
 #include "context.hpp"
@@ -794,8 +795,37 @@ struct random_access_file_test
     }
 #endif
 
+    void testResumesOnAwaitingExecutor()
+    {
+        // The pool-backed op is freed before the coroutine resumes, so
+        // only a continuation the awaitable owns can carry it back
+        // through the awaiting coroutine's executor.
+        temp_file tmp("raf_resume_strand_", std::string(64, 'z'));
+        io_context ioc(Backend);
+        capy::strand s(ioc.get_executor());
+        random_access_file f(ioc);
+        BOOST_TEST(!f.open(tmp.path, file_base::read_only));
+
+        bool on_strand = false;
+        std::error_code ec;
+        char buf[16];
+        auto t = [&]() -> capy::task<> {
+            auto [e, n] = co_await f.read_some_at(
+                0, capy::mutable_buffer(buf, sizeof(buf)));
+            ec = e;
+            (void)n;
+            on_strand = s.running_in_this_thread();
+        };
+        capy::run_async(s)(t());
+        ioc.run();
+
+        BOOST_TEST(!ec);
+        BOOST_TEST(on_strand);
+    }
+
     void run()
     {
+        testResumesOnAwaitingExecutor();
         testConstruction();
         testConstructionFromExecutor();
         testMoveConstruct();

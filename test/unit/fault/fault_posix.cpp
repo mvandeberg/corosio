@@ -1,5 +1,6 @@
 //
 // Copyright (c) 2026 Steve Gerbino
+// Copyright (c) 2026 Michael Vandeberg
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -18,10 +19,13 @@
 #endif
 
 #include <cerrno>
+#include <condition_variable>
 #include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <dlfcn.h>
+#include <mutex>
 #include <fcntl.h>
 #include <netdb.h>
 #include <poll.h>
@@ -133,6 +137,69 @@ bool
 cqe_fault_scope::fired() const noexcept
 {
     return tls_cqe.fired;
+}
+
+namespace {
+
+// Static, not owned by the hold: a held call can still be leaving it
+// when the hold is destroyed.
+struct preadv_hold_state
+{
+    std::mutex m;
+    std::condition_variable cv;
+    bool armed    = false;
+    bool held     = false;
+    bool released = false;
+} g_preadv_hold;
+
+} // namespace
+
+preadv_hold::preadv_hold()
+{
+    std::lock_guard<std::mutex> lock(g_preadv_hold.m);
+    if (g_preadv_hold.armed)
+    {
+        std::fputs("preadv_hold: a hold is already alive\n", stderr);
+        std::abort();
+    }
+    g_preadv_hold.armed    = true;
+    g_preadv_hold.held     = false;
+    g_preadv_hold.released = false;
+}
+
+preadv_hold::~preadv_hold()
+{
+    std::lock_guard<std::mutex> lock(g_preadv_hold.m);
+    g_preadv_hold.armed    = false;
+    g_preadv_hold.released = true;
+    g_preadv_hold.cv.notify_all();
+}
+
+void
+preadv_hold::wait_held()
+{
+    std::unique_lock<std::mutex> lock(g_preadv_hold.m);
+    g_preadv_hold.cv.wait(lock, [] { return g_preadv_hold.held; });
+}
+
+void
+preadv_hold::release()
+{
+    std::lock_guard<std::mutex> lock(g_preadv_hold.m);
+    g_preadv_hold.released = true;
+    g_preadv_hold.cv.notify_all();
+}
+
+// Called by the preadv shadow once the real call has returned.
+void
+hold_preadv_if_armed() noexcept
+{
+    std::unique_lock<std::mutex> lock(g_preadv_hold.m);
+    if (!g_preadv_hold.armed || g_preadv_hold.held)
+        return;
+    g_preadv_hold.held = true;
+    g_preadv_hold.cv.notify_all();
+    g_preadv_hold.cv.wait(lock, [] { return g_preadv_hold.released; });
 }
 
 } // namespace boost::corosio::test::fault
@@ -725,7 +792,11 @@ preadv(int fd, iovec const* v, int n, off_t o)
         iovec t[64];
         return real(fd, t, truncate_iov(v, n, c, t), o);
     }
-    return real(fd, v, n, o);
+    ssize_t const r = real(fd, v, n, o);
+    int const err   = errno;
+    hold_preadv_if_armed();
+    errno = err;
+    return r;
 }
 
 extern "C" ssize_t

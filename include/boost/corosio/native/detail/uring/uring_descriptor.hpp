@@ -42,12 +42,11 @@
    pass a real offset; a pipe, tty or character device has none.
 
    O_NONBLOCK is armed lazily, on the first read_some/write_some and
-   never from assign() or wait(). Here that is a cancellability
-   requirement, not only the public contract: a transfer the kernel
-   would have to block on is punted to an io-wq worker, and a request
-   running on a worker cannot be cancelled. With the flag set the
-   kernel reports readiness instead, so every operation stays
-   cancellable on every kernel version.
+   never from assign() or wait(). The lazy O_NONBLOCK keeps transfers
+   off io-wq workers on kernels that punt blocking reads there; on
+   current kernels READV/WRITEV on such descriptors park in the
+   kernel's poll and EAGAIN reaches userspace mainly when the SQ is
+   full.
 
    That reporting is what the transfer ops' two-phase shape handles.
    An O_NONBLOCK descriptor the kernel cannot retry internally
@@ -59,14 +58,16 @@
    reaches the kernel.
 
    The gap between a CQE and its dispatch is the whole difficulty of
-   that shape, and two epoch counters close it. Nothing of a transfer
-   waiting in that gap is in the ring, so neither cancel-by-fd nor a
-   one-shot stop_callback can reach it; cancel() bumps cancel_epoch_
-   and every descriptor change bumps desc_epoch_, and an op whose
-   snapshot no longer matches completes instead of re-arming. The
-   descriptor epoch is also what makes the staleness check exact
-   rather than heuristic: a closed fd number the next assign() gets
-   back would satisfy a bare fd comparison.
+   that shape, and one epoch counter closes it. Nothing of a transfer
+   waiting in that gap is in the ring, so cancel-by-fd cannot reach
+   it. cancel() and every descriptor change bump epoch_ before they
+   take ring_mutex_, and do_prep, which runs under ring_mutex_,
+   compares the op's snapshot against it: an op that no longer
+   matches preps a NOP instead of a transfer and completes canceled.
+   Either the prep sees the bump, or the cancel's SQE queues behind
+   the transfer's and finds it. The epoch is also what makes the
+   staleness check exact rather than heuristic: a closed fd number
+   the next assign() gets back would satisfy a bare fd comparison.
 
    There is no adopt-time registration. assign() validates and takes
    the descriptor; a kernel that refuses it says so at the first
@@ -91,6 +92,11 @@ class uring_descriptor;
 template<class Op>
 bool uring_descriptor_continue(Op& op) noexcept;
 
+/// True when @a op no longer belongs to its owner's current intent.
+/// Called from do_prep, under ring_mutex_.
+template<class Op>
+bool uring_descriptor_abandoned(Op const& op) noexcept;
+
 /** Scatter read via `IORING_OP_READV` at the descriptor's own offset.
 
     @see uring_descriptor_continue for the `polling` phase.
@@ -100,9 +106,10 @@ struct uring_descriptor_read_op final : uring_file_read_op_base
     uring_descriptor* desc = nullptr;
     /// True while the submitted SQE is the readiness poll, not the read.
     bool polling = false;
-    /// Owner epochs snapshotted at submission; see uring_descriptor_continue.
-    std::uint32_t cancel_epoch = 0;
-    std::uint32_t desc_epoch   = 0;
+    /// Owner epoch snapshotted by arm_slot; see uring_descriptor_continue.
+    std::uint32_t epoch = 0;
+    /// Set by do_prep when the op was abandoned before its SQE was built.
+    bool abandoned = false;
 
     uring_descriptor_read_op() noexcept : uring_file_read_op_base(&do_handler)
     {
@@ -112,6 +119,15 @@ struct uring_descriptor_read_op final : uring_file_read_op_base
     static void do_prep(uring_op* base, ::io_uring_sqe* sqe) noexcept
     {
         auto* self = static_cast<uring_descriptor_read_op*>(base);
+        // Decided here because every cancel path records its intent
+        // before taking ring_mutex_, which this runs under: either the
+        // intent is visible now, or the cancel SQE queues behind ours.
+        if (uring_descriptor_abandoned(*self))
+        {
+            self->abandoned = true;
+            ::io_uring_prep_nop(sqe);
+            return;
+        }
         if (self->polling)
             ::io_uring_prep_poll_add(sqe, self->fd, POLLIN);
         else
@@ -131,9 +147,10 @@ struct uring_descriptor_write_op final : uring_file_write_op_base
     uring_descriptor* desc = nullptr;
     /// True while the submitted SQE is the readiness poll, not the write.
     bool polling = false;
-    /// Owner epochs snapshotted at submission; see uring_descriptor_continue.
-    std::uint32_t cancel_epoch = 0;
-    std::uint32_t desc_epoch   = 0;
+    /// Owner epoch snapshotted by arm_slot; see uring_descriptor_continue.
+    std::uint32_t epoch = 0;
+    /// Set by do_prep when the op was abandoned before its SQE was built.
+    bool abandoned = false;
 
     uring_descriptor_write_op() noexcept : uring_file_write_op_base(&do_handler)
     {
@@ -143,6 +160,15 @@ struct uring_descriptor_write_op final : uring_file_write_op_base
     static void do_prep(uring_op* base, ::io_uring_sqe* sqe) noexcept
     {
         auto* self = static_cast<uring_descriptor_write_op*>(base);
+        // Decided here because every cancel path records its intent
+        // before taking ring_mutex_, which this runs under: either the
+        // intent is visible now, or the cancel SQE queues behind ours.
+        if (uring_descriptor_abandoned(*self))
+        {
+            self->abandoned = true;
+            ::io_uring_prep_nop(sqe);
+            return;
+        }
         if (self->polling)
             ::io_uring_prep_poll_add(sqe, self->fd, POLLOUT);
         else
@@ -173,14 +199,12 @@ class BOOST_COROSIO_DECL uring_descriptor final
 {
     uring_scheduler* sched_ = nullptr;
     int fd_                 = -1;
-    bool nonblocking_       = false;
+    std::atomic<bool> nonblocking_{false};
 
-    // Bumped by cancel() and by every descriptor change respectively.
-    // A transfer op parked between its EAGAIN CQE and its dispatch is
-    // invisible to the ring, so these are the only thing that can stop
-    // it re-arming against an intent it no longer belongs to.
-    std::atomic<std::uint32_t> cancel_epoch_{0};
-    std::atomic<std::uint32_t> desc_epoch_{0};
+    // Bumped by cancel() and by every descriptor change. A transfer op
+    // between its EAGAIN CQE and its dispatch is invisible to the ring;
+    // its snapshot of this is what stops it re-arming.
+    std::atomic<std::uint32_t> epoch_{0};
 
     uring_descriptor_read_op rd_;
     uring_descriptor_write_op wr_;
@@ -340,15 +364,16 @@ public:
 
     native_handle_type release_descriptor() noexcept override
     {
-        // Flush the cancel while the fd is still open so the kernel
-        // resolves it before the caller can close and recycle the
-        // number. Do NOT close -- the caller takes ownership.
+        // Bump before the flush, as close_descriptor does. Flush the
+        // cancel while the fd is still open so the kernel resolves it
+        // before the caller can close and recycle the number. Do NOT
+        // close -- the caller takes ownership.
+        epoch_.fetch_add(1, std::memory_order_release);
         if (fd_ >= 0)
             sched_->cancel_and_flush(fd_);
         native_handle_type released = fd_;
         fd_                         = -1;
-        nonblocking_                = false;
-        desc_epoch_.fetch_add(1, std::memory_order_release);
+        nonblocking_.store(false, std::memory_order_relaxed);
         return released;
     }
 
@@ -357,21 +382,15 @@ public:
         // Bump before the SQE: cancel-by-fd reaches only what the ring
         // currently holds, and an op waiting for its handler to run
         // holds nothing there. The epoch is what that op consults.
-        cancel_epoch_.fetch_add(1, std::memory_order_release);
+        epoch_.fetch_add(1, std::memory_order_release);
         if (fd_ >= 0)
             sched_->submit_cancel_by_fd(fd_);
     }
 
-    /// Epoch bumped by every @ref cancel.
-    std::uint32_t cancel_epoch() const noexcept
+    /// Epoch bumped by every @ref cancel and every descriptor change.
+    std::uint32_t epoch() const noexcept
     {
-        return cancel_epoch_.load(std::memory_order_acquire);
-    }
-
-    /// Epoch bumped by every change of the held descriptor.
-    std::uint32_t desc_epoch() const noexcept
-    {
-        return desc_epoch_.load(std::memory_order_acquire);
+        return epoch_.load(std::memory_order_acquire);
     }
 
     // -- Service-facing (non-virtual) --
@@ -386,9 +405,9 @@ public:
     */
     void set_descriptor(int fd) noexcept
     {
+        epoch_.fetch_add(1, std::memory_order_release);
         fd_          = fd;
-        nonblocking_ = false;
-        desc_epoch_.fetch_add(1, std::memory_order_release);
+        nonblocking_.store(false, std::memory_order_relaxed);
     }
 
     /// Cancel pending operations and close the descriptor. No-op when
@@ -397,14 +416,16 @@ public:
     {
         if (fd_ < 0)
             return;
+        // Bump before the flush: an op prepping concurrently must see
+        // the change, or its SQE could land on a recycled fd number.
+        epoch_.fetch_add(1, std::memory_order_release);
         // Both kernel entries below can run a queued pipe write as task
         // work; with the reader already gone that raises SIGPIPE.
         scoped_sigpipe_block no_sigpipe;
         sched_->cancel_and_flush(fd_);
         ::close(fd_);
         fd_          = -1;
-        nonblocking_ = false;
-        desc_epoch_.fetch_add(1, std::memory_order_release);
+        nonblocking_.store(false, std::memory_order_relaxed);
     }
 
 private:
@@ -417,26 +438,28 @@ private:
     */
     int arm_nonblocking() noexcept
     {
-        if (nonblocking_)
+        // Relaxed: ensure_nonblocking is idempotent, so a duplicate
+        // fcntl from a racing first read and write is harmless.
+        if (nonblocking_.load(std::memory_order_relaxed))
             return 0;
         if (auto ec = ensure_nonblocking(fd_))
             return ec.value();
-        nonblocking_ = true;
+        nonblocking_.store(true, std::memory_order_relaxed);
         return 0;
     }
 
     /** Bind a transfer slot to this descriptor for a fresh submission.
 
-        The epoch snapshot taken here is what a later re-arm compares
+        The epoch snapshot taken here is what every later prep compares
         against; see uring_descriptor_continue.
     */
     template<class Op>
     void arm_slot(Op& op) noexcept
     {
-        op.desc         = this;
-        op.polling      = false;
-        op.cancel_epoch = cancel_epoch_.load(std::memory_order_acquire);
-        op.desc_epoch   = desc_epoch_.load(std::memory_order_acquire);
+        op.desc      = this;
+        op.polling   = false;
+        op.abandoned = false;
+        op.epoch     = epoch_.load(std::memory_order_acquire);
     }
 
     /// Queue an already-counted op for the next dispatch cycle.
@@ -451,66 +474,58 @@ private:
 
 template<class Op>
 bool
+uring_descriptor_abandoned(Op const& op) noexcept
+{
+    return op.cancelled.load(std::memory_order_acquire) ||
+        op.desc->epoch() != op.epoch;
+}
+
+template<class Op>
+bool
 uring_descriptor_continue(Op& op) noexcept
 {
-    // A poll CQE carries its revents in `res` -- a small positive
-    // integer the completion decode would otherwise read as a byte
-    // count and as success. Every path that abandons the op while that
-    // value is sitting there has to overwrite it with a terminal one.
-    bool const mid_poll = op.polling && op.res >= 0;
-
     if (!op.desc)
     {
-        if (mid_poll)
+        if (op.polling && op.res >= 0)
             op.res = -EBADF;
         return false;
     }
 
-    // Two epochs rather than one, because the two reasons to abandon an
-    // op name different codes to the caller.
-    if (op.cancelled.load(std::memory_order_acquire) ||
-        op.desc->cancel_epoch() != op.cancel_epoch)
+    // A NOP completed: the op was abandoned at prep.
+    if (op.abandoned)
     {
-        if (mid_poll)
+        op.res = -ECANCELED;
+        return false;
+    }
+
+    // A failed poll, a transfer error or a byte count is the operation's
+    // answer, and bytes beat a cancel that landed after them.
+    bool const rearm = op.polling
+        ? op.res >= 0
+        : (op.res == -EAGAIN || op.res == -EWOULDBLOCK);
+    if (!rearm)
+    {
+        // A poll the full SQ never took comes back as -EAGAIN; one
+        // abandoned meanwhile is owed canceled, as above.
+        if (op.polling && op.res == -EAGAIN && uring_descriptor_abandoned(op))
             op.res = -ECANCELED;
         return false;
     }
 
-    if (op.desc->desc_epoch() != op.desc_epoch)
+    // Abandoned since the CQE arrived: the caller is owed canceled,
+    // never the poll's revents or the transfer's EAGAIN.
+    if (uring_descriptor_abandoned(op))
     {
-        if (mid_poll)
-            op.res = -EBADF;
+        op.res = -ECANCELED;
         return false;
     }
-
-    if (op.polling)
-    {
-        // A poll that failed or was cancelled is the operation's answer.
-        if (op.res < 0)
-            return false;
-        op.polling = false;
-    }
-    else if (op.res == -EAGAIN || op.res == -EWOULDBLOCK)
-    {
-        op.polling = true;
-    }
-    else
-    {
-        return false;
-    }
+    op.polling = !op.polling;
 
     // do_one spends a work_finished() on every op it dispatches, so an
-    // op going round again has to be counted again.
+    // op going round again has to be counted again. Nothing may touch
+    // op after the submit: another thread can complete and free it.
     op.sched_->work_started();
     uring_submit_op(*op.sched_, &op);
-
-    // stop_cb is one-shot and has already fired for the SQE that just
-    // completed, and cancel-by-fd found nothing while this op was out
-    // of the ring: a cancel racing the submission above would reach no
-    // kernel request at all, so re-check and drive it here.
-    if (op.cancelled.load(std::memory_order_acquire) ||
-        op.desc->cancel_epoch() != op.cancel_epoch)
-        op.sched_->submit_cancel_by_user_data(&op);
     return true;
 }
 

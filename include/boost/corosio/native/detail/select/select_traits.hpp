@@ -46,7 +46,10 @@ struct select_traits
     using scheduler_type  = select_scheduler;
     using desc_state_type = reactor_descriptor_state;
 
-    static constexpr bool needs_write_notification = true;
+    static constexpr bool needs_park_notification = true;
+
+    /// select() cannot watch a descriptor at or above this.
+    static constexpr int max_descriptor = FD_SETSIZE;
 
     // No extra per-socket state or lifecycle hooks needed for select.
     struct stream_socket_hook

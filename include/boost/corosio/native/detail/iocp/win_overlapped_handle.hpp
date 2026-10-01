@@ -25,6 +25,7 @@
 #include <boost/corosio/native/detail/iocp/win_scheduler.hpp>
 #include <boost/corosio/native/detail/iocp/win_validate_handle.hpp>
 #include <boost/capy/buffers.hpp>
+#include <boost/capy/continuation.hpp>
 #include <boost/capy/ex/executor_ref.hpp>
 
 #include <algorithm>
@@ -447,19 +448,7 @@ public:
 
     std::coroutine_handle<> read_some_at(
         std::uint64_t offset,
-        std::coroutine_handle<> h,
-        capy::executor_ref ex,
-        buffer_param param,
-        std::stop_token token,
-        std::error_code* ec,
-        std::size_t* bytes_out)
-    {
-        return start(true, offset, h, ex, param, std::move(token), ec, bytes_out);
-    }
-
-    std::coroutine_handle<> write_some_at(
-        std::uint64_t offset,
-        std::coroutine_handle<> h,
+        capy::continuation& cont,
         capy::executor_ref ex,
         buffer_param param,
         std::stop_token token,
@@ -467,7 +456,20 @@ public:
         std::size_t* bytes_out)
     {
         return start(
-            false, offset, h, ex, param, std::move(token), ec, bytes_out);
+            true, offset, cont, ex, param, std::move(token), ec, bytes_out);
+    }
+
+    std::coroutine_handle<> write_some_at(
+        std::uint64_t offset,
+        capy::continuation& cont,
+        capy::executor_ref ex,
+        buffer_param param,
+        std::stop_token token,
+        std::error_code* ec,
+        std::size_t* bytes_out)
+    {
+        return start(
+            false, offset, cont, ex, param, std::move(token), ec, bytes_out);
     }
 
     void cancel() noexcept
@@ -550,7 +552,7 @@ protected:
     std::coroutine_handle<> start(
         bool is_read,
         std::uint64_t offset,
-        std::coroutine_handle<> h,
+        capy::continuation& cont,
         capy::executor_ref ex,
         buffer_param param,
         std::stop_token token,
@@ -562,7 +564,7 @@ protected:
         op->reset();
         op->owner     = this;
         op->is_read   = is_read;
-        op->h         = h;
+        op->h         = cont.h;
         op->ex        = ex;
         op->ec_out    = ec;
         op->bytes_out = bytes_out;

@@ -631,31 +631,29 @@ struct uring_wait_op : uring_op
         if (self->sched_)
             self->sched_->reset_inline_budget();
 
-        // A POLL_ADD completion carries the error band in its revents
-        // (res), not as a negative res, so name the reason the reactor
-        // way — SO_ERROR, or EIO when the kernel has none — instead of
-        // completing wait(error) with an empty, benign-looking code.
-        // OOB (POLLPRI) is a readiness signal, not an error.
+        // A readiness wait (POLLIN/POLLOUT) reports readiness: POLLERR
+        // and POLLHUP mean the next read or write will not block, and
+        // that operation names the condition. Reading SO_ERROR here
+        // would clear it, turning a reset into a clean EOF for the read
+        // that follows. asio reports the same on every backend. Only a
+        // descriptor closed under the poll (POLLNVAL) fails the wait.
         //
-        // POLLHUP is a fault only for wait(error). A readiness wait --
-        // the POLLIN/POLLOUT flag sets -- treats it as ready: a pipe or
-        // fully shut-down socket whose peer hung up is readable-at-EOF,
-        // and the read or write that follows names the condition. The
-        // reactors' poll() probe already reports it that way, so
-        // without this io_uring alone answers the wait-then-read idiom
-        // with a spurious EIO.
+        // wait(error) is different: its completion has to say why, so
+        // it names SO_ERROR, or EIO when the kernel has none. OOB
+        // (POLLPRI) is a readiness signal, not an error.
         bool const readiness_wait =
             (self->poll_flags & (POLLIN | POLLOUT)) != 0;
-        int const fault_bits = readiness_wait
-            ? (POLLERR | POLLNVAL)
-            : (POLLERR | POLLHUP | POLLNVAL);
 
         std::error_code ec{};
         if (self->res < 0)
         {
             ec = make_err(-self->res);
         }
-        else if (self->res & fault_bits)
+        else if (self->res & POLLNVAL)
+        {
+            ec = make_err(EBADF);
+        }
+        else if (!readiness_wait && (self->res & (POLLERR | POLLHUP)))
         {
             int so_err    = 0;
             socklen_t len = sizeof(so_err);

@@ -16,6 +16,10 @@ namespace boost::corosio {
 
     Passed to socket::wait() and acceptor::wait() to select which
     readiness condition to await before returning.
+
+    A hangup or a pending error satisfies `read` and `write`. The wait
+    completes successfully and leaves the error for the next read or
+    write to report.
 */
 enum class wait_type
 {

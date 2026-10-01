@@ -1,5 +1,6 @@
 //
 // Copyright (c) 2026 Steve Gerbino
+// Copyright (c) 2026 Michael Vandeberg
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -189,7 +190,7 @@ reactor_basic_socket<Derived, ImplBase, Service, DescState, Endpoint>::
         Op& op,
         reactor_op_base*& desc_slot,
         bool& ready_flag,
-        bool is_write_direction) noexcept
+        [[maybe_unused]] bool is_write_direction) noexcept
 {
     svc_.work_started();
 
@@ -213,16 +214,12 @@ reactor_basic_socket<Derived, ImplBase, Service, DescState, Endpoint>::
     {
         desc_slot = &op;
 
-        // Select must rebuild its fd_sets when a write-direction op
-        // is parked, so select() watches for writability. Compiled
-        // away to nothing for epoll and kqueue.
-        if constexpr (requires { Service::needs_write_notification; })
+        // Select rebuilds its fd_sets from parked ops only, so parking
+        // must wake it. Compiled away for epoll and kqueue.
+        if constexpr (requires { Service::needs_park_notification; })
         {
-            if constexpr (Service::needs_write_notification)
-            {
-                if (is_write_direction)
-                    svc_.scheduler().notify_reactor();
-            }
+            if constexpr (Service::needs_park_notification)
+                svc_.scheduler().notify_reactor();
         }
     }
 }

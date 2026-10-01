@@ -63,10 +63,9 @@ struct validate_fd_test
         // exactly why the check is a reject-list and not an accept-list.
         //
         // /dev/null stands in for a character device here because it is
-        // portable, but note that passing this check is not a promise
-        // that assign() will succeed: /dev/null is not pollable, so
-        // epoll refuses it with EPERM and kqueue with EINVAL. The
-        // validator's job is the file-type policy, not reachability.
+        // portable. epoll cannot watch it (EPERM), and the reactors then
+        // adopt it unwatched; the validator's job is the file-type
+        // policy, not reachability.
         int fd = ::open("/dev/null", O_RDWR | O_CLOEXEC);
         BOOST_TEST(fd >= 0);
         BOOST_TEST(!detail::validate_descriptor_fd(fd));

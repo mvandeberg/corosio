@@ -22,6 +22,7 @@
 #include <boost/corosio/detail/thread_pool.hpp>
 #include <boost/corosio/detail/scheduler.hpp>
 #include <boost/corosio/detail/buffer_param.hpp>
+#include <boost/corosio/detail/dispatch_coro.hpp>
 #include <boost/corosio/native/detail/coro_op.hpp>
 #include <boost/corosio/native/detail/coro_op_complete.hpp>
 #include <boost/corosio/native/detail/make_err.hpp>
@@ -92,12 +93,19 @@ public:
         iovec iovecs[max_buffers];
         int iovec_count      = 0;
         std::uint64_t offset = 0;
+        // Snapshotted at submission: assign() may replace fd_ while the
+        // worker runs.
+        int fd = -1;
 
         int errn                      = 0;
         std::size_t bytes_transferred = 0;
 
         // Raw back-pointer for the typed work; `impl_ptr` is the keepalive.
         posix_random_access_file* file_ = nullptr;
+
+        // The awaitable's, not the embedded `cont`: this op is freed
+        // before the coroutine resumes.
+        capy::continuation* awaiting = nullptr;
 
         void operator()() override;
         void destroy() override;
@@ -113,7 +121,7 @@ public:
 
     std::coroutine_handle<> read_some_at(
         std::uint64_t offset,
-        std::coroutine_handle<>,
+        capy::continuation&,
         capy::executor_ref,
         buffer_param,
         std::stop_token,
@@ -122,7 +130,7 @@ public:
 
     std::coroutine_handle<> write_some_at(
         std::uint64_t offset,
-        std::coroutine_handle<>,
+        capy::continuation&,
         capy::executor_ref,
         buffer_param,
         std::stop_token,
@@ -280,10 +288,9 @@ posix_random_access_file::assign(native_handle_type handle) noexcept
     if (auto ec = validate_file_fd(handle))
         return ec;
 
-    // cancel() first: an in-flight read_at/write_at's pool-thread
-    // completion reads fd_ at execution time, not at post time, so
-    // without this a pending op silently completes against the newly
-    // adopted file instead of being cancelled. The service's
+    // cancel() first, so a queued read_at/write_at completes canceled
+    // rather than running against the newly adopted file; a worker
+    // already past its cancelled check uses its op's fd snapshot. The service's
     // close(handle) / destroy() normally pair cancel()+close_file();
     // assign() bypasses that path and must do the same pairing itself.
     cancel();
@@ -316,10 +323,11 @@ posix_random_access_file::raf_op::operator()()
 
     impl_ptr.reset();
 
-    auto coro = h;
-    ex.on_work_finished();
+    auto* c       = awaiting;
+    auto local_ex = ex;
+    local_ex.on_work_finished();
     delete this;
-    coro.resume();
+    dispatch_coro(local_ex, *c).resume();
 }
 
 // -- raf_op shutdown cleanup --

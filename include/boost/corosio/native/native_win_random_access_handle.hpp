@@ -65,6 +65,7 @@ class native_win_random_access_handle : public win_random_access_handle
         native_win_random_access_handle& self_;
         std::uint64_t offset_;
         MutableBufferSequence buffers_;
+        mutable capy::continuation cont_;
 
         native_read_at_awaitable(
             native_win_random_access_handle& self,
@@ -79,8 +80,9 @@ class native_win_random_access_handle : public win_random_access_handle
         std::coroutine_handle<>
         dispatch(std::coroutine_handle<> h, capy::executor_ref ex) const
         {
+            cont_.h = h;
             return self_.get_impl().read_some_at(
-                offset_, h, ex, buffers_, this->token_, &this->ec_,
+                offset_, cont_, ex, buffers_, this->token_, &this->ec_,
                 &this->bytes_);
         }
     };
@@ -92,6 +94,7 @@ class native_win_random_access_handle : public win_random_access_handle
         native_win_random_access_handle& self_;
         std::uint64_t offset_;
         ConstBufferSequence buffers_;
+        mutable capy::continuation cont_;
 
         native_write_at_awaitable(
             native_win_random_access_handle& self,
@@ -106,8 +109,9 @@ class native_win_random_access_handle : public win_random_access_handle
         std::coroutine_handle<>
         dispatch(std::coroutine_handle<> h, capy::executor_ref ex) const
         {
+            cont_.h = h;
             return self_.get_impl().write_some_at(
-                offset_, h, ex, buffers_, this->token_, &this->ec_,
+                offset_, cont_, ex, buffers_, this->token_, &this->ec_,
                 &this->bytes_);
         }
     };

@@ -45,7 +45,7 @@ struct kqueue_traits
     using scheduler_type  = kqueue_scheduler;
     using desc_state_type = reactor_descriptor_state;
 
-    static constexpr bool needs_write_notification = false;
+    static constexpr bool needs_park_notification = false;
 
     // No per-socket state or lifecycle hooks: the stream socket hook is a
     // plain setsockopt passthrough, like epoll/select. SO_LINGER in particular

@@ -13,6 +13,7 @@
 
 #if BOOST_COROSIO_POSIX
 
+#include <boost/corosio/delay.hpp>
 #include <boost/corosio/native/native_io_context.hpp>
 
 #include <boost/capy/buffers.hpp>
@@ -120,9 +121,6 @@ struct native_posix_descriptor_test
         BOOST_TEST_EQ(::pipe(fds), 0);
         BOOST_TEST(!d.assign(fds[0]));
 
-        char const msg[] = "x";
-        BOOST_TEST_EQ(::write(fds[1], msg, 1), 1);
-
         std::error_code ec;
         bool done   = false;
         auto waiter = [&]() -> capy::task<> {
@@ -130,7 +128,15 @@ struct native_posix_descriptor_test
             ec         = wec;
             done       = true;
         };
-        capy::run_async(ioc.get_executor())(waiter());
+        auto writer = [&]() -> capy::task<> {
+            auto [e] = co_await delay(std::chrono::milliseconds(10));
+            (void)e;
+            BOOST_TEST_EQ(done, false); // the wait parked
+            BOOST_TEST_EQ(::write(fds[1], "x", 1), 1);
+        };
+        auto ex = ioc.get_executor();
+        capy::run_async(ex)(waiter());
+        capy::run_async(ex)(writer());
         ioc.run();
 
         BOOST_TEST(done);
@@ -139,12 +145,44 @@ struct native_posix_descriptor_test
         ::close(fds[1]);
     }
 
+    // The shadowed write_some() end to end; the static_assert above
+    // only pins its type.
+    void testWriteSome()
+    {
+        native_io_context<Backend> ioc;
+        native_posix_descriptor<Backend> d(ioc);
+
+        int fds[2];
+        BOOST_TEST_EQ(::pipe(fds), 0);
+        BOOST_TEST(!d.assign(fds[1]));
+
+        std::size_t n = 0;
+        std::error_code ec;
+        auto writer = [&]() -> capy::task<> {
+            auto [wec, wn] =
+                co_await d.write_some(capy::const_buffer("abc", 3));
+            ec = wec;
+            n  = wn;
+        };
+        capy::run_async(ioc.get_executor())(writer());
+        ioc.run();
+
+        BOOST_TEST_EQ(ec, std::error_code{});
+        BOOST_TEST_EQ(n, 3u);
+        char buf[8] = {};
+        BOOST_TEST_EQ(::read(fds[0], buf, sizeof(buf)), 3);
+        BOOST_TEST_EQ(std::string(buf, 3), std::string("abc"));
+
+        ::close(fds[0]);
+    }
+
     void run()
     {
         testConstruct();
         testReadWriteRoundTrip();
         testPolymorphicSlice();
         testWait();
+        testWriteSome();
     }
 };
 

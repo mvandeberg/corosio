@@ -76,6 +76,10 @@ struct reactor_descriptor_state : scheduler_op
     /// Event mask set during registration (no mutex needed).
     std::uint32_t registered_events = 0;
 
+    /// The reactor refused to watch this fd (e.g. /dev/null on epoll);
+    /// its I/O never blocks, and an op that would park must not.
+    bool unpollable = false;
+
     /// File descriptor this state tracks.
     int fd = -1;
 
@@ -151,32 +155,33 @@ reactor_descriptor_state::invoke_deferred_io()
         int err = 0;
         if (ev & reactor_event_error)
         {
+            // Force the read/write dispatch below to run: an
+            // edge-triggered EPOLLERR can arrive alone, and without this
+            // a parked op never calls perform_io() and, the edge being
+            // one-shot, never gets another chance -- a permanent hang.
+            // Every parked op then re-runs its own syscall or probe.
+            //
+            // Assumes at least one parked op's own syscall makes
+            // non-EAGAIN progress; if every op re-parks with EAGAIN this
+            // sticky error is never redelivered and they hang. No such
+            // case is known -- a future descriptor type that hits one
+            // should be handled here.
+            ev |= reactor_event_read | reactor_event_write;
+
+            // SO_ERROR clears on read, so take it only for a parked op
+            // that reports it. A readiness wait reports readiness and
+            // leaves the error for the next read or write to name, as
+            // asio does; reading it here with nothing to report it to
+            // would turn a reset into a clean EOF.
+            bool const reports_error =
+                read_op || write_op || connect_op || wait_error_op;
             socklen_t len = sizeof(err);
-            if (::getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &len) < 0)
+            if (reports_error &&
+                ::getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &len) < 0)
             {
-                if (errno == ENOTSOCK)
-                {
-                    // Non-socket fd (pipe, chardev, ...): no SO_ERROR, so
-                    // let the op's own syscall name the real failure.
-                    // Also force the read/write dispatch below to run: an
-                    // edge-triggered EPOLLERR can arrive alone, and
-                    // without this a parked op never calls perform_io()
-                    // and, the edge being one-shot, never gets another
-                    // chance -- a permanent hang.
-                    //
-                    // Assumes at least one parked op's own syscall makes
-                    // non-EAGAIN progress; if every op re-parks with
-                    // EAGAIN this sticky error is never redelivered and
-                    // they hang. No such case is known for pipes -- a
-                    // future non-socket type that hits one should be
-                    // handled here.
-                    err = 0;
-                    ev |= reactor_event_read | reactor_event_write;
-                }
-                else
-                {
-                    err = errno;
-                }
+                // Non-socket fd (pipe, chardev, ...): no SO_ERROR, so
+                // let the op's own syscall name the real failure.
+                err = (errno == ENOTSOCK) ? 0 : errno;
             }
             // select raises its exceptional set for out-of-band/urgent
             // data as well as for genuine faults; on a healthy socket the
@@ -219,10 +224,7 @@ reactor_descriptor_state::invoke_deferred_io()
             if (wait_read_op)
             {
                 auto* wo = wait_read_op;
-                if (err)
-                    wo->complete(err, 0);
-                else
-                    wo->perform_io();
+                wo->perform_io();
 
                 if (wo->errn == EAGAIN || wo->errn == EWOULDBLOCK)
                 {
@@ -285,10 +287,7 @@ reactor_descriptor_state::invoke_deferred_io()
             if (wait_write_op)
             {
                 auto* wo = wait_write_op;
-                if (err)
-                    wo->complete(err, 0);
-                else
-                    wo->perform_io();
+                wo->perform_io();
 
                 if (wo->errn == EAGAIN || wo->errn == EWOULDBLOCK)
                 {
@@ -330,16 +329,6 @@ reactor_descriptor_state::invoke_deferred_io()
             {
                 connect_op->complete(err, 0);
                 local_ops.push(std::exchange(connect_op, nullptr));
-            }
-            if (wait_read_op)
-            {
-                wait_read_op->complete(err, 0);
-                local_ops.push(std::exchange(wait_read_op, nullptr));
-            }
-            if (wait_write_op)
-            {
-                wait_write_op->complete(err, 0);
-                local_ops.push(std::exchange(wait_write_op, nullptr));
             }
         }
     }

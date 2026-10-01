@@ -983,6 +983,56 @@ struct wait_test
     }
 #endif
 
+#if BOOST_COROSIO_POSIX
+    // A readiness wait reports readiness and leaves the socket's pending
+    // error for the I/O that follows, as asio does on every backend.
+    // SO_ERROR clears on read, so a wait that took it would turn the
+    // reset into a clean EOF for the read.
+    void waitReadOnResetThenReadNamesReset(bool parked)
+    {
+        io_context ioc(Backend);
+        auto [s1, s2] = test::make_socket_pair(ioc); // RST on close
+
+        std::error_code wec, rec;
+        bool done   = false;
+        auto reader = [&]() -> capy::task<> {
+            if (!parked)
+            {
+                s2.close();
+                auto [e] = co_await delay(std::chrono::milliseconds(10));
+                (void)e;
+            }
+            auto [e] = co_await s1.wait(wait_type::read);
+            wec      = e;
+            char buf[8];
+            auto [re, n] =
+                co_await s1.read_some(capy::mutable_buffer(buf, sizeof(buf)));
+            rec = re;
+            (void)n;
+            done = true;
+        };
+        auto resetter = [&]() -> capy::task<> {
+            auto [e] = co_await delay(std::chrono::milliseconds(10));
+            (void)e;
+            if (parked)
+                s2.close();
+        };
+        capy::run_async(ioc.get_executor())(reader());
+        capy::run_async(ioc.get_executor())(resetter());
+        ioc.run();
+
+        BOOST_TEST(done);
+        BOOST_TEST(!wec);
+        BOOST_TEST(rec == std::errc::connection_reset);
+    }
+
+    void testWaitReadOnResetThenReadNamesReset()
+    {
+        waitReadOnResetThenReadNamesReset(false);
+        waitReadOnResetThenReadNamesReset(true);
+    }
+#endif
+
     void run()
     {
         testWaitReadAndNoConsume();
@@ -994,6 +1044,7 @@ struct wait_test
         testAcceptorErrorWaitCancel();
 #if BOOST_COROSIO_POSIX
         testOobDoesNotFaultRead();
+        testWaitReadOnResetThenReadNamesReset();
 #endif
         testWaitOnLocalStream();
         testWaitOnUdp();

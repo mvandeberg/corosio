@@ -18,6 +18,7 @@
 #include <boost/corosio/detail/op_base.hpp>
 #include <boost/corosio/file_base.hpp>
 #include <boost/corosio/io/io_object.hpp>
+#include <boost/capy/continuation.hpp>
 #include <boost/capy/io_result.hpp>
 #include <boost/capy/ex/executor_ref.hpp>
 #include <boost/capy/ex/execution_context.hpp>
@@ -66,7 +67,8 @@ public:
         /** Initiate a read at the given offset.
 
             @param offset Byte offset into the file.
-            @param h Coroutine handle to resume on completion.
+            @param cont The awaiting coroutine's continuation. It must
+                stay valid until `cont.h` is resumed through @p ex.
             @param ex Executor for dispatching the completion.
             @param buf The buffer to read into.
             @param token Stop token for cancellation.
@@ -76,7 +78,7 @@ public:
         */
         virtual std::coroutine_handle<> read_some_at(
             std::uint64_t offset,
-            std::coroutine_handle<> h,
+            capy::continuation& cont,
             capy::executor_ref ex,
             buffer_param buf,
             std::stop_token token,
@@ -86,7 +88,8 @@ public:
         /** Initiate a write at the given offset.
 
             @param offset Byte offset into the file.
-            @param h Coroutine handle to resume on completion.
+            @param cont The awaiting coroutine's continuation. It must
+                stay valid until `cont.h` is resumed through @p ex.
             @param ex Executor for dispatching the completion.
             @param buf The buffer to write from.
             @param token Stop token for cancellation.
@@ -96,7 +99,7 @@ public:
         */
         virtual std::coroutine_handle<> write_some_at(
             std::uint64_t offset,
-            std::coroutine_handle<> h,
+            capy::continuation& cont,
             capy::executor_ref ex,
             buffer_param buf,
             std::stop_token token,
@@ -158,6 +161,7 @@ public:
         random_access_file& f_;
         std::uint64_t offset_;
         MutableBufferSequence buffers_;
+        mutable capy::continuation cont_;
 
         read_some_at_awaitable(
             random_access_file& f,
@@ -175,8 +179,12 @@ public:
         std::coroutine_handle<>
         dispatch(std::coroutine_handle<> h, capy::executor_ref ex) const
         {
+            // The continuation lives in the awaiting frame, which stays
+            // put until resumption -- unlike the per-call op, which is
+            // freed before the coroutine runs.
+            cont_.h = h;
             return f_.get().read_some_at(
-                offset_, h, ex, buffers_, this->token_, &this->ec_,
+                offset_, cont_, ex, buffers_, this->token_, &this->ec_,
                 &this->bytes_);
         }
     };
@@ -194,6 +202,7 @@ public:
         random_access_file& f_;
         std::uint64_t offset_;
         ConstBufferSequence buffers_;
+        mutable capy::continuation cont_;
 
         write_some_at_awaitable(
             random_access_file& f,
@@ -211,8 +220,9 @@ public:
         std::coroutine_handle<>
         dispatch(std::coroutine_handle<> h, capy::executor_ref ex) const
         {
+            cont_.h = h;
             return f_.get().write_some_at(
-                offset_, h, ex, buffers_, this->token_, &this->ec_,
+                offset_, cont_, ex, buffers_, this->token_, &this->ec_,
                 &this->bytes_);
         }
     };
