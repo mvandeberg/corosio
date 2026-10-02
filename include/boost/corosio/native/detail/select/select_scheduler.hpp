@@ -329,7 +329,10 @@ select_scheduler::run_task(lock_type& lock, context_type& ctx, long timeout_us)
     // always writable) or an always-readable fd (/dev/zero, a pipe at
     // EOF) would return select() immediately every iteration if
     // unconditionally added. Membership in both sets is opt-in: a
-    // parked op or wait in a direction opts that direction in.
+    // parked op or wait in a direction opts that direction in. The
+    // exceptional set is opt-in too, for any parked op or wait:
+    // Darwin reports a character device (/dev/zero, /dev/null) as
+    // exceptional on every call.
     struct fd_entry
     {
         int fd;
@@ -351,7 +354,8 @@ select_scheduler::run_task(lock_type& lock, context_type& ctx, long timeout_us)
                                                        : 0) |
                 ((desc->write_op || desc->connect_op || desc->wait_write_op)
                      ? reactor_event_write
-                     : 0);
+                     : 0) |
+                (desc->wait_error_op ? reactor_event_error : 0);
             ++snapshot_count;
         }
     }
@@ -376,7 +380,8 @@ select_scheduler::run_task(lock_type& lock, context_type& ctx, long timeout_us)
             FD_SET(fd, &read_fds);
         if (snapshot[i].want & reactor_event_write)
             FD_SET(fd, &write_fds);
-        FD_SET(fd, &except_fds);
+        if (snapshot[i].want != 0)
+            FD_SET(fd, &except_fds);
         if (fd > nfds)
             nfds = fd;
     }
