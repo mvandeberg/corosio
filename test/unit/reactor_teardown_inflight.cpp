@@ -41,7 +41,7 @@ namespace boost::corosio {
 namespace {
 
 // pipe2() is not on Darwin.
-bool
+[[maybe_unused]] bool
 make_nonblocking_pipe(int (&fds)[2])
 {
     if (::pipe(fds) != 0)
@@ -51,7 +51,7 @@ make_nonblocking_pipe(int (&fds)[2])
     return true;
 }
 
-void
+[[maybe_unused]] void
 fill_fd(int fd)
 {
     char junk[4096] = {};
@@ -60,7 +60,7 @@ fill_fd(int fd)
     }
 }
 
-void
+[[maybe_unused]] void
 fill_pipe(int fd)
 {
     char junk[4096] = {};
