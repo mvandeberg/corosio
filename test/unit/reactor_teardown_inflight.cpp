@@ -51,12 +51,24 @@ make_nonblocking_pipe(int (&fds)[2])
     return true;
 }
 
+// One pass that stops at EAGAIN is not enough on Darwin: loopback
+// TCP acknowledges asynchronously, so the send buffer keeps draining
+// into the peer and a parked write would complete. Refill until a
+// pass after a pause sends nothing; the small buffers bound how much
+// that takes.
 [[maybe_unused]] void
-fill_fd(int fd)
+fill_fd(int fd, int peer)
 {
+    int size = 8192;
+    ::setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &size, sizeof(size));
+    ::setsockopt(peer, SOL_SOCKET, SO_RCVBUF, &size, sizeof(size));
     char junk[4096] = {};
-    while (::send(fd, junk, sizeof(junk), MSG_DONTWAIT | MSG_NOSIGNAL) > 0)
+    for (bool sent = true; sent;)
     {
+        sent = false;
+        while (::send(fd, junk, sizeof(junk), MSG_DONTWAIT | MSG_NOSIGNAL) > 0)
+            sent = true;
+        ::usleep(2000);
     }
 }
 
@@ -145,7 +157,9 @@ struct reactor_teardown_test
                 test::make_socket_pair<tcp_socket, tcp_acceptor, false>(ioc);
             auto [r1, r2] =
                 test::make_socket_pair<tcp_socket, tcp_acceptor, false>(ioc);
-            fill_fd(static_cast<int>(w1.native_handle()));
+            fill_fd(
+                static_cast<int>(w1.native_handle()),
+                static_cast<int>(w2.native_handle()));
             auto writer = [](tcp_socket s, int& count) -> capy::task<> {
                 char big[65536] = {};
                 std::ignore =
