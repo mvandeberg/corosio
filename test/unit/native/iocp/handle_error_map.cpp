@@ -52,6 +52,15 @@ struct win_handle_error_map_test
             iocp_make_err(ERROR_BROKEN_PIPE, false) == std::errc::broken_pipe);
         BOOST_TEST(
             iocp_make_err(ERROR_NO_DATA, false) == std::errc::broken_pipe);
+        BOOST_TEST(
+            iocp_make_err(ERROR_PIPE_NOT_CONNECTED, false) ==
+            std::errc::broken_pipe);
+    }
+
+    void testServerDisconnectReadsAsEof()
+    {
+        BOOST_TEST_EQ(
+            normalize_handle_error(ERROR_PIPE_NOT_CONNECTED, true), 0u);
     }
 
     void testDissociateHandleAllowsRebinding()
@@ -75,6 +84,7 @@ struct win_handle_error_map_test
         testReadMoreDataIsPartialSuccess();
         testWriteCodesPassThrough();
         testBrokenPipeCodes();
+        testServerDisconnectReadsAsEof();
         testDissociateHandleAllowsRebinding();
     }
 };

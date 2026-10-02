@@ -91,7 +91,7 @@ public:
     }
 
     std::coroutine_handle<> wait(
-        std::coroutine_handle<> h,
+        capy::continuation& cont,
         capy::executor_ref ex,
         std::stop_token token,
         std::error_code* ec)
@@ -103,7 +103,7 @@ public:
             // symmetric transfer on the caller's own executor.
             if (ec)
                 *ec = std::make_error_code(std::errc::operation_in_progress);
-            return h;
+            return cont.h;
         }
 
         std::uint64_t const gen   = (cur >> 2) + 1;
@@ -114,7 +114,8 @@ public:
         // The op may complete and the object be destroyed on another
         // thread before wait() returns; this pin outlives both.
         auto const pin = op_.keep_alive;
-        op_.h          = h;
+        op_.user_cont  = &cont;
+        op_.h          = cont.h;
         op_.ex         = ex;
         op_.ec_out     = ec;
         op_.bytes_out  = nullptr;
@@ -201,6 +202,7 @@ private:
     {
         win_object_handle_state* self = nullptr;
         std::shared_ptr<win_object_handle_state> keep_alive;
+        capy::continuation* user_cont = nullptr;
 
         wait_op() noexcept : overlapped_op(&do_complete)
         {
@@ -222,13 +224,9 @@ private:
             auto* self = op->self;
             auto prevent_premature_destruction = std::move(op->keep_alive);
 
-            // Back to idle, keeping the generation.
-            self->state_.store(
-                self->state_.load(std::memory_order_relaxed) & ~phase_mask,
-                std::memory_order_release);
-
             if (!owner)
             {
+                self->set_idle();
                 op->cleanup_only();
                 return;
             }
@@ -246,10 +244,24 @@ private:
                     *op->ec_out =
                         iocp_make_err(op->dwError, /*accept_path=*/false);
             }
-            op->cont.h = op->h;
-            dispatch_coro(op->ex, op->cont).resume();
+
+            capy::continuation* cont = op->user_cont;
+            cont->h                  = op->h;
+            capy::executor_ref ex    = op->ex;
+
+            // Last touch of op_: from here a new wait() may reset it.
+            self->set_idle();
+            dispatch_coro(ex, *cont).resume();
         }
     };
+
+    // Back to idle, keeping the generation.
+    void set_idle() noexcept
+    {
+        state_.store(
+            state_.load(std::memory_order_relaxed) & ~phase_mask,
+            std::memory_order_release);
+    }
 
     static void CALLBACK on_signaled(
         PTP_CALLBACK_INSTANCE, void* ctx, PTP_WAIT, TP_WAIT_RESULT) noexcept
@@ -328,12 +340,12 @@ public:
     }
 
     std::coroutine_handle<> wait(
-        std::coroutine_handle<> h,
+        capy::continuation& cont,
         capy::executor_ref ex,
         std::stop_token token,
         std::error_code* ec) override
     {
-        return internal_->wait(h, ex, std::move(token), ec);
+        return internal_->wait(cont, ex, std::move(token), ec);
     }
 
     native_handle_type native_handle() const noexcept override
@@ -391,6 +403,9 @@ public:
         win_object_handle::implementation& impl,
         native_handle_type h) override
     {
+        // The thread-pool callback completes from a foreign thread.
+        if (sched_.scheduler_locking_disabled())
+            return std::make_error_code(std::errc::operation_not_supported);
         return static_cast<win_object_handle_impl&>(impl)
             .get_internal()
             ->assign(h);

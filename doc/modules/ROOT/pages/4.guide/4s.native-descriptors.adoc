@@ -375,42 +375,54 @@ which apply the same checks on Windows.
 | Rejected
 | Rejected
 | Rejected
-| —
+| Not applicable
 
 | Opened without `FILE_FLAG_OVERLAPPED`, including `CreatePipe`
 | Rejected
 | Rejected
 | Rejected
-| —
+| Not applicable
 
 | Directory
 | Rejected
 | Rejected
 | Rejected
-| —
+| Not applicable
 
 | Disk file, volume, or physical drive
 | Rejected
 | Accepted
 | Accepted
-| —
+| Not applicable
 
 | Overlapped pipe
 | Accepted
 | Accepted
 | Rejected
-| —
+| Not applicable
 
-| Mutex
-| —
-| —
-| —
+| Socket
+| Rejected
+| Rejected
+| Rejected
+| Not applicable
+
+| Handle already in skip-on-success mode
+| Rejected
+| Rejected
+| Rejected
+| Not applicable
+
+| Any type other than process, thread, event, semaphore or waitable timer
+| Not applicable
+| Not applicable
+| Not applicable
 | Rejected
 
 | Handle without `SYNCHRONIZE` access
-| —
-| —
-| —
+| Not applicable
+| Not applicable
+| Not applicable
 | Rejected
 |===
 
@@ -449,12 +461,17 @@ like `SIGPIPE` to suppress.
 `release()` cancels pending operations and hands the handle back
 without closing it. On the overlapped types, it also detaches the
 handle from the context's completion port, but only if no operation is
-pending. Windows refuses to detach a handle while a cancelled
-operation's completion is still queued. A handle released with I/O in
+in flight: detaching with a completion still pending would lose it or
+deliver it to the next adopter's port. A handle released with I/O in
 flight therefore stays bound. Adopting it into another `io_context`
-then fails with `errc::invalid_argument`. Such a handle must not be used
-for overlapped I/O that posts to a completion port while the
-`io_context` lives. Release an idle handle to move it between contexts.
+then fails with `errc::invalid_argument`. Release an idle handle to move
+it between contexts.
+
+While a handle is bound to a completion port, every overlapped call on
+it queues a packet to that port. Do not issue your own overlapped I/O on
+it (`ConnectNamedPipe`, `WaitCommEvent`, `DeviceIoControl`) unless the
+`OVERLAPPED`'s `hEvent` has its low-order bit set, which suppresses the
+packet. Connect a pipe server before `assign()`.
 
 cpp:win_object_handle[] never binds to the completion port, so its
 released handle has no such restriction.
@@ -475,8 +492,17 @@ include::example$snippets/4s_native_handles_win.cpp[tag=wait_for_process,indent=
 
 `assign()` rejects a mutex. A satisfied mutex wait acquires the mutex on
 a pool thread, and the resuming coroutine would not own it. A handle
-without `SYNCHRONIZE` access cannot be waited on, so it is rejected too.
-`assign()` never waits on the handle, so it never consumes a signal.
+without `SYNCHRONIZE` access cannot be waited on, so it is rejected too,
+as are pseudo-handles such as `GetCurrentThread()` and every other
+object type. On an `io_context` whose locking mode is
+`locking_mode::unsafe`, `assign()` rejects every handle, because the
+wait completes from a thread-pool thread. `assign()` never waits on the
+handle, so it never consumes a signal.
+
+Re-waiting on an object that stays signaled -- a manual-reset event, an
+exited process or thread, a manual-reset timer -- completes again at
+once. Reset the object, or stop waiting, rather than looping on
+`wait()`.
 
 Only one wait may be pending. While the first is pending, a second
 `wait()` completes with `errc::operation_in_progress` and leaves the
@@ -487,7 +513,8 @@ unsafe.
 ====
 A wait the kernel satisfied always reports success, even when it raced
 `cancel()`, `close()`, `release()`, or a timeout. For an auto-reset
-event, a semaphore, or a waitable timer, a satisfied wait has already
+event, a semaphore, or a synchronization (auto-reset) waitable timer, a
+satisfied wait has already
 changed the object's state. Reporting it as cancelled would lose that
 change for good.
 ====

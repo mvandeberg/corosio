@@ -1230,11 +1230,13 @@ struct stream_file_test
         // Must not have completed against the newly adopted file's data.
         BOOST_TEST(std::memcmp(buf, "NEWNEWNEW", 9) != 0);
     }
+#endif
 
     void testReassignDuringInFlightReadKeepsNewOffset()
     {
-        // A read already running on the pool when assign() swaps the
-        // file must not advance the new file's position.
+        // A read already in flight when assign() swaps the file must not
+        // advance the new file's position: on POSIX it runs on the pool,
+        // on IOCP its cancelled completion may still carry bytes.
 #if BOOST_COROSIO_HAS_URING
         // No pool on io_uring: the ring cancels the old fd's read.
         if constexpr (
@@ -1266,8 +1268,17 @@ struct stream_file_test
                 (void)n;
             };
             auto swapper = [&]() -> capy::task<> {
+#if BOOST_COROSIO_HAS_IOCP
+                HANDLE h2 = ::CreateFileW(
+                    tmp2.path.c_str(), GENERIC_READ,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED,
+                    nullptr);
+                BOOST_TEST(!f.assign(reinterpret_cast<native_handle_type>(h2)));
+#else
                 int fd2 = ::open(tmp2.path.c_str(), O_RDONLY);
                 BOOST_TEST(!f.assign(static_cast<native_handle_type>(fd2)));
+#endif
                 co_return;
             };
             capy::run_async(ioc.get_executor())(reader());
@@ -1281,7 +1292,6 @@ struct stream_file_test
         }
         BOOST_TEST_EQ(moved, 0);
     }
-#endif
 
     void run()
     {
@@ -1343,8 +1353,8 @@ struct stream_file_test
         testDestroyWithPoolWorkQueued();
         testReadWriteAfterPoolShutdown();
         testAssignCancelsInFlightRead();
-        testReassignDuringInFlightReadKeepsNewOffset();
 #endif
+        testReassignDuringInFlightReadKeepsNewOffset();
 
 #if !COROSIO_TEST_HAS_ASAN
         // Abandon parked coroutine frames by design; see context.hpp.

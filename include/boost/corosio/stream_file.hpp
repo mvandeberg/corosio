@@ -268,14 +268,18 @@ public:
         The file object becomes not-open. The caller is
         responsible for closing the returned handle.
         On Windows the handle is detached from this context's
-        completion port only if no operation is pending. Windows
-        refuses to detach a handle while a cancelled operation's
-        completion is still queued. A handle released with I/O in
-        flight therefore stays bound, and adopting it into another
-        `io_context` fails with `errc::invalid_argument`. Such a
-        handle must not be used for overlapped I/O that posts to a
-        completion port while this `io_context` lives. Release an
-        idle handle to move it between contexts.
+        completion port only if no operation is in flight. A handle
+        released with I/O in flight therefore stays bound, and
+        adopting it into another `io_context` fails with
+        `errc::invalid_argument`; see the next paragraph for using it
+        yourself. Release an idle handle to move it between contexts.
+
+        While the handle is bound to a completion port, every
+        overlapped call on it queues a packet to that port. Do not
+        issue your own overlapped I/O on it (`ConnectNamedPipe`,
+        `WaitCommEvent`, `DeviceIoControl`) unless the `OVERLAPPED`'s
+        `hEvent` has its low-order bit set, which suppresses the
+        packet. Connect a pipe server before `assign()`.
 
         @return The native file descriptor or handle.
 
@@ -301,10 +305,13 @@ public:
             object already holds. `errc::bad_file_descriptor` if it
             is invalid. `errc::operation_not_supported` if it names
             something a file object cannot position. On Windows,
-            that means a pipe, a console, a directory, or a handle
-            opened without `FILE_FLAG_OVERLAPPED`. On POSIX and
-            io_uring only, any other failure is the `errno` reported
-            by the kernel. Otherwise, the code is empty.
+            that means a pipe, a socket, a console, a directory, a
+            handle opened without `FILE_FLAG_OVERLAPPED`, or one
+            already in skip-completion-port-on-success mode. On
+            Windows, `errc::invalid_argument` also when @p handle is
+            bound to another completion port. Any other failure is
+            the code reported by the system. Otherwise, the code is
+            empty.
 
         @par Exception Safety
         Throws nothing. Strong guarantee.

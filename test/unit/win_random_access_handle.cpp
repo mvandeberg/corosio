@@ -17,11 +17,13 @@
 #include <boost/capy/buffers.hpp>
 #include <boost/capy/cond.hpp>
 #include <boost/capy/ex/run_async.hpp>
+#include <boost/capy/ex/strand.hpp>
 #include <boost/capy/task.hpp>
 
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <stop_token>
 #include <system_error>
 #include <type_traits>
 
@@ -215,6 +217,162 @@ struct win_random_access_handle_test
         BOOST_TEST(!h2.assign(raw));
     }
 
+    void testReleaseAfterCompletedReadReadopts()
+    {
+        // A finished op leaves nothing in flight, so release() detaches
+        // and a second context can adopt the handle.
+        test::temp_path t("rah_done_readopt");
+        {
+            auto w = test::open_file(t.path, false);
+            BOOST_TEST(test::write_all(w.get(), "abcd", 4));
+        }
+        native_handle_type raw{};
+        {
+            io_context ioc(Backend);
+            win_random_access_handle h(ioc);
+            auto f = test::open_file(t.path, true);
+            BOOST_TEST(!h.assign(test::as_native(f.release())));
+            std::error_code ec;
+            auto reader = [&]() -> capy::task<> {
+                char buf[4];
+                auto [e, n] = co_await h.read_some_at(
+                    0, capy::mutable_buffer(buf, sizeof(buf)));
+                ec = e;
+                (void)n;
+            };
+            capy::run_async(ioc.get_executor())(reader());
+            ioc.run();
+            BOOST_TEST(!ec);
+            raw = h.release();
+        }
+
+        io_context ioc2(Backend);
+        win_random_access_handle h2(ioc2);
+        BOOST_TEST(!h2.assign(raw));
+        std::error_code ec;
+        std::size_t n = 0;
+        char buf[4]{};
+        auto reader = [&]() -> capy::task<> {
+            auto [e, rn] = co_await h2.read_some_at(
+                1, capy::mutable_buffer(buf, 2));
+            ec = e;
+            n  = rn;
+        };
+        capy::run_async(ioc2.get_executor())(reader());
+        ioc2.run();
+        BOOST_TEST(!ec);
+        BOOST_TEST_EQ(n, 2u);
+        BOOST_TEST(std::memcmp(buf, "bc", 2) == 0);
+    }
+
+    void testResumesOnAwaitingExecutor()
+    {
+        io_context ioc(Backend);
+        capy::strand s(ioc.get_executor());
+        win_random_access_handle h(ioc);
+        test::temp_path p("ra_strand");
+        {
+            // write_all needs a synchronous handle.
+            auto w = test::open_file(p.path, /*overlapped=*/false);
+            BOOST_TEST(test::write_all(w.get(), "abcdefgh", 8));
+        }
+        auto f = test::open_file(p.path, /*overlapped=*/true);
+        BOOST_TEST(!h.assign(test::as_native(f.get())));
+        f.release();
+
+        bool on_strand = false;
+        std::error_code ec;
+        char buf[4];
+        auto t = [&]() -> capy::task<> {
+            auto [e, n] = co_await h.read_some_at(
+                2, capy::mutable_buffer(buf, sizeof(buf)));
+            ec = e;
+            (void)n;
+            on_strand = s.running_in_this_thread();
+        };
+        capy::run_async(s)(t());
+        ioc.run();
+
+        BOOST_TEST(!ec);
+        BOOST_TEST(on_strand);
+    }
+
+    void testReleaseWithPendingStaysBound()
+    {
+        // A handle released with a read in flight stays bound to the
+        // first port, so a second live context cannot adopt it.
+        io_context a(Backend);
+        io_context b(Backend);
+        win_random_access_handle ha(a);
+        win_random_access_handle hb(b);
+        auto p = test::make_pipe_pair();
+        BOOST_TEST(!ha.assign(test::as_native(p.server.release())));
+
+        std::error_code rec;
+        char buf[4];
+        auto reader = [&]() -> capy::task<> {
+            auto [e, n] = co_await ha.read_some_at(
+                0, capy::mutable_buffer(buf, sizeof(buf)));
+            rec = e;
+            (void)n;
+        };
+        capy::run_async(a.get_executor())(reader());
+        a.poll(); // the read is now issued and pending
+
+        native_handle_type released = ha.release();
+        BOOST_TEST(hb.assign(released) == std::errc::invalid_argument);
+
+        a.run();
+        BOOST_TEST(rec == capy::cond::canceled);
+        ::CloseHandle(reinterpret_cast<HANDLE>(released));
+    }
+
+    void testAssignRejectsInvalid()
+    {
+        io_context ioc(Backend);
+        win_random_access_handle h(ioc);
+        BOOST_TEST(
+            h.assign(test::as_native(INVALID_HANDLE_VALUE)) ==
+            std::errc::bad_file_descriptor);
+    }
+
+    void testAssignRejectsSelf()
+    {
+        io_context ioc(Backend);
+        win_random_access_handle h(ioc);
+        auto p = test::make_pipe_pair();
+        BOOST_TEST(!h.assign(test::as_native(p.server.release())));
+        auto const held = h.native_handle();
+        BOOST_TEST(h.assign(held) == std::errc::invalid_argument);
+        BOOST_TEST_EQ(h.native_handle(), held);
+    }
+
+    void testStopTokenCancelsRead()
+    {
+        io_context ioc(Backend);
+        win_random_access_handle h(ioc);
+        auto p = test::make_pipe_pair();
+        BOOST_TEST(!h.assign(test::as_native(p.server.release())));
+
+        std::stop_source ss;
+        std::error_code ec;
+        char buf[8]{};
+        auto reader = [&]() -> capy::task<> {
+            auto [e, n] = co_await h.read_some_at(
+                0, capy::mutable_buffer(buf, sizeof(buf)));
+            ec = e;
+            (void)n;
+        };
+        auto stopper = [&]() -> capy::task<> {
+            ss.request_stop();
+            co_return;
+        };
+        capy::run_async(ioc.get_executor(), ss.get_token())(reader());
+        capy::run_async(ioc.get_executor())(stopper());
+        ioc.run();
+        BOOST_TEST(ec == capy::cond::canceled);
+    }
+
     void run()
     {
         testConstruction();
@@ -226,6 +384,12 @@ struct win_random_access_handle_test
         testCancelPendingPipeReads();
         testFailedAssignKeepsHeld();
         testReleaseAndReadopt();
+        testResumesOnAwaitingExecutor();
+        testReleaseAfterCompletedReadReadopts();
+        testReleaseWithPendingStaysBound();
+        testAssignRejectsInvalid();
+        testAssignRejectsSelf();
+        testStopTokenCancelsRead();
     }
 };
 

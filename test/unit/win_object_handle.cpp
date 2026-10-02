@@ -14,12 +14,16 @@
 
 #if BOOST_COROSIO_HAS_IOCP
 
+#include <boost/corosio/delay.hpp>
 #include <boost/capy/cond.hpp>
 #include <boost/capy/ex/run_async.hpp>
+#include <boost/capy/ex/strand.hpp>
 #include <boost/capy/task.hpp>
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <optional>
 #include <stop_token>
 #include <thread>
 #include <type_traits>
@@ -84,6 +88,17 @@ struct win_object_handle_test
         BOOST_TEST(
             o.assign(test::as_native(nullptr)) ==
             std::errc::bad_file_descriptor);
+        // Pseudo-handles name "whichever thread asks"; never adoptable.
+        BOOST_TEST(
+            o.assign(test::as_native(::GetCurrentThread())) ==
+            std::errc::operation_not_supported);
+        // SYNCHRONIZE alone does not make a handle a meaningful wait: a
+        // file handle has it, but its signal tracks I/O, not an event.
+        test::temp_path t("oh_file");
+        auto f = test::open_file(t.path, false);
+        BOOST_TEST(
+            o.assign(test::as_native(f.get())) ==
+            std::errc::operation_not_supported);
         BOOST_TEST(!o.is_open());
     }
 
@@ -416,6 +431,142 @@ struct win_object_handle_test
         BOOST_TEST(!wait_once(ioc, b));
     }
 
+    void testStrandWaitersNeverShareAContinuation()
+    {
+        // A manual-reset event stays signaled, so every wait completes
+        // at once. Waiters on a strand resume through a posted
+        // continuation; a second waiter must never reuse one that is
+        // still queued. Both waiters share the strand, so wait() is
+        // never called concurrently, which the object does not allow.
+        io_context ioc(Backend, 2);
+        capy::strand s(ioc.get_executor());
+        win_object_handle o(ioc);
+        adopt_event(o, /*manual=*/true, /*signaled=*/true);
+
+        constexpr int per_waiter = 200;
+        std::atomic<int> ok{0}, busy{0}, other{0};
+        auto waiter = [&]() -> capy::task<> {
+            for (int i = 0; i < per_waiter; ++i)
+            {
+                auto [e] = co_await o.wait();
+                if (!e)
+                    ++ok;
+                else if (e == std::errc::operation_in_progress)
+                    ++busy;
+                else
+                    ++other;
+            }
+        };
+        capy::run_async(s)(waiter());
+        capy::run_async(s)(waiter());
+        std::thread t([&] { ioc.run(); });
+        ioc.run();
+        t.join();
+
+        BOOST_TEST_EQ(ok + busy, 2 * per_waiter);
+        BOOST_TEST_EQ(other.load(), 0);
+    }
+
+    void testLocklessContextRefusesObjectHandle()
+    {
+        // The pool callback completes from a foreign thread, which a
+        // lockless scheduler cannot accept.
+        io_context_options opts;
+        opts.locking = locking_mode::unsafe;
+        io_context ioc(Backend, opts);
+        win_object_handle o(ioc);
+        test::unique_handle ev(::CreateEventW(nullptr, TRUE, FALSE, nullptr));
+        BOOST_TEST(
+            o.assign(test::as_native(ev.get())) ==
+            std::errc::operation_not_supported);
+        BOOST_TEST(!o.is_open());
+    }
+
+    // Completion wins against every rundown, not just cancel(): the
+    // signal is set inline, so the pool satisfies the wait first.
+    template<class Rundown>
+    static int signal_then_rundown_losses(Rundown rundown)
+    {
+        int lost = 0;
+        for (int i = 0; i < 200; ++i)
+        {
+            io_context ioc(Backend);
+            std::optional<win_object_handle> o(std::in_place, ioc);
+            HANDLE ev          = adopt_event(*o, false, false);
+            std::error_code ec = std::make_error_code(std::errc::io_error);
+            native_handle_type released = ~native_handle_type{};
+            auto waiter = [&]() -> capy::task<> {
+                auto [e] = co_await o->wait();
+                ec       = e;
+            };
+            auto signaler = [&]() -> capy::task<> {
+                ::SetEvent(ev);
+                rundown(o, released);
+                co_return;
+            };
+            capy::run_async(ioc.get_executor())(waiter());
+            capy::run_async(ioc.get_executor())(signaler());
+            ioc.run();
+            if (ec)
+                ++lost;
+            if (released != ~native_handle_type{})
+                ::CloseHandle(reinterpret_cast<HANDLE>(released));
+        }
+        return lost;
+    }
+
+    void testSignalBeforeCloseReportsSuccess()
+    {
+        BOOST_TEST_EQ(
+            signal_then_rundown_losses(
+                [](auto& o, native_handle_type&) { o->close(); }),
+            0);
+    }
+
+    void testSignalBeforeReleaseReportsSuccess()
+    {
+        BOOST_TEST_EQ(
+            signal_then_rundown_losses(
+                [](auto& o, native_handle_type& r) { r = o->release(); }),
+            0);
+    }
+
+    void testSignalBeforeDestroyReportsSuccess()
+    {
+        BOOST_TEST_EQ(
+            signal_then_rundown_losses(
+                [](auto& o, native_handle_type&) { o.reset(); }),
+            0);
+    }
+
+    void testAssignWhileWaitPendingCancelsOldWait()
+    {
+        io_context ioc(Backend);
+        win_object_handle o(ioc);
+        test::unique_handle e1(::CreateEventW(nullptr, TRUE, FALSE, nullptr));
+        test::unique_handle e2(::CreateEventW(nullptr, TRUE, TRUE, nullptr));
+        BOOST_TEST(!o.assign(test::as_native(e1.release())));
+
+        std::error_code first, second;
+        auto t = [&]() -> capy::task<> {
+            auto [e] = co_await o.wait();
+            first    = e;
+            auto [f] = co_await o.wait();
+            second   = f;
+        };
+        auto swapper = [&]() -> capy::task<> {
+            auto [d] = co_await delay(std::chrono::milliseconds(10));
+            (void)d;
+            BOOST_TEST(!o.assign(test::as_native(e2.release())));
+        };
+        capy::run_async(ioc.get_executor())(t());
+        capy::run_async(ioc.get_executor())(swapper());
+        ioc.run();
+
+        BOOST_TEST(first == capy::cond::canceled);
+        BOOST_TEST(!second); // e2 is signaled
+    }
+
     void run()
     {
         testConstruction();
@@ -437,6 +588,12 @@ struct win_object_handle_test
         testReleaseWithPendingWait();
         testDestroyWithPendingWait();
         testMoveThenWait();
+        testStrandWaitersNeverShareAContinuation();
+        testLocklessContextRefusesObjectHandle();
+        testSignalBeforeCloseReportsSuccess();
+        testSignalBeforeReleaseReportsSuccess();
+        testSignalBeforeDestroyReportsSuccess();
+        testAssignWhileWaitPendingCancelsOldWait();
     }
 };
 

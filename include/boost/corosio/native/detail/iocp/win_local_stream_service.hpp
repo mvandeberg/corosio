@@ -337,6 +337,11 @@ local_stream_wait_op::do_complete(
         return;
     }
 
+    // Only the zero-byte WSARecv read wait; write and error waits come
+    // from the poll reactor through this op too.
+    if (op->w == wait_type::read)
+        op->dwError = normalize_read_wait_error(op->dwError);
+
     auto prevent_premature_destruction = std::move(op->internal_ptr);
     op->invoke_handler();
 }
@@ -623,6 +628,7 @@ win_local_stream_socket_internal::wait(
     op.ec_out       = ec;
     op.bytes_out    = nullptr;
     op.empty_buffer = true;
+    op.w            = w;
     op.start(token);
 
     svc_.work_started();

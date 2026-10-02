@@ -41,9 +41,10 @@ namespace {
 capy::task<std::error_code>
 await_event(corosio::io_context& ioc, HANDLE event)
 {
-    // Adopt a duplicate: assign() takes ownership, and the caller's
-    // handle must outlive it. DUPLICATE_SAME_ACCESS keeps the caller's
-    // access, which must include SYNCHRONIZE.
+    // Adopt a duplicate: assign() takes ownership of the copy, so the
+    // caller's own handle stays independent of this object's lifetime.
+    // DUPLICATE_SAME_ACCESS keeps the caller's access, which must
+    // include SYNCHRONIZE.
     HANDLE copy = nullptr;
     if (!::DuplicateHandle(
             ::GetCurrentProcess(), event, ::GetCurrentProcess(), &copy, 0,

@@ -983,7 +983,6 @@ struct wait_test
     }
 #endif
 
-#if BOOST_COROSIO_POSIX
     // A readiness wait reports readiness and leaves the socket's pending
     // error for the I/O that follows, as asio does on every backend.
     // SO_ERROR clears on read, so a wait that took it would turn the
@@ -1031,7 +1030,33 @@ struct wait_test
         waitReadOnResetThenReadNamesReset(false);
         waitReadOnResetThenReadNamesReset(true);
     }
-#endif
+
+    void testWaitWriteOnResetThenWriteNamesReset()
+    {
+        // A reset socket is "ready" for a write: the write that follows
+        // fails at once and names the reset.
+        io_context ioc(Backend);
+        auto [s1, s2] = test::make_socket_pair(ioc); // RST on close
+        std::error_code wec, xec;
+        auto t = [&]() -> capy::task<> {
+            s2.close();
+            auto [e0] = co_await delay(std::chrono::milliseconds(10));
+            (void)e0;
+            auto [e] = co_await s1.wait(wait_type::write);
+            wec      = e;
+            auto [we, n] =
+                co_await s1.write_some(capy::const_buffer("x", 1));
+            xec = we;
+            (void)n;
+        };
+        capy::run_async(ioc.get_executor())(t());
+        ioc.run();
+
+        BOOST_TEST(!wec);
+        BOOST_TEST(
+            xec == std::errc::connection_reset ||
+            xec == std::errc::broken_pipe);
+    }
 
     void run()
     {
@@ -1044,8 +1069,9 @@ struct wait_test
         testAcceptorErrorWaitCancel();
 #if BOOST_COROSIO_POSIX
         testOobDoesNotFaultRead();
-        testWaitReadOnResetThenReadNamesReset();
 #endif
+        testWaitReadOnResetThenReadNamesReset();
+        testWaitWriteOnResetThenWriteNamesReset();
         testWaitOnLocalStream();
         testWaitOnUdp();
         testWaitReadAfterShortRead();

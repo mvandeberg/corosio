@@ -161,7 +161,9 @@ win_stream_file_internal::seek(
     }
     else if (origin == file_base::seek_cur)
     {
-        new_pos = static_cast<std::int64_t>(offset_) + offset;
+        new_pos = static_cast<std::int64_t>(
+                      offset_.load(std::memory_order_acquire)) +
+            offset;
     }
     else // seek_end
     {
@@ -174,8 +176,9 @@ win_stream_file_internal::seek(
     if (new_pos < 0)
         return {make_err(ERROR_NEGATIVE_SEEK), 0};
 
-    offset_ = static_cast<std::uint64_t>(new_pos);
-    return {std::error_code{}, offset_};
+    offset_.store(
+        static_cast<std::uint64_t>(new_pos), std::memory_order_release);
+    return {std::error_code{}, static_cast<std::uint64_t>(new_pos)};
 }
 
 // ---------------------------------------------------------------------------
@@ -391,7 +394,7 @@ win_file_service::open_file(
 
     auto& internal   = *static_cast<win_stream_file&>(impl).get_internal();
     internal.handle_ = h;
-    internal.offset_ = 0;
+    internal.offset_.store(0, std::memory_order_release);
 
     // Handle append: seek to end
     if (mode & file_base::append)
@@ -404,7 +407,8 @@ win_file_service::open_file(
             ::CloseHandle(h);
             return make_err(err);
         }
-        internal.offset_ = static_cast<std::uint64_t>(sz.QuadPart);
+        internal.offset_.store(
+            static_cast<std::uint64_t>(sz.QuadPart), std::memory_order_release);
     }
 
     return {};

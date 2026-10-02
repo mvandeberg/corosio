@@ -44,6 +44,28 @@ struct win_validate_handle_test
         BOOST_TEST(rejects(p.server.get(), handle_kind::random_access_file));
     }
 
+    void testWriteOnlyPipeEndsAccepted()
+    {
+        // Neither end has FILE_READ_ATTRIBUTES, so GetNamedPipeInfo
+        // fails on the outbound server; the socket gate must not take
+        // that for a socket.
+        auto const name = L"\\\\.\\pipe\\corosio_test_" + test::unique_suffix();
+        test::unique_handle server(::CreateNamedPipeW(
+            name.c_str(),
+            PIPE_ACCESS_OUTBOUND | FILE_FLAG_OVERLAPPED |
+                FILE_FLAG_FIRST_PIPE_INSTANCE,
+            PIPE_TYPE_BYTE | PIPE_WAIT, 1, 4096, 4096, 0, nullptr));
+        BOOST_TEST(server);
+        test::unique_handle client(::CreateFileW(
+            name.c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING,
+            FILE_FLAG_OVERLAPPED, nullptr));
+        BOOST_TEST(client);
+        BOOST_TEST(!validate_overlapped_handle(
+            server.get(), handle_kind::stream_handle));
+        BOOST_TEST(!validate_overlapped_handle(
+            server.get(), handle_kind::random_access_handle));
+    }
+
     void testSynchronousPipeEndRejected()
     {
         auto p = test::make_pipe_pair();
@@ -91,16 +113,42 @@ struct win_validate_handle_test
             BOOST_TEST(rejects(d.get(), k));
     }
 
-    void testConsoleRejected()
+    void testRejectsSkipCompletionPortOnSuccess()
     {
-        test::unique_handle con(::CreateFileW(
-            L"CONOUT$", GENERIC_READ | GENERIC_WRITE,
-            FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0,
-            nullptr));
-        if (!con)
-            return; // no console attached (CI service session)
+        test::temp_path p("skip_on_success");
+        auto f = test::open_file(p.path, /*overlapped=*/true);
+        BOOST_TEST(::SetFileCompletionNotificationModes(
+            f.get(), FILE_SKIP_COMPLETION_PORT_ON_SUCCESS));
         for (auto k : all_kinds)
-            BOOST_TEST(rejects(con.get(), k));
+            BOOST_TEST(rejects(f.get(), k));
+    }
+
+    void testConsoleRejectedEvenWhenOverlapped()
+    {
+        // Open the console overlapped, so the synchronous-mode gate
+        // cannot be what rejects it.
+        auto open_con = [] {
+            return ::CreateFileW(
+                L"CONOUT$", GENERIC_READ | GENERIC_WRITE,
+                FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+                FILE_FLAG_OVERLAPPED, nullptr);
+        };
+        bool allocated = false;
+        HANDLE h       = open_con();
+        if (h == INVALID_HANDLE_VALUE)
+        {
+            // No console attached (typical under CI). Allocate one.
+            if (!::AllocConsole())
+                return;
+            allocated = true;
+            h         = open_con();
+        }
+        BOOST_TEST(h != INVALID_HANDLE_VALUE);
+        for (auto k : all_kinds)
+            BOOST_TEST(rejects(h, k));
+        ::CloseHandle(h);
+        if (allocated)
+            ::FreeConsole();
     }
 
     void testInvalidHandles()
@@ -173,11 +221,13 @@ struct win_validate_handle_test
     void run()
     {
         testOverlappedPipe();
+        testWriteOnlyPipeEndsAccepted();
         testSynchronousPipeEndRejected();
         testAnonymousPipeRejected();
         testDiskFile();
         testDirectoryRejected();
-        testConsoleRejected();
+        testConsoleRejectedEvenWhenOverlapped();
+        testRejectsSkipCompletionPortOnSuccess();
         testInvalidHandles();
         testObjectEventKeepsSignal();
         testObjectSemaphoreKeepsCount();

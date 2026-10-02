@@ -16,7 +16,9 @@
 
 #include <boost/corosio/native/detail/iocp/win_windows.hpp>
 
+#include <cstdint>
 #include <cstring>
+#include <string_view>
 #include <system_error>
 
 /* The adopt-time gates for Windows handles -- the counterpart of
@@ -60,11 +62,13 @@ using query_information_file_fn =
 using query_object_fn = ntstatus(NTAPI*)(HANDLE, int, void*, ULONG, ULONG*);
 
 inline constexpr int file_mode_information    = 16;
+inline constexpr int file_io_completion_notification_information = 41;
 inline constexpr int object_basic_information = 0;
 inline constexpr int object_type_information  = 2;
 
 inline constexpr ULONG file_synchronous_io_alert    = 0x10;
 inline constexpr ULONG file_synchronous_io_nonalert = 0x20;
+inline constexpr ULONG file_skip_completion_port_on_success = 0x1;
 
 struct object_basic_info
 {
@@ -118,8 +122,10 @@ query_object() noexcept
     @param kind The adopting type.
 
     @return `bad_file_descriptor` for a null, invalid or closed
-        handle; `operation_not_supported` for a console, a
-        synchronous-mode handle, a directory, a disk handle adopted
+        handle; `operation_not_supported` for a console, a socket, a
+        synchronous-mode handle, a handle already in
+        skip-completion-port-on-success mode, a directory, a disk
+        handle adopted
         by `win_stream_handle`, or a pipe adopted by a file type;
         otherwise an empty code. A missing `ntdll` entry point fails
         closed with `operation_not_supported`.
@@ -155,11 +161,30 @@ validate_overlapped_handle(HANDLE h, handle_kind kind) noexcept
          win_nt::file_synchronous_io_nonalert))
         return not_supported;
 
+    // A handle already in skip-on-success mode queues no packet for a
+    // synchronous success, so the op would never complete. The mode
+    // cannot be cleared. A failed query means the mode was never set.
+    ULONG notify = 0;
+    if (query(h, &iosb, &notify, sizeof(notify),
+            win_nt::file_io_completion_notification_information) >= 0 &&
+        (notify & win_nt::file_skip_completion_port_on_success))
+        return not_supported;
+
     // A failed query (volumes, some devices) means "not a directory".
     FILE_BASIC_INFO basic{};
     if (::GetFileInformationByHandleEx(
             h, FileBasicInfo, &basic, sizeof(basic)) &&
         (basic.FileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+        return not_supported;
+
+    // A SOCKET reports FILE_TYPE_PIPE but is no named pipe, and must be
+    // closed with closesocket, not CloseHandle. GetNamedPipeInfo fails
+    // on it with ERROR_INVALID_FUNCTION; on a pipe end opened without
+    // FILE_READ_ATTRIBUTES (a PIPE_ACCESS_OUTBOUND server) it fails
+    // with ERROR_ACCESS_DENIED, which is no reason to reject.
+    if (type == FILE_TYPE_PIPE &&
+        !::GetNamedPipeInfo(h, nullptr, nullptr, nullptr, nullptr) &&
+        ::GetLastError() != ERROR_ACCESS_DENIED)
         return not_supported;
 
     switch (kind)
@@ -182,9 +207,10 @@ validate_overlapped_handle(HANDLE h, handle_kind kind) noexcept
 /** Validate a handle for adoption by `win_object_handle`.
 
     @return `bad_file_descriptor` for a null, invalid or closed
-        handle; `operation_not_supported` for a mutex, a handle
-        without `SYNCHRONIZE` access, or a missing `ntdll` entry
-        point; otherwise an empty code.
+        handle; `operation_not_supported` for a pseudo-handle, an
+        object type other than process, thread, event, semaphore or
+        waitable timer, a handle without `SYNCHRONIZE` access, or a
+        missing `ntdll` entry point; otherwise an empty code.
 */
 inline std::error_code
 validate_object_handle(HANDLE h) noexcept
@@ -194,6 +220,13 @@ validate_object_handle(HANDLE h) noexcept
 
     if (h == nullptr || h == INVALID_HANDLE_VALUE)
         return std::make_error_code(std::errc::bad_file_descriptor);
+
+    // GetCurrentThread() and the other pseudo-handles (-2 .. -6) resolve
+    // per calling thread. -1 (GetCurrentProcess) is INVALID_HANDLE_VALUE
+    // and already rejected above.
+    auto const v = reinterpret_cast<std::intptr_t>(h);
+    if (v <= -2 && v >= -6)
+        return not_supported;
 
     auto const query = win_nt::query_object();
     if (!query)
@@ -207,17 +240,26 @@ validate_object_handle(HANDLE h) noexcept
     if (!(basic.GrantedAccess & SYNCHRONIZE))
         return not_supported;
 
-    // A satisfied mutex wait acquires the mutex on a pool thread the
-    // resuming coroutine does not own.
     alignas(8) unsigned char buf[1024];
     if (query(h, win_nt::object_type_information, buf, sizeof(buf), nullptr) <
         0)
         return not_supported;
     win_nt::unicode_string name;
     std::memcpy(&name, buf, sizeof(name));
-    static constexpr wchar_t mutant[] = L"Mutant";
-    if (name.Buffer && name.Length == sizeof(mutant) - sizeof(wchar_t) &&
-        std::memcmp(name.Buffer, mutant, name.Length) == 0)
+    if (!name.Buffer)
+        return not_supported;
+
+    // Waitable kinds the pool can satisfy without side effects on a
+    // thread the coroutine does not own. Mutant (a mutex) is excluded
+    // for that reason; anything else is not a meaningful wait.
+    static constexpr std::wstring_view accepted[] = {
+        L"Process", L"Thread", L"Event", L"Semaphore", L"Timer"};
+    std::wstring_view const type_name(
+        name.Buffer, name.Length / sizeof(wchar_t));
+    bool ok = false;
+    for (auto a : accepted)
+        ok = ok || type_name == a;
+    if (!ok)
         return not_supported;
 
     return {};

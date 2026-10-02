@@ -19,6 +19,7 @@
 #include <boost/corosio/detail/native_handle.hpp>
 #include <boost/corosio/detail/op_base.hpp>
 #include <boost/corosio/io/io_object.hpp>
+#include <boost/capy/continuation.hpp>
 #include <boost/capy/io_result.hpp>
 #include <boost/capy/ex/executor_ref.hpp>
 #include <boost/capy/ex/execution_context.hpp>
@@ -46,10 +47,15 @@ namespace boost::corosio {
     awaiting coroutine resumes on its executor as usual.
 
     @par Rejected Handles
-    Mutexes are rejected with `errc::operation_not_supported`: a
+    Only processes, threads, events, semaphores and waitable timers
+    are accepted; any other object type is rejected with
+    `errc::operation_not_supported`. Mutexes are excluded because a
     satisfied mutex wait acquires the mutex on a pool thread the
-    resuming coroutine does not own. Handles without `SYNCHRONIZE`
-    access are rejected the same way.
+    resuming coroutine does not own. Pseudo-handles such as
+    `GetCurrentThread()` and handles without `SYNCHRONIZE` access
+    are rejected the same way. Every handle is rejected on an
+    `io_context` whose locking mode is `locking_mode::unsafe`,
+    because the wait completes from a thread-pool thread.
 
     @par Ownership
     `assign()` takes ownership and `close()` closes the handle.
@@ -72,14 +78,15 @@ public:
     {
         /** Initiate an asynchronous wait for the object's signaled state.
 
-            @param h Coroutine handle to resume on completion.
+            @param cont Continuation to resume on completion; owned by
+                the awaitable.
             @param ex Executor for dispatching the completion.
             @param token Stop token for cancellation.
             @param ec Output error code.
             @return Coroutine handle to resume immediately.
         */
         virtual std::coroutine_handle<> wait(
-            std::coroutine_handle<> h,
+            capy::continuation& cont,
             capy::executor_ref ex,
             std::stop_token token,
             std::error_code* ec) = 0;
@@ -89,7 +96,10 @@ public:
 
         /** Release ownership of the native handle.
 
-            Cancels a pending wait without closing the handle. The
+            Cancels a pending wait without closing the handle: it
+            completes with a code that compares equal to
+            `capy::cond::canceled`, unless the kernel already
+            satisfied it, in which case it reports success. The
             caller takes ownership.
 
             @return The native handle.
@@ -115,17 +125,23 @@ public:
         friend detail::void_op_base<wait_awaitable>;
 
         win_object_handle& o_;
+        // Lives in the awaiting frame until resumption, so a completion
+        // posted through an executor never shares the object's state.
+        mutable capy::continuation cont_;
 
         std::coroutine_handle<>
         dispatch(std::coroutine_handle<> h, capy::executor_ref ex) const
         {
-            return o_.get().wait(h, ex, token_, &ec_);
+            cont_.h = h;
+            return o_.get().wait(cont_, ex, token_, &ec_);
         }
     };
 
     /** Destructor.
 
-        Closes the handle if open, cancelling a pending wait.
+        Closes the handle if open. A pending wait completes with a
+        code that compares equal to `capy::cond::canceled`, unless the
+        kernel already satisfied it, in which case it reports success.
     */
     ~win_object_handle() override;
 
@@ -184,14 +200,20 @@ public:
         wait it held before, and the caller still owns @p h.
 
         No wait is performed on @p h; its signal state is unchanged.
+        A pending wait on the previously held handle is cancelled,
+        unless the kernel already satisfied it, in which case it
+        reports success.
 
         @param h The native handle to adopt.
 
         @return `errc::invalid_argument` when @p h is the handle this
             object already holds. `errc::bad_file_descriptor` when
             @p h is null, invalid or closed.
-            `errc::operation_not_supported` when @p h is a mutex or
-            lacks `SYNCHRONIZE` access. Otherwise an empty code.
+            `errc::operation_not_supported` when @p h is a
+            pseudo-handle, an object type other than process, thread,
+            event, semaphore or waitable timer, lacks `SYNCHRONIZE`
+            access, or this `io_context` uses `locking_mode::unsafe`.
+            Otherwise an empty code.
 
         @par Exception Safety
         Throws nothing. Strong guarantee.
@@ -202,7 +224,9 @@ public:
 
     /** Release ownership of the native handle.
 
-        The object becomes not-open and a pending wait is cancelled.
+        The object becomes not-open. A pending wait completes with a
+        code that compares equal to `capy::cond::canceled`, unless the
+        kernel already satisfied it, in which case it reports success.
         The caller is responsible for closing the result.
 
         @return The native handle.
@@ -217,7 +241,9 @@ public:
     /** Close the handle.
 
         A pending wait completes with a code that compares equal to
-        `capy::cond::canceled`. Does nothing when not open.
+        `capy::cond::canceled`, unless the kernel already satisfied
+        it, in which case it reports success. Does nothing when not
+        open.
     */
     void close() noexcept;
 

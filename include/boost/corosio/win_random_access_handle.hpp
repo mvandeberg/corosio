@@ -49,17 +49,27 @@ namespace boost::corosio {
     For regular files prefer @ref random_access_file, which also
     offers `size()`, `resize()` and the sync operations.
 
+    Overlapped pipes are accepted too. The kernel ignores the offset
+    for them, so each operation reads or writes the stream in order
+    of arrival.
+
     @par Ownership
     `assign()` takes ownership and `close()` closes the handle.
     `release()` hands it back. The handle is detached from this
-    context's completion port only if no operation is pending.
-    Windows refuses to detach a handle while a cancelled operation's
-    completion is still queued. A handle released with I/O in flight
+    context's completion port only if no operation is in flight,
+    since a completion still pending would otherwise be lost or
+    reach the wrong port. A handle released with I/O in flight
     therefore stays bound, and adopting it into another `io_context`
-    fails with `errc::invalid_argument`. Such a handle must not be
-    used for overlapped I/O that posts to a completion port while
-    this `io_context` lives. Release an idle handle to move it
-    between contexts.
+    fails with `errc::invalid_argument`; see the next paragraph for
+    using it yourself. Release an idle handle to move it between
+    contexts.
+
+    While the handle is bound to a completion port, every overlapped
+    call on it queues a packet to that port. Do not issue your own
+    overlapped I/O on it (`ConnectNamedPipe`, `WaitCommEvent`,
+    `DeviceIoControl`) unless the `OVERLAPPED`'s `hEvent` has its
+    low-order bit set, which suppresses the packet. Connect a pipe
+    server before `assign()`.
 
     @par Concurrency
     Any number of `read_some_at()` and `write_some_at()` operations
@@ -306,15 +316,19 @@ public:
 
         The object becomes not-open and pending operations are
         cancelled. The handle is detached from this context's
-        completion port only if no operation is pending. Windows
-        refuses to detach a handle while a cancelled operation's
-        completion is still queued. A handle released with I/O in
-        flight therefore stays bound, and adopting it into another
-        `io_context` fails with `errc::invalid_argument`. Such a
-        handle must not be used for overlapped I/O that posts to a
-        completion port while this `io_context` lives. Release an
-        idle handle to move it between contexts. The caller is
-        responsible for closing the result.
+        completion port only if no operation is in flight. A handle
+        released with I/O in flight therefore stays bound, and
+        adopting it into another `io_context` fails with
+        `errc::invalid_argument`; see the next paragraph for using it
+        yourself. Release an idle handle to move it between contexts.
+        The caller is responsible for closing the result.
+
+        While the handle is bound to a completion port, every
+        overlapped call on it queues a packet to that port. Do not
+        issue your own overlapped I/O on it (`ConnectNamedPipe`,
+        `WaitCommEvent`, `DeviceIoControl`) unless the `OVERLAPPED`'s
+        `hEvent` has its low-order bit set, which suppresses the
+        packet. Connect a pipe server before `assign()`.
 
         @return The native handle.
 

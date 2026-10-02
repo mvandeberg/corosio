@@ -118,6 +118,23 @@ make_pipe_pair(bool message_mode = false)
     return p;
 }
 
+/// Like make_pipe_pair, but the client end is overlapped (the end tests
+/// adopt) and the server end is driven directly by the test.
+inline pipe_pair
+make_pipe_pair_overlapped_client()
+{
+    auto const name = L"\\\\.\\pipe\\corosio_test_" + unique_suffix();
+    pipe_pair p;
+    p.server = unique_handle(::CreateNamedPipeW(
+        name.c_str(), PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE,
+        PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT, 1, 4096, 4096, 0,
+        nullptr));
+    p.client = unique_handle(::CreateFileW(
+        name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
+        OPEN_EXISTING, FILE_FLAG_OVERLAPPED, nullptr));
+    return p;
+}
+
 /// A temp-directory path removed on destruction.
 struct temp_path
 {

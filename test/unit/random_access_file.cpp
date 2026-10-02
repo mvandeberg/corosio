@@ -55,6 +55,8 @@
 #endif
 
 #if BOOST_COROSIO_HAS_IOCP
+#include <boost/corosio/win_random_access_handle.hpp>
+#include <winioctl.h>
 #include "win_test_handles.hpp"
 #endif
 
@@ -823,6 +825,80 @@ struct random_access_file_test
         BOOST_TEST(on_strand);
     }
 
+    void testOffsetAbove4GiB()
+    {
+        temp_file tmp("raf_4gib_", "");
+#if BOOST_COROSIO_HAS_IOCP
+        {
+            // Without the sparse flag NTFS allocates the whole 5 GiB. Set
+            // it through a synchronous handle; the one f holds is bound
+            // to the completion port.
+            test::unique_handle s(::CreateFileW(
+                tmp.path.c_str(), GENERIC_READ | GENERIC_WRITE,
+                FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS,
+                FILE_ATTRIBUTE_NORMAL, nullptr));
+            DWORD ret = 0;
+            BOOST_TEST(::DeviceIoControl(
+                s.get(), FSCTL_SET_SPARSE, nullptr, 0, nullptr, 0, &ret,
+                nullptr));
+        }
+#endif
+        io_context ioc(Backend);
+        random_access_file f(ioc);
+        BOOST_TEST(!f.open(tmp.path, file_base::read_write));
+        std::uint64_t const off = (std::uint64_t(5) << 30) + 7;
+
+        std::error_code wec, rec;
+        char out[4] = {'w', 'x', 'y', 'z'};
+        char in[4]  = {};
+        auto t      = [&]() -> capy::task<> {
+            auto [e1, n1] =
+                co_await f.write_some_at(off, capy::const_buffer(out, 4));
+            wec = e1;
+            (void)n1;
+            auto [e2, n2] =
+                co_await f.read_some_at(off, capy::mutable_buffer(in, 4));
+            rec = e2;
+            (void)n2;
+        };
+        capy::run_async(ioc.get_executor())(t());
+        ioc.run();
+
+        BOOST_TEST(!wec);
+        BOOST_TEST(!rec);
+        BOOST_TEST(std::memcmp(in, out, 4) == 0);
+    }
+
+#if BOOST_COROSIO_HAS_IOCP
+    // A positional read on a regular file completes too fast to cancel,
+    // so this pins the concurrent model's stop-token path on a pipe.
+    void testStopTokenCancelsReadAt()
+    {
+        io_context ioc(Backend);
+        win_random_access_handle h(ioc);
+        auto p = test::make_pipe_pair();
+        BOOST_TEST(!h.assign(test::as_native(p.server.release())));
+
+        std::stop_source ss;
+        std::error_code ec;
+        char buf[8]{};
+        auto reader = [&]() -> capy::task<> {
+            auto [e, n] = co_await h.read_some_at(
+                0, capy::mutable_buffer(buf, sizeof(buf)));
+            ec = e;
+            (void)n;
+        };
+        auto stopper = [&]() -> capy::task<> {
+            ss.request_stop();
+            co_return;
+        };
+        capy::run_async(ioc.get_executor(), ss.get_token())(reader());
+        capy::run_async(ioc.get_executor())(stopper());
+        ioc.run();
+        BOOST_TEST(ec == capy::cond::canceled);
+    }
+#endif
+
     void run()
     {
         testResumesOnAwaitingExecutor();
@@ -872,10 +948,12 @@ struct random_access_file_test
         testAssignRejectsSynchronousHandle();
         testFailedAssignKeepsHeldFileIocp();
         testReleaseDetachesForReadoption();
+        testStopTokenCancelsReadAt();
 #endif
         testWrongDirectionIoFails();
         testResizeReadOnlyFails();
         testAssignOverOpenAdopts();
+        testOffsetAbove4GiB();
         testOpenSyncAllOnWrite();
         testOpenExclusiveExistingFails();
         testOpenExclusiveNewFile();

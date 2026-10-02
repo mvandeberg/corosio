@@ -15,6 +15,7 @@
 #if BOOST_COROSIO_HAS_IOCP
 
 #include <boost/corosio/detail/buffer_param.hpp>
+#include <boost/corosio/detail/dispatch_coro.hpp>
 #include <boost/corosio/detail/intrusive.hpp>
 #include <boost/corosio/detail/native_handle.hpp>
 #include <boost/corosio/native/detail/coro_op_complete.hpp>
@@ -29,12 +30,14 @@
 #include <boost/capy/ex/executor_ref.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <coroutine>
 #include <cstdint>
 #include <memory>
 #include <mutex>
 #include <stop_token>
 #include <system_error>
+#include <vector>
 
 /* The overlapped-handle core shared by stream_file, random_access_file,
    win_stream_handle and win_random_access_handle.
@@ -53,8 +56,9 @@ namespace boost::corosio::detail {
 
 /** Map a handle completion code to what decode_io_result expects.
 
-    On reads, end of data (`ERROR_HANDLE_EOF`, and `ERROR_BROKEN_PIPE`
-    once a pipe's writer is gone) becomes zero, so a zero-byte read
+    On reads, end of data (`ERROR_HANDLE_EOF`, `ERROR_BROKEN_PIPE`
+    once a pipe's writer is gone, or `ERROR_PIPE_NOT_CONNECTED` after
+    the server disconnects) becomes zero, so a zero-byte read
     decodes as eof, and `ERROR_MORE_DATA` (a partial message on a
     message-mode pipe) becomes a successful partial read. Socket ops
     never pass through here: on a datagram socket `ERROR_MORE_DATA`
@@ -65,7 +69,7 @@ normalize_handle_error(DWORD err, bool is_read) noexcept
 {
     if (is_read &&
         (err == ERROR_HANDLE_EOF || err == ERROR_BROKEN_PIPE ||
-         err == ERROR_MORE_DATA))
+         err == ERROR_PIPE_NOT_CONNECTED || err == ERROR_MORE_DATA))
         return 0;
     return err;
 }
@@ -89,9 +93,20 @@ public:
 
     void close_all() noexcept
     {
-        std::lock_guard<win_mutex> lock(mutex_);
-        for (auto* s = list_.pop_front(); s != nullptr; s = list_.pop_front())
-            s->close_handle();
+        // A state whose last owner is mid-destruction cannot be pinned;
+        // it is blocked in remove() on this mutex and closes itself.
+        // Pins are released outside the lock, since dropping the last
+        // one runs a destructor that calls remove().
+        std::vector<std::shared_ptr<State>> pins;
+        {
+            std::lock_guard<win_mutex> lock(mutex_);
+            for (auto* s = list_.pop_front(); s != nullptr;
+                 s       = list_.pop_front())
+                if (auto pin = s->weak_from_this().lock())
+                    pins.push_back(std::move(pin));
+        }
+        for (auto& p : pins)
+            p->close_handle();
     }
 
 private:
@@ -219,21 +234,34 @@ protected:
             return ec;
         if (!::CreateIoCompletionPort(
                 h, static_cast<HANDLE>(sched_.native_handle()), key_io, 0))
-            return iocp_make_err(::GetLastError(), /*accept_path=*/false);
+        {
+            DWORD const err = ::GetLastError();
+            // Already bound to another port. Mapped here because the
+            // system_category -> errc mapping of 87 differs by toolchain.
+            if (err == ERROR_INVALID_PARAMETER)
+                return std::make_error_code(std::errc::invalid_argument);
+            return iocp_make_err(err, /*accept_path=*/false);
+        }
         return {};
     }
 
-    /// Cancel kernel I/O and unbind from the port; returns the handle.
-    HANDLE detach() noexcept
+    /** Cancel kernel I/O and unbind from the port; returns the handle.
+
+        @param idle True when no op of this handle is in flight.
+    */
+    HANDLE detach(bool idle) noexcept
     {
         HANDLE h = handle_;
         handle_  = INVALID_HANDLE_VALUE;
         if (h != INVALID_HANDLE_VALUE)
         {
             ::CancelIoEx(h, nullptr);
-            // Best effort: without it a later adopt fails with
-            // invalid_argument, which release() documents.
-            dissociate_from_iocp(h);
+            // Dissociating with a completion still pending would lose it
+            // or deliver it to the next adopter's port. Stay bound; a
+            // later adopt fails with invalid_argument, which release()
+            // documents.
+            if (idle)
+                dissociate_from_iocp(h);
         }
         return h;
     }
@@ -364,24 +392,38 @@ public:
         HANDLE h = reinterpret_cast<HANDLE>(nh);
         if (auto ec = check_and_register(h, kind))
             return ec;
+        generation_.fetch_add(1, std::memory_order_acq_rel);
         cancel();
         close_handle();
         handle_ = h;
-        offset_ = 0;
+        offset_.store(0, std::memory_order_release);
         return {};
     }
 
     native_handle_type release() noexcept
     {
+        generation_.fetch_add(1, std::memory_order_acq_rel);
         rd_.request_cancel();
         wr_.request_cancel();
-        offset_ = 0;
-        return reinterpret_cast<native_handle_type>(detach());
+        offset_.store(0, std::memory_order_release);
+        bool const idle = !rd_.in_flight.load(std::memory_order_acquire) &&
+            !wr_.in_flight.load(std::memory_order_acquire);
+        return reinterpret_cast<native_handle_type>(detach(idle));
+    }
+
+    /// Close the handle; completions still queued no longer move the position.
+    void close_handle() noexcept
+    {
+        generation_.fetch_add(1, std::memory_order_acq_rel);
+        win_handle_base::close_handle();
     }
 
 protected:
     struct slot_op : handle_io_op
     {
+        std::atomic<bool> in_flight{false};
+        std::uint32_t generation = 0;
+
         slot_op() noexcept : handle_io_op(&do_complete) {}
 
         static void do_complete(
@@ -391,6 +433,7 @@ protected:
             std::uint32_t /*error*/)
         {
             auto* op = static_cast<slot_op*>(base);
+            op->in_flight.store(false, std::memory_order_release);
             if (!owner)
             {
                 op->cleanup_only();
@@ -399,9 +442,14 @@ protected:
             }
 
             auto* self = static_cast<win_slot_handle*>(op->owner);
+            // A completion from before assign()/release() belongs to the
+            // old handle; its byte count must not move the new position.
             if (self->track_offset_ && op->dwError == 0 &&
-                op->bytes_transferred > 0)
-                self->offset_ += op->bytes_transferred;
+                op->bytes_transferred > 0 &&
+                self->generation_.load(std::memory_order_acquire) ==
+                    op->generation)
+                self->offset_.fetch_add(
+                    op->bytes_transferred, std::memory_order_acq_rel);
 
             op->dwError = normalize_handle_error(op->dwError, op->is_read);
             auto prevent_premature_destruction = std::move(op->keep_alive);
@@ -430,13 +478,19 @@ protected:
         op.start(token);
 
         sched_.work_started();
-        start_io(op, track_offset_ ? offset_ : 0, param);
+        op.generation = generation_.load(std::memory_order_acquire);
+        op.in_flight.store(true, std::memory_order_release);
+        start_io(
+            op, track_offset_ ? offset_.load(std::memory_order_acquire) : 0,
+            param);
         return std::noop_coroutine();
     }
 
     slot_op rd_;
     slot_op wr_;
-    std::uint64_t offset_ = 0;
+    std::atomic<std::uint64_t> offset_{0};
+    // Bumped by assign(), release() and close; tags each op.
+    std::atomic<std::uint32_t> generation_{0};
     bool track_offset_;
 };
 
@@ -493,7 +547,12 @@ public:
     native_handle_type release() noexcept
     {
         request_cancel_all();
-        return reinterpret_cast<native_handle_type>(detach());
+        bool idle;
+        {
+            std::lock_guard<win_mutex> lock(ops_mutex_);
+            idle = outstanding_ops_.empty();
+        }
+        return reinterpret_cast<native_handle_type>(detach(idle));
     }
 
 protected:
@@ -501,10 +560,11 @@ protected:
         : handle_io_op
         , intrusive_list<concurrent_op>::node
     {
+        capy::continuation* user_cont = nullptr;
+
         concurrent_op() noexcept : handle_io_op(&do_complete) {}
 
-        // Resumes directly after deleting the op: dispatch_coro may post
-        // the embedded continuation, which a deleted op cannot outlive.
+        // The continuation lives in the awaitable, so the op can go first.
         static void do_complete(
             void* owner,
             scheduler_op* base,
@@ -536,9 +596,11 @@ protected:
                 op->is_read, static_cast<std::size_t>(op->bytes_transferred),
                 op->empty_buffer);
 
-            auto coro = op->h;
+            capy::continuation* c = op->user_cont;
+            c->h                  = op->h;
+            capy::executor_ref ex = op->ex;
             delete op;
-            coro.resume();
+            dispatch_coro(ex, *c).resume();
         }
     };
 
@@ -564,6 +626,7 @@ protected:
         op->reset();
         op->owner     = this;
         op->is_read   = is_read;
+        op->user_cont = &cont;
         op->h         = cont.h;
         op->ex        = ex;
         op->ec_out    = ec;

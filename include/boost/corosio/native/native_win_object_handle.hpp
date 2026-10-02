@@ -59,6 +59,7 @@ class native_win_object_handle : public win_object_handle
     struct native_wait_awaitable : detail::void_op_base<native_wait_awaitable>
     {
         native_win_object_handle& self_;
+        mutable capy::continuation cont_;
 
         explicit native_wait_awaitable(native_win_object_handle& self) noexcept
             : self_(self)
@@ -68,7 +69,9 @@ class native_win_object_handle : public win_object_handle
         std::coroutine_handle<>
         dispatch(std::coroutine_handle<> h, capy::executor_ref ex) const
         {
-            return self_.get_impl().wait(h, ex, this->token_, &this->ec_);
+            cont_.h = h;
+            return self_.get_impl().wait(
+                cont_, ex, this->token_, &this->ec_);
         }
     };
 
