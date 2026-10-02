@@ -236,9 +236,9 @@ posix_stream_file::do_read_work(pool_work_item* w) noexcept
         ssize_t n;
         do
         {
-            n = ::preadv(
+            n = file_preadv(
                 op.fd, op.iovecs, op.iovec_count,
-                static_cast<off_t>(op.offset));
+                static_cast<file_off_t>(op.offset));
         }
         while (n < 0 && errno == EINTR);
 
@@ -347,9 +347,9 @@ posix_stream_file::do_write_work(pool_work_item* w) noexcept
         ssize_t n;
         do
         {
-            n = ::pwritev(
+            n = file_pwritev(
                 op.fd, op.iovecs, op.iovec_count,
-                static_cast<off_t>(op.offset));
+                static_cast<file_off_t>(op.offset));
         }
         while (n < 0 && errno == EINTR);
 

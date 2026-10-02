@@ -316,7 +316,7 @@ posix_random_access_file::raf_op::do_work(pool_work_item* w) noexcept
     }
     else if (
         op->offset >
-        static_cast<std::uint64_t>(std::numeric_limits<off_t>::max()))
+        static_cast<std::uint64_t>(std::numeric_limits<file_off_t>::max()))
     {
         op->errn              = EOVERFLOW;
         op->bytes_transferred = 0;
@@ -328,9 +328,9 @@ posix_random_access_file::raf_op::do_work(pool_work_item* w) noexcept
         {
             do
             {
-                n = ::preadv(
+                n = file_preadv(
                     op->fd, op->iovecs, op->iovec_count,
-                    static_cast<off_t>(op->offset));
+                    static_cast<file_off_t>(op->offset));
             }
             while (n < 0 && errno == EINTR);
         }
@@ -338,9 +338,9 @@ posix_random_access_file::raf_op::do_work(pool_work_item* w) noexcept
         {
             do
             {
-                n = ::pwritev(
+                n = file_pwritev(
                     op->fd, op->iovecs, op->iovec_count,
-                    static_cast<off_t>(op->offset));
+                    static_cast<file_off_t>(op->offset));
             }
             while (n < 0 && errno == EINTR);
         }

@@ -26,6 +26,7 @@
 #include <boost/corosio/native/detail/coro_op.hpp>
 #include <boost/corosio/native/detail/coro_op_complete.hpp>
 #include <boost/corosio/native/detail/make_err.hpp>
+#include <boost/corosio/native/detail/posix/large_file.hpp>
 #include <boost/corosio/native/detail/validate_fd.hpp>
 #include <boost/capy/ex/executor_ref.hpp>
 #include <boost/capy/error.hpp>
@@ -204,7 +205,7 @@ posix_random_access_file::open_file(
         oflags |= O_SYNC;
     // Note: no O_APPEND for random access files
 
-    int fd = ::open(path.c_str(), oflags, 0666);
+    int fd = ::open(path.c_str(), oflags | large_file_open_flag, 0666);
     if (fd < 0)
         return make_err(errno);
 
@@ -230,8 +231,8 @@ posix_random_access_file::close_file() noexcept
 inline std::uint64_t
 posix_random_access_file::size() const
 {
-    struct stat st;
-    if (::fstat(fd_, &st) < 0)
+    file_stat_t st;
+    if (file_fstat(fd_, &st) < 0)
         throw_system_error(make_err(errno), "random_access_file::size");
     return static_cast<std::uint64_t>(st.st_size);
 }
@@ -240,9 +241,9 @@ inline std::error_code
 posix_random_access_file::resize(std::uint64_t new_size) noexcept
 {
     if (new_size >
-        static_cast<std::uint64_t>((std::numeric_limits<off_t>::max)()))
+        static_cast<std::uint64_t>((std::numeric_limits<file_off_t>::max)()))
         return make_err(EOVERFLOW);
-    if (::ftruncate(fd_, static_cast<off_t>(new_size)) < 0)
+    if (file_ftruncate(fd_, static_cast<file_off_t>(new_size)) < 0)
         return make_err(errno);
     return {};
 }

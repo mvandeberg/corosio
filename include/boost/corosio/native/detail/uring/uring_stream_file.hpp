@@ -21,6 +21,7 @@
 #include <boost/corosio/native/detail/uring/uring_file_service_base.hpp>
 #include <boost/corosio/native/detail/uring/uring_scheduler.hpp>
 #include <boost/corosio/native/detail/make_err.hpp>
+#include <boost/corosio/native/detail/posix/large_file.hpp>
 #include <boost/corosio/native/detail/validate_fd.hpp>
 #include <boost/corosio/stream_file.hpp>
 
@@ -120,18 +121,18 @@ public:
 
     std::uint64_t size() const override
     {
-        struct stat st;
-        if (::fstat(fd_, &st) < 0)
+        file_stat_t st;
+        if (file_fstat(fd_, &st) < 0)
             throw_system_error(make_err(errno), "stream_file::size");
         return static_cast<std::uint64_t>(st.st_size);
     }
 
     std::error_code resize(std::uint64_t new_size) noexcept override
     {
-        if (new_size >
-            static_cast<std::uint64_t>((std::numeric_limits<off_t>::max)()))
+        if (new_size > static_cast<std::uint64_t>(
+                           (std::numeric_limits<file_off_t>::max)()))
             return make_err(EOVERFLOW);
-        if (::ftruncate(fd_, static_cast<off_t>(new_size)) < 0)
+        if (file_ftruncate(fd_, static_cast<file_off_t>(new_size)) < 0)
             return make_err(errno);
         return {};
     }
@@ -191,8 +192,8 @@ public:
         else if (origin == file_base::seek_end)
             whence = SEEK_END;
 
-        off_t r = ::lseek(fd_, static_cast<off_t>(offset), whence);
-        if (r == static_cast<off_t>(-1))
+        file_off_t r = file_lseek(fd_, static_cast<file_off_t>(offset), whence);
+        if (r == static_cast<file_off_t>(-1))
             return {make_err(errno), 0};
         return {std::error_code{}, static_cast<std::uint64_t>(r)};
     }
@@ -227,7 +228,7 @@ public:
 
         oflags |= O_CLOEXEC;
 
-        int fd = ::open(path.c_str(), oflags, 0666);
+        int fd = ::open(path.c_str(), oflags | large_file_open_flag, 0666);
         if (fd < 0)
             return make_err(errno);
 

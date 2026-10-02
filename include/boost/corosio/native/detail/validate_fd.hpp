@@ -16,6 +16,7 @@
 #if BOOST_COROSIO_POSIX
 
 #include <boost/corosio/native/detail/make_err.hpp>
+#include <boost/corosio/native/detail/posix/large_file.hpp>
 
 #include <cerrno>
 #include <system_error>
@@ -92,8 +93,8 @@ validate_descriptor_fd(int fd) noexcept
     if (fd < 0)
         return make_err(EBADF);
 
-    struct stat st{};
-    if (::fstat(fd, &st) != 0)
+    file_stat_t st{};
+    if (file_fstat(fd, &st) != 0)
         return make_err(errno);
 
     // Regular files, block devices and directories are the province of
@@ -137,8 +138,8 @@ validate_file_fd(int fd) noexcept
     if (fd < 0)
         return make_err(EBADF);
 
-    struct stat st{};
-    if (::fstat(fd, &st) != 0)
+    file_stat_t st{};
+    if (file_fstat(fd, &st) != 0)
         return make_err(errno);
 
     switch (st.st_mode & S_IFMT)

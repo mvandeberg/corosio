@@ -26,6 +26,7 @@
 #include <boost/corosio/native/detail/coro_op.hpp>
 #include <boost/corosio/native/detail/coro_op_complete.hpp>
 #include <boost/corosio/native/detail/make_err.hpp>
+#include <boost/corosio/native/detail/posix/large_file.hpp>
 #include <boost/corosio/native/detail/validate_fd.hpp>
 #include <boost/capy/ex/executor_ref.hpp>
 #include <boost/capy/error.hpp>
@@ -253,7 +254,7 @@ posix_stream_file::open_file(
     if ((mode & file_base::sync_all_on_write) != file_base::flags(0))
         oflags |= O_SYNC;
 
-    int fd = ::open(path.c_str(), oflags, 0666);
+    int fd = ::open(path.c_str(), oflags | large_file_open_flag, 0666);
     if (fd < 0)
         return make_err(errno);
 
@@ -264,8 +265,8 @@ posix_stream_file::open_file(
     // explicit offsets, so O_APPEND alone is not sufficient).
     if ((mode & file_base::append) != file_base::flags(0))
     {
-        struct stat st;
-        if (::fstat(fd, &st) < 0)
+        file_stat_t st;
+        if (file_fstat(fd, &st) < 0)
         {
             int err = errno;
             ::close(fd);
@@ -303,8 +304,8 @@ posix_stream_file::close_file() noexcept
 inline std::uint64_t
 posix_stream_file::size() const
 {
-    struct stat st;
-    if (::fstat(fd_, &st) < 0)
+    file_stat_t st;
+    if (file_fstat(fd_, &st) < 0)
         throw_system_error(make_err(errno), "stream_file::size");
     return static_cast<std::uint64_t>(st.st_size);
 }
@@ -313,9 +314,9 @@ inline std::error_code
 posix_stream_file::resize(std::uint64_t new_size) noexcept
 {
     if (new_size >
-        static_cast<std::uint64_t>((std::numeric_limits<off_t>::max)()))
+        static_cast<std::uint64_t>((std::numeric_limits<file_off_t>::max)()))
         return make_err(EOVERFLOW);
-    if (::ftruncate(fd_, static_cast<off_t>(new_size)) < 0)
+    if (file_ftruncate(fd_, static_cast<file_off_t>(new_size)) < 0)
         return make_err(errno);
     return {};
 }
@@ -395,8 +396,8 @@ posix_stream_file::seek(
     }
     else
     {
-        struct stat st;
-        if (::fstat(fd_, &st) < 0)
+        file_stat_t st;
+        if (file_fstat(fd_, &st) < 0)
             return {make_err(errno), 0};
         new_pos = st.st_size + offset;
     }
@@ -404,7 +405,7 @@ posix_stream_file::seek(
     if (new_pos < 0)
         return {make_err(EINVAL), 0};
     if (new_pos >
-        static_cast<std::int64_t>((std::numeric_limits<off_t>::max)()))
+        static_cast<std::int64_t>((std::numeric_limits<file_off_t>::max)()))
         return {make_err(EOVERFLOW), 0};
 
     offset_ = static_cast<std::uint64_t>(new_pos);
