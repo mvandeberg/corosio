@@ -142,19 +142,6 @@ report_poll_masks(tcp_socket& s)
     }
 }
 
-// Run into the reset, so the socket has a chance to record it where
-// SO_ERROR will report it. A connection the provider has flagged
-// through the poll does not necessarily have an error waiting there
-// for anyone who has not touched it since.
-void
-touch_after_reset(tcp_socket& s)
-{
-    auto const fd = static_cast<SOCKET>(s.native_handle());
-    char byte     = '!';
-    for (int i = 0; i < 2; ++i)
-        std::ignore = ::send(fd, &byte, 1, 0);
-}
-
 } // namespace
 
 /* Faults on the IOCP backend itself: the scheduler, its completion
