@@ -33,6 +33,7 @@
 #include <utility>
 
 #include <errno.h>
+#include <sys/stat.h>
 #include <sys/uio.h>
 #include <unistd.h>
 
@@ -138,7 +139,17 @@ struct reactor_descriptor_wait_op final
             err = EBADF;
         else if (pfd.revents & (POLLERR | POLLHUP))
             err = EIO;
+        else if (is_fifo(fd))
+            // Darwin reports POLLPRI on a pipe that merely holds data;
+            // a FIFO has no exceptional condition to signal.
+            return false;
         return true;
+    }
+
+    static bool is_fifo(int fd) noexcept
+    {
+        struct stat st;
+        return ::fstat(fd, &st) == 0 && S_ISFIFO(st.st_mode);
     }
 
     void perform_io() noexcept override
