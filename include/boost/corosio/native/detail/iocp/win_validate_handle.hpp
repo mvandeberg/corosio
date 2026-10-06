@@ -251,9 +251,11 @@ validate_object_handle(HANDLE h) noexcept
 
     // Waitable kinds the pool can satisfy without side effects on a
     // thread the coroutine does not own. Mutant (a mutex) is excluded
-    // for that reason; anything else is not a meaningful wait.
+    // for that reason. File is excluded because a file object signals
+    // on any I/O completion; console input and change notifications
+    // are File objects and need their own handling.
     static constexpr std::wstring_view accepted[] = {
-        L"Process", L"Thread", L"Event", L"Semaphore", L"Timer"};
+        L"Process", L"Thread", L"Event", L"Semaphore", L"Timer", L"Job"};
     std::wstring_view const type_name(
         name.Buffer, name.Length / sizeof(wchar_t));
     bool ok = false;

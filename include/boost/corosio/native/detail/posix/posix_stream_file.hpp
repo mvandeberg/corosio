@@ -344,6 +344,9 @@ posix_stream_file::sync_all() noexcept
 inline native_handle_type
 posix_stream_file::release()
 {
+    // A queued op has already copied the fd number; it must not run
+    // after the caller closes it and the number is recycled.
+    cancel();
     bump_generation();
     int fd  = fd_;
     fd_     = -1;

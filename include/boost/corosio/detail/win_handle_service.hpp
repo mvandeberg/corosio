@@ -40,9 +40,8 @@ public:
 
     /** Adopt an existing handle.
 
-        Validates and registers before mutating: on failure the
-        implementation keeps its previous handle and pending
-        operations, and the caller retains ownership of @a h.
+        The implementation is closed. On failure it stays closed and
+        the caller retains ownership of @a h.
 
         @param impl The implementation to assign to.
         @param h The native handle to adopt.
@@ -67,9 +66,8 @@ public:
 
     /** Adopt an existing handle.
 
-        Validates and registers before mutating: on failure the
-        implementation keeps its previous handle and pending
-        operations, and the caller retains ownership of @a h.
+        The implementation is closed. On failure it stays closed and
+        the caller retains ownership of @a h.
 
         @param impl The implementation to assign to.
         @param h The native handle to adopt.
@@ -95,9 +93,8 @@ public:
 
     /** Adopt an existing waitable handle.
 
-        Validates before mutating: on failure the implementation keeps
-        its previous handle and pending wait, and the caller retains
-        ownership of @a h.
+        The implementation is closed. On failure it stays closed and
+        the caller retains ownership of @a h.
 
         @param impl The implementation to assign to.
         @param h The native handle to adopt.

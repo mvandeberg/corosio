@@ -360,6 +360,30 @@ struct uring_descriptor_continue_test
         BOOST_TEST_EQ(op.res, -ECANCELED);
     }
 
+    void testInterruptedTransferAfterCancelReportsCanceled()
+    {
+        // A blocking transfer that io_uring punted to an io-wq worker
+        // is interrupted by the cancel and comes back as -EINTR. The
+        // caller asked for the cancel, so it is owed canceled.
+        uring_descriptor_test_context ctx;
+        auto d = std::make_shared<detail::uring_descriptor>(ctx.scheduler());
+
+        detail::uring_descriptor_read_op op;
+        arm(*d, op);
+        op.res = -EINTR;
+        d->cancel();
+
+        BOOST_TEST(!detail::uring_descriptor_continue(op));
+        BOOST_TEST_EQ(op.res, -ECANCELED);
+
+        // Without a cancel, -EINTR is the kernel's answer; leave it.
+        detail::uring_descriptor_read_op plain;
+        arm(*d, plain);
+        plain.res = -EINTR;
+        BOOST_TEST(!detail::uring_descriptor_continue(plain));
+        BOOST_TEST_EQ(plain.res, -EINTR);
+    }
+
     void run()
     {
         testCancelledMidPollDoesNotReportRevents();
@@ -372,6 +396,7 @@ struct uring_descriptor_continue_test
         testPrepAfterDescriptorChangeSubmitsNop();
         testBytesBeatCancel();
         testSqFullPollAfterCancelReportsCanceled();
+        testInterruptedTransferAfterCancelReportsCanceled();
     }
 };
 

@@ -1274,6 +1274,68 @@ struct stream_file_test
         BOOST_TEST(std::memcmp(buf, "OLDOLDOLD", 9) == 0);
         ::close(fd2);
     }
+
+    // release() cancels a write queued on the pool. The op has already
+    // copied the fd number, so without the cancel it would write into
+    // whatever the caller next opens on that number.
+    void testReleaseCancelsQueuedWrite()
+    {
+#if BOOST_COROSIO_HAS_URING
+        // No pool on io_uring; this pins the POSIX pool path.
+        if constexpr (
+            std::is_same_v<std::remove_const_t<decltype(Backend)>, uring_t>)
+            return;
+#endif
+        temp_file tmp1("sf_release_queued_a_", "OLDOLDOLD");
+        temp_file tmp2("sf_release_queued_b_", "NEWNEWNEW");
+
+        // blocker must outlive ioc; see testAssignKeepsQueuedRead.
+        test::pool_blocker blocker;
+        io_context ioc(Backend);
+        BOOST_TEST(test::park_pool_worker(ioc, blocker));
+
+        stream_file f(ioc);
+        BOOST_TEST(!f.open(tmp1.path, file_base::read_write));
+
+        bool resumed              = false;
+        std::error_code result_ec = {};
+
+        auto writer = [&]() -> capy::task<> {
+            auto [ec, n] =
+                co_await f.write_some(capy::const_buffer("XXXXXXXXX", 9));
+            std::ignore  = n;
+            result_ec    = ec;
+            resumed      = true;
+        };
+
+        std::optional<io_context::executor_type> ex;
+        std::optional<capy::io_env> env;
+        std::optional<capy::task<>> parked;
+        ex.emplace(ioc.get_executor());
+        env.emplace(capy::io_env{*ex, std::stop_token{}, nullptr});
+        parked.emplace(writer());
+        // Queues the write behind the parked worker.
+        parked->await_suspend(std::noop_coroutine(), &*env).resume();
+
+        // Recycle the released number onto the other file.
+        int raw = static_cast<int>(f.release());
+        int fd2 = ::open(tmp2.path.c_str(), O_RDWR);
+        BOOST_TEST(fd2 >= 0);
+        BOOST_TEST_EQ(::dup2(fd2, raw), raw);
+        ::close(fd2);
+
+        blocker.release();
+        ioc.run();
+        ::close(raw);
+
+        BOOST_TEST(resumed);
+        BOOST_TEST(result_ec == capy::cond::canceled);
+        std::ifstream ifs(tmp2.path, std::ios::binary);
+        std::string contents(
+            (std::istreambuf_iterator<char>(ifs)),
+            std::istreambuf_iterator<char>());
+        BOOST_TEST(contents == "NEWNEWNEW");
+    }
 #endif
 
     void testReassignDuringInFlightReadKeepsNewOffset()
@@ -1433,6 +1495,7 @@ struct stream_file_test
         testDestroyWithPoolWorkQueued();
         testReadWriteAfterPoolShutdown();
         testAssignKeepsQueuedRead();
+        testReleaseCancelsQueuedWrite();
 #endif
         testReassignDuringInFlightReadKeepsNewOffset();
 

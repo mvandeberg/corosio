@@ -42,11 +42,14 @@
    advances) the descriptor's own file position. The file services
    pass a real offset; a pipe, tty or character device has none.
 
-   The descriptor's flags are never modified. A transfer on a blocking
-   fd parks in the kernel and stays cancellable by ASYNC_CANCEL, as
-   asio relies on. A caller who made the fd non-blocking gets EAGAIN
-   completions, which the two-phase shape below turns into a poll and
-   a retry.
+   The descriptor's flags are never modified, as in asio. A transfer
+   on a blocking fd the kernel can poll parks in its internal poll and
+   ASYNC_CANCEL removes it. One the kernel punts to an io-wq worker
+   (no poll support, or no FMODE_NOWAIT) holds that worker; the cancel
+   interrupts it only if the driver's wait is interruptible, and the
+   resulting -EINTR is reported as canceled. A caller who made the fd
+   non-blocking gets EAGAIN completions, which the two-phase shape
+   below turns into a poll and a retry.
 
    An O_NONBLOCK descriptor the kernel cannot retry internally
    completes with -EAGAIN; the op then re-arms itself as a poll_add on
@@ -466,9 +469,12 @@ uring_descriptor_continue(Op& op) noexcept
         : (op.res == -EAGAIN || op.res == -EWOULDBLOCK);
     if (!rearm)
     {
-        // A poll the full SQ never took comes back as -EAGAIN; one
-        // abandoned meanwhile is owed canceled, as above.
-        if (op.polling && op.res == -EAGAIN && uring_descriptor_abandoned(op))
+        // A poll the full SQ never took comes back as -EAGAIN, and a
+        // transfer the cancel interrupted in an io-wq worker as -EINTR;
+        // either one abandoned meanwhile is owed canceled, as above.
+        bool const interrupted =
+            op.polling ? op.res == -EAGAIN : op.res == -EINTR;
+        if (interrupted && uring_descriptor_abandoned(op))
             op.res = -ECANCELED;
         return false;
     }

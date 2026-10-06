@@ -157,6 +157,11 @@ public:
 
     native_handle_type release() override
     {
+        // Flush the cancel while the fd is still open, so the kernel
+        // resolves it before the caller can close and recycle the
+        // number.
+        if (fd_ >= 0)
+            sched_->cancel_and_flush(fd_);
         int fd = fd_;
         fd_    = -1;
         return fd;

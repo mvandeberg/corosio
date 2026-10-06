@@ -140,6 +140,7 @@ reports exactly the original's readiness. Corosio closing the
 duplicate can never close the original. This is the same rule
 xref:4.guide/4r.wait.adoc[Readiness Wait] states for adopted sockets.
 
+[#descriptor-flags]
 === Descriptor Flags
 
 [WARNING]
@@ -148,6 +149,13 @@ On epoll, kqueue and select, `O_NONBLOCK` is set on the first
 `read_some()` or `write_some()` and never restored. On io_uring nothing
 is ever modified. `assign()` and `wait()` never modify the descriptor on
 any backend.
+
+Leaving the descriptor blocking has a cost on io_uring. A transfer the
+kernel cannot complete through its internal poll, such as on a device
+without poll support, waits in a kernel worker thread. Each such
+operation holds one worker until it completes. Cancellation reaches it
+only if the driver's wait is interruptible, and then completes it with
+`capy::error::canceled`.
 
 The flag lives on the shared open file description, not on the
 descriptor, so every other holder of that description sees it.
@@ -230,14 +238,22 @@ refusal.
 io_uring:: There is no adopt-time registration syscall, so `assign()`
 succeeds and a refusal appears at the first operation instead.
 
+select:: Nothing is registered with the kernel, so there is no refusal
+to report.
+
 Whichever way `assign()` fails, the descriptor you passed is still
 yours to close.
 
 Character devices that no reactor can watch, such as `/dev/null`,
 `/dev/zero` and `/dev/urandom`, are adopted on every backend. Their
-I/O never blocks. An operation on one that would have to wait for
-readiness completes with `errc::operation_not_supported` instead of
-waiting forever.
+I/O never blocks. On epoll, kqueue and select, an operation on one that
+would have to wait for readiness completes with
+`errc::operation_not_supported` instead of waiting forever. io_uring
+cannot tell such a device apart. On a blocking descriptor the operation
+waits in a kernel worker thread, as described under
+<<descriptor-flags>>. If the caller set `O_NONBLOCK` and the device
+keeps answering `EAGAIN`, the operation polls and retries on a CPU
+until it is cancelled. Prefer a reactor backend for such devices.
 
 `wait(wait_type::error)` is the one verb that is not uniform. A hangup
 or error condition that already holds completes it with
@@ -302,7 +318,7 @@ include::example$snippets/4s_native_handles_win.cpp[tag=assume_win]
 | Any number
 
 | cpp:win_object_handle[]
-| Waitable kernel objects: processes, threads, events, semaphores, waitable timers
+| Waitable kernel objects: processes, threads, events, semaphores, waitable timers, jobs
 | `wait()`
 | One wait
 |===
@@ -423,7 +439,7 @@ which apply the same checks on Windows.
 | Rejected
 | Not applicable
 
-| Any type other than process, thread, event, semaphore or waitable timer
+| Any type other than process, thread, event, semaphore, waitable timer, or job
 | Not applicable
 | Not applicable
 | Not applicable
@@ -471,12 +487,13 @@ without closing it. On the overlapped types, it also detaches the
 handle from the context's completion port. If an operation is still in
 flight, or Windows refuses the detach, `release()` throws and the object
 keeps the handle. Call it again once the cancelled operations have
-completed.
+completed. Detaching requires Windows 8.1 or later; on earlier versions
+`release()` on these types always throws `errc::operation_not_supported`.
 
 === Waiting on Kernel Objects
 
 cpp:win_object_handle[] awaits the signaled state of a process, a
-thread, an event, a semaphore, or a waitable timer. The Windows thread
+thread, an event, a semaphore, a waitable timer, or a job. The Windows thread
 pool carries the wait. The awaiting coroutine resumes on its executor as
 usual.
 
@@ -488,7 +505,10 @@ include::example$snippets/4s_native_handles_win.cpp[tag=wait_for_process,indent=
 ----
 
 `assign()` rejects a mutex. A satisfied mutex wait acquires the mutex on
-a pool thread, and the resuming coroutine would not own it. A handle
+a pool thread, and the resuming coroutine would not own it. It rejects
+file objects too, because a file object signals on any I/O completion.
+Console input handles and directory change notification handles are
+file objects, so they are rejected as well. A handle
 without `SYNCHRONIZE` access cannot be waited on, so it is rejected too,
 as are pseudo-handles such as `GetCurrentThread()` and every other
 object type. On an `io_context` whose locking mode is

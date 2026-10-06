@@ -37,7 +37,7 @@ namespace boost::corosio {
 /** Waits on an already-open Windows kernel object from an `io_context`.
 
     Wraps a waitable handle: a process or thread, an event, a
-    semaphore, or a waitable timer. A coroutine can await its
+    semaphore, a waitable timer, or a job. A coroutine can await its
     signaled state without blocking a thread. The handle must come
     from the caller and must carry `SYNCHRONIZE` access.
 
@@ -47,11 +47,14 @@ namespace boost::corosio {
     awaiting coroutine resumes on its executor as usual.
 
     @par Rejected Handles
-    Only processes, threads, events, semaphores and waitable timers
-    are accepted; any other object type is rejected with
+    Only processes, threads, events, semaphores, waitable timers and
+    jobs are accepted; any other object type is rejected with
     `errc::operation_not_supported`. Mutexes are excluded because a
     satisfied mutex wait acquires the mutex on a pool thread the
-    resuming coroutine does not own. Pseudo-handles such as
+    resuming coroutine does not own. File objects are excluded
+    because one signals on any I/O completion. Console input and
+    directory change notification handles are file objects, so they
+    are rejected too. Pseudo-handles such as
     `GetCurrentThread()` and handles without `SYNCHRONIZE` access
     are rejected the same way. Every handle is rejected on an
     `io_context` whose locking mode is `locking_mode::unsafe`,
@@ -202,9 +205,9 @@ public:
         @return `error::already_open` if this object is open.
             `errc::bad_file_descriptor` when @p h is null, invalid or
             closed. `errc::operation_not_supported` when @p h is a
-            pseudo-handle, an object type other than process, thread,
-            event, semaphore or waitable timer, lacks `SYNCHRONIZE`
-            access, or this `io_context` uses `locking_mode::unsafe`.
+            pseudo-handle, lacks `SYNCHRONIZE` access, or has a type
+            not listed above. The same when this `io_context` uses
+            `locking_mode::unsafe`.
             Otherwise an empty code.
 
         @par Exception Safety

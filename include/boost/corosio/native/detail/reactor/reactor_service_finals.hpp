@@ -432,6 +432,9 @@ class reactor_acceptor_service_impl
     }
 
 public:
+    static constexpr bool needs_park_notification =
+        Traits::needs_park_notification;
+
     std::error_code open_acceptor_socket(
         typename AccFinal::impl_base_type& impl,
         int family,

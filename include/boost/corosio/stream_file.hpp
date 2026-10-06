@@ -276,11 +276,12 @@ public:
         The file object becomes not-open. The caller is
         responsible for closing the returned handle.
 
-        On Windows, pending operations are cancelled first. If one is
-        still in flight, or Windows refuses to detach the handle from
-        this context's completion port, the object keeps the handle
-        and this throws. Call `release()` again once the cancelled
-        operations have completed.
+        Pending operations are cancelled first. On Windows, the object
+        keeps the handle and this throws if one is still in flight. It
+        does the same if Windows refuses to detach the handle from this
+        context's completion port. Call `release()` again once the
+        cancelled operations have completed. Detaching requires Windows 8.1 or
+        later.
 
         @return The native file descriptor or handle.
 

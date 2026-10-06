@@ -28,9 +28,8 @@ namespace boost::corosio::detail {
    from this class. The three reactor backends register the adopted
    fd with their reactor; uring has no adopt-time registration and
    only takes ownership of it.
-   The context constructor installs whichever backend via
-   make_service, and posix_stream_descriptor.cpp retrieves it via
-   create_handle<descriptor_service>().
+   posix_stream_descriptor.cpp creates the running backend's service
+   on first use via use_backend_service.
 */
 class BOOST_COROSIO_DECL descriptor_service
     : public capy::execution_context::service
@@ -42,8 +41,7 @@ public:
 
     /** Adopt an existing native descriptor.
 
-        Validates before mutating: on failure the implementation
-        keeps its previous descriptor and pending operations, and
+        The implementation is closed. On failure it stays closed and
         the caller retains ownership of @a fd. On success the
         implementation takes ownership and will close it.
 

@@ -75,7 +75,10 @@ namespace boost::corosio {
     `assign()` and `wait()` never modify the descriptor on any
     backend. On epoll, kqueue and select the first `read_some()` or
     `write_some()` sets `O_NONBLOCK` and never restores it. On
-    io_uring nothing is ever modified. The flag lives on the shared
+    io_uring nothing is ever modified. A transfer the kernel cannot
+    complete through its internal poll waits in a kernel worker
+    thread. Cancellation reaches it only if the driver's wait is
+    interruptible. The flag lives on the shared
     open file description, so restoring it would race every other
     holder. A
     `dup()` is no escape: the duplicate shares that same description,
@@ -90,8 +93,12 @@ namespace boost::corosio {
     @ref random_access_file adopt regular files and block devices. A
     directory is adoptable by no corosio type. A character device no
     reactor can watch, such as `/dev/null`, is adopted on every
-    backend. An operation on it that would have to wait for readiness
-    completes with `errc::operation_not_supported`. On select, a
+    backend. On epoll, kqueue and select an operation on it that
+    would have to wait for readiness completes with
+    `errc::operation_not_supported`. io_uring cannot tell such a
+    device apart, so the operation waits in a kernel worker thread.
+    If the caller set `O_NONBLOCK` and the device keeps answering
+    `EAGAIN`, it retries on a CPU until cancelled. On select, a
     descriptor at or above `FD_SETSIZE` is rejected with
     `errc::too_many_files_open`. Where a kernel refusal surfaces
     depends on the backend. The epoll and kqueue backends register the
@@ -103,6 +110,8 @@ namespace boost::corosio {
     with the kernel's refusal. The io_uring backend has no adopt-time
     registration, so `assign()` succeeds and takes ownership, and the
     refusal appears at the first `read_some()` or `write_some()`.
+    select registers nothing with the kernel, so it has no refusal to
+    report.
 
     @par Signals
     Writing to a descriptor whose peer has closed raises `SIGPIPE`

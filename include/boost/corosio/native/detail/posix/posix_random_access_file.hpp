@@ -271,6 +271,9 @@ posix_random_access_file::sync_all() noexcept
 inline native_handle_type
 posix_random_access_file::release()
 {
+    // A queued op has already copied the fd number; it must not run
+    // after the caller closes it and the number is recycled.
+    cancel();
     int fd = fd_;
     fd_    = -1;
     return fd;

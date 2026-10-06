@@ -214,8 +214,10 @@ The `unsafe` tier additionally makes:
 * **DNS resolution** return `operation_not_supported`.
 * **POSIX file I/O** (cpp:stream_file[], cpp:random_access_file[]) return
   `operation_not_supported` on `open()`.
+* cpp:win_object_handle[] return `operation_not_supported` on `assign()`.
+  The Windows thread pool completes its waits from a foreign thread.
 
-These two services stay available under `unsafe_io` because they rely
+These stay available under `unsafe_io` because they rely
 on scheduler locking, which that tier keeps enabled.
 
 [NOTE]

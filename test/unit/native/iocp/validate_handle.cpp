@@ -192,6 +192,22 @@ struct win_validate_handle_test
             std::errc::operation_not_supported);
     }
 
+    void testObjectJobAccepted()
+    {
+        test::unique_handle job(::CreateJobObjectW(nullptr, nullptr));
+        BOOST_TEST(job);
+        BOOST_TEST(!validate_object_handle(job.get()));
+    }
+
+    void testObjectFileRejected()
+    {
+        auto p = test::make_pipe_pair();
+        BOOST_TEST(p.server);
+        BOOST_TEST(
+            validate_object_handle(p.server.get()) ==
+            std::errc::operation_not_supported);
+    }
+
     void testObjectWithoutSynchronizeRejected()
     {
         test::unique_handle ev(::CreateEventW(nullptr, TRUE, FALSE, nullptr));
@@ -232,6 +248,8 @@ struct win_validate_handle_test
         testObjectEventKeepsSignal();
         testObjectSemaphoreKeepsCount();
         testObjectMutexRejected();
+        testObjectJobAccepted();
+        testObjectFileRejected();
         testObjectWithoutSynchronizeRejected();
         testObjectInvalid();
     }

@@ -131,10 +131,15 @@ include::example$snippets/4o_file_io.cpp[tag=native_adopt,indent=0]
 
 [NOTE]
 ====
-On Windows, `assign` requires a handle that has never been associated
-with an I/O completion port. A handle released from another Corosio
-file object is already associated and cannot be re-adopted there. On
-POSIX platforms no such restriction exists.
+On Windows, `assign` requires a handle that is not associated with an
+I/O completion port. `release()` detaches the handle from the context's
+port, so a handle released from another Corosio file object can be
+adopted again. While an operation is still in flight, `release()` throws
+`errc::device_or_resource_busy` and keeps the handle; call it again once
+the cancelled operations have completed. Detaching requires Windows 8.1
+or later. The handles Windows rejects are listed in
+xref:4.guide/4s.native-descriptors.adoc#windows-handles[Native
+Descriptors and Handles].
 ====
 
 On POSIX, `assign()` accepts only what a file object can position:

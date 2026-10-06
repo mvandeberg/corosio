@@ -136,6 +136,7 @@
 
 # --- Coined adjectives and nouns the guide uses ---------------------------------
 (?i)joinable
+(?i)interruptible
 (?i)pollable
 (?i)schedulable
 (?i)launchable

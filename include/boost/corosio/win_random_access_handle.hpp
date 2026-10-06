@@ -314,9 +314,9 @@ public:
         flight, or Windows refuses to detach the handle from this
         context's completion port, the object keeps the handle and
         this throws. Call `release()` again once the cancelled
-        operations have completed. On success the object becomes
-        not-open and the caller is responsible for closing the
-        result.
+        operations have completed. Detaching requires Windows 8.1 or
+        later. On success the object becomes not-open and the caller
+        is responsible for closing the result.
 
         @return The native handle.
 
