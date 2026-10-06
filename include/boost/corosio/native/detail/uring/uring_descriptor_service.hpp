@@ -28,7 +28,8 @@
    assign_descriptor is the reactor version minus the registration
    step: io_uring has no adopt-time registration syscall, so adoption
    cannot fail once validation has passed, and a kernel refusal
-   surfaces at the first operation instead.
+   surfaces at the first operation instead. It does probe whether the
+   kernel can poll the fd, which the reactors learn from registration.
 
    Lifecycle comes from uring_file_service_base, as asio's file service
    reuses its descriptor service.
@@ -65,7 +66,7 @@ public:
         if (auto ec = validate_descriptor_fd(fd))
             return ec;
 
-        impl->set_descriptor(fd);
+        impl->set_descriptor(fd, fd_is_pollable(fd));
         return {};
     }
 };

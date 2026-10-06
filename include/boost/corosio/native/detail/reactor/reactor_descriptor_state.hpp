@@ -301,7 +301,7 @@ reactor_descriptor_state::invoke_deferred_io()
             }
         }
         // Complete a parked wait-for-error on any error condition.
-        if ((ev & reactor_event_error) || err)
+        if (ev & reactor_event_error)
         {
             if (wait_error_op)
             {

@@ -246,14 +246,11 @@ yours to close.
 
 Character devices that no reactor can watch, such as `/dev/null`,
 `/dev/zero` and `/dev/urandom`, are adopted on every backend. Their
-I/O never blocks. On epoll, kqueue and select, an operation on one that
-would have to wait for readiness completes with
-`errc::operation_not_supported` instead of waiting forever. io_uring
-cannot tell such a device apart. On a blocking descriptor the operation
-waits in a kernel worker thread, as described under
-<<descriptor-flags>>. If the caller set `O_NONBLOCK` and the device
-keeps answering `EAGAIN`, the operation polls and retries on a CPU
-until it is cancelled. Prefer a reactor backend for such devices.
+I/O never blocks. An operation on one that would have to wait for
+readiness completes with `errc::operation_not_supported` instead of
+waiting forever. The exception is a transfer on io_uring when the
+descriptor is blocking: it waits in a kernel worker thread, as
+described under <<descriptor-flags>>.
 
 `wait(wait_type::error)` is the one verb that is not uniform. A hangup
 or error condition that already holds completes it with

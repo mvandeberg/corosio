@@ -1208,10 +1208,9 @@ struct stream_file_test
     }
 
 #if BOOST_COROSIO_POSIX
-    // A rejected assign() leaves a read queued on the pool alone:
-    // do_read_work reads fd_/offset_ at pool-execution time, so a
-    // disturbed fd_ would show up as the read completing against the
-    // other file.
+    // A rejected assign() leaves a read queued on the pool alone: a
+    // disturbed object would show up as the read completing against
+    // the other file.
     void testAssignKeepsQueuedRead()
     {
 #if BOOST_COROSIO_HAS_URING

@@ -93,12 +93,10 @@ namespace boost::corosio {
     @ref random_access_file adopt regular files and block devices. A
     directory is adoptable by no corosio type. A character device no
     reactor can watch, such as `/dev/null`, is adopted on every
-    backend. On epoll, kqueue and select an operation on it that
-    would have to wait for readiness completes with
-    `errc::operation_not_supported`. io_uring cannot tell such a
-    device apart, so the operation waits in a kernel worker thread.
-    If the caller set `O_NONBLOCK` and the device keeps answering
-    `EAGAIN`, it retries on a CPU until cancelled. On select, a
+    backend. An operation on it that would have to wait for
+    readiness completes with `errc::operation_not_supported`. The
+    exception is a transfer on io_uring when the descriptor is
+    blocking: it waits in a kernel worker thread instead. On select, a
     descriptor at or above `FD_SETSIZE` is rejected with
     `errc::too_many_files_open`. Where a kernel refusal surfaces
     depends on the backend. The epoll and kqueue backends register the

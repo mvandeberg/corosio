@@ -37,6 +37,7 @@
 #include <system_error>
 
 #include <errno.h>
+#include <fcntl.h>
 #include <poll.h>
 #include <unistd.h>
 
@@ -384,6 +385,37 @@ struct uring_descriptor_continue_test
         BOOST_TEST_EQ(plain.res, -EINTR);
     }
 
+    void testUnpollableEagainIsNotSupported()
+    {
+        // A file with no poll support is ready to every poll, so a
+        // re-armed poll would retry the transfer forever.
+        uring_descriptor_test_context ctx;
+        auto d = std::make_shared<detail::uring_descriptor>(ctx.scheduler());
+        d->set_descriptor(-1, /*pollable=*/false);
+
+        detail::uring_descriptor_read_op op;
+        arm(*d, op);
+        op.res = -EAGAIN;
+
+        BOOST_TEST(!detail::uring_descriptor_continue(op));
+        BOOST_TEST(!op.polling);
+        BOOST_TEST_EQ(op.res, -EOPNOTSUPP);
+    }
+
+    void testFdIsPollable()
+    {
+        int fds[2];
+        BOOST_TEST_EQ(::pipe(fds), 0);
+        BOOST_TEST(detail::fd_is_pollable(fds[0]));
+        ::close(fds[0]);
+        ::close(fds[1]);
+
+        int zero = ::open("/dev/zero", O_RDONLY);
+        BOOST_TEST(zero >= 0);
+        BOOST_TEST(!detail::fd_is_pollable(zero));
+        ::close(zero);
+    }
+
     void run()
     {
         testCancelledMidPollDoesNotReportRevents();
@@ -397,6 +429,8 @@ struct uring_descriptor_continue_test
         testBytesBeatCancel();
         testSqFullPollAfterCancelReportsCanceled();
         testInterruptedTransferAfterCancelReportsCanceled();
+        testUnpollableEagainIsNotSupported();
+        testFdIsPollable();
     }
 };
 

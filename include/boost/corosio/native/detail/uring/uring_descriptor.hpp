@@ -31,6 +31,7 @@
 
 #include <errno.h>
 #include <poll.h>
+#include <sys/epoll.h>
 #include <unistd.h>
 
 /* io_uring-backed implementation of posix_stream_descriptor.
@@ -49,7 +50,9 @@
    interrupts it only if the driver's wait is interruptible, and the
    resulting -EINTR is reported as canceled. A caller who made the fd
    non-blocking gets EAGAIN completions, which the two-phase shape
-   below turns into a poll and a retry.
+   below turns into a poll and a retry. A file with no poll support
+   is ready to every poll, so assign probes for it (fd_is_pollable)
+   and its EAGAIN fails with EOPNOTSUPP instead, as on the reactors.
 
    An O_NONBLOCK descriptor the kernel cannot retry internally
    completes with -EAGAIN; the op then re-arms itself as a poll_add on
@@ -195,6 +198,26 @@ struct uring_descriptor_write_op final : uring_file_write_op_base
     operation, so a descriptor must not have two operations of the
     same kind in flight.
 */
+/** Return whether the kernel can poll @p fd.
+
+    epoll refuses a file with no poll support with EPERM; io_uring
+    instead reports such a file ready to every poll. Nothing is left
+    registered and @p fd is not modified. When the probe itself fails,
+    the descriptor is assumed pollable.
+*/
+inline bool
+fd_is_pollable(int fd) noexcept
+{
+    int ep = ::epoll_create1(EPOLL_CLOEXEC);
+    if (ep < 0)
+        return true;
+    ::epoll_event ev{};
+    bool const pollable =
+        ::epoll_ctl(ep, EPOLL_CTL_ADD, fd, &ev) == 0 || errno != EPERM;
+    ::close(ep);
+    return pollable;
+}
+
 class BOOST_COROSIO_DECL uring_descriptor final
     : public posix_stream_descriptor::implementation
     , public std::enable_shared_from_this<uring_descriptor>
@@ -202,6 +225,7 @@ class BOOST_COROSIO_DECL uring_descriptor final
 {
     uring_scheduler* sched_ = nullptr;
     int fd_                 = -1;
+    bool pollable_          = true;
 
     // Bumped by cancel() and by every descriptor change. A transfer op
     // between its EAGAIN CQE and its dispatch is invisible to the ring;
@@ -331,6 +355,15 @@ public:
             return std::noop_coroutine();
         }
 
+        // Without poll support there is no error condition to watch;
+        // the kernel would refuse the poll with EINVAL.
+        if (w == wait_type::error && !pollable_)
+        {
+            op->res = -EOPNOTSUPP;
+            push_completed(op);
+            return std::noop_coroutine();
+        }
+
         if (op->cancelled.load(std::memory_order_acquire))
         {
             push_completed(op);
@@ -381,11 +414,20 @@ public:
     /** Adopt an already-validated descriptor.
 
         @param fd The descriptor to adopt.
+        @param pollable Whether the kernel can poll @p fd; see
+            @ref fd_is_pollable.
     */
-    void set_descriptor(int fd) noexcept
+    void set_descriptor(int fd, bool pollable = true) noexcept
     {
         epoch_.fetch_add(1, std::memory_order_release);
-        fd_ = fd;
+        fd_       = fd;
+        pollable_ = pollable;
+    }
+
+    /// Whether the kernel can poll the held descriptor.
+    bool pollable() const noexcept
+    {
+        return pollable_;
     }
 
     /// Teardown hook named by uring_file_service_base.
@@ -448,13 +490,6 @@ template<class Op>
 bool
 uring_descriptor_continue(Op& op) noexcept
 {
-    if (!op.desc)
-    {
-        if (op.polling && op.res >= 0)
-            op.res = -EBADF;
-        return false;
-    }
-
     // A NOP completed: the op was abandoned at prep.
     if (op.abandoned)
     {
@@ -484,6 +519,15 @@ uring_descriptor_continue(Op& op) noexcept
     if (uring_descriptor_abandoned(op))
     {
         op.res = -ECANCELED;
+        return false;
+    }
+
+    // A file with no poll support is ready to every poll, so arming
+    // one would retry the refused transfer on a CPU forever. The
+    // reactors report the same refusal.
+    if (!op.polling && !op.desc->pollable())
+    {
+        op.res = -EOPNOTSUPP;
         return false;
     }
     op.polling = !op.polling;

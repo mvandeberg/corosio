@@ -876,12 +876,19 @@ struct posix_stream_descriptor_test
 
     void testUnpollableWaitThatWouldParkIsNotSupported()
     {
-        // epoll adopts /dev/zero unwatched, so a wait the readiness
-        // probe cannot satisfy would park forever. kqueue, select and
-        // io_uring all watch /dev/zero, where this wait does park.
+        // epoll adopts /dev/zero unwatched and io_uring cannot poll it,
+        // so a wait the readiness probe cannot satisfy would park
+        // forever or fail with the kernel's EINVAL. kqueue and select
+        // watch /dev/zero, where this wait does park.
+        constexpr bool unwatched =
 #if BOOST_COROSIO_HAS_EPOLL
-        if constexpr (
-            std::is_same_v<std::remove_const_t<decltype(Backend)>, epoll_t>)
+            std::is_same_v<std::remove_const_t<decltype(Backend)>, epoll_t> ||
+#endif
+#if BOOST_COROSIO_HAS_URING
+            std::is_same_v<std::remove_const_t<decltype(Backend)>, uring_t> ||
+#endif
+            false;
+        if constexpr (unwatched)
         {
             io_context ioc(Backend);
             posix_stream_descriptor zero(ioc);
@@ -897,7 +904,6 @@ struct posix_stream_descriptor_test
 
             BOOST_TEST(ec == std::errc::operation_not_supported);
         }
-#endif
     }
 
     void testSelectFdSetsizeIsRejected()
