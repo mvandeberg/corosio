@@ -49,8 +49,8 @@ namespace boost::corosio {
     @par Ownership
     `assign()` takes ownership and `close()` closes the handle.
     `release()` detaches it from this context's completion port and
-    hands it back, or throws and keeps it while an operation is
-    still in flight.
+    hands it back. It throws and keeps the handle while an operation
+    is still in flight, or if Windows refuses the detach.
 
     While the handle is bound to a completion port, every overlapped
     call on it queues a packet to that port. Do not issue your own
@@ -106,6 +106,11 @@ public:
             ownership.
 
             @return The native handle.
+
+            @throws std::system_error `errc::device_or_resource_busy` if
+                an operation is still in flight, or
+                `errc::operation_not_supported` if the handle cannot be
+                detached. The handle stays owned on throw.
         */
         virtual native_handle_type release_handle() = 0;
 

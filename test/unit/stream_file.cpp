@@ -55,7 +55,6 @@
 #endif
 
 #if BOOST_COROSIO_HAS_IOCP
-#include <boost/corosio/win_stream_handle.hpp>
 #include "win_test_handles.hpp"
 #endif
 
@@ -864,32 +863,35 @@ struct stream_file_test
 
     void testFileReleaseWithPendingThrowsAndKeeps()
     {
-        // A disk-file read completes too fast to stay in flight, and
-        // stream_file rejects pipes, so win_stream_handle stands in.
-        // stream_file's release() runs the same code (win_slot_handle).
+        // A read is in flight until the run loop dequeues its packet,
+        // even when the disk finished it at once. poll_one() starts the
+        // reader, which issues the read, and stops there.
+        temp_file tmp("sf_relbusy_", "hello world");
         io_context a(Backend);
         io_context b(Backend);
-        win_stream_handle ha(a);
-        win_stream_handle hb(b);
-        auto p = test::make_pipe_pair();
-        BOOST_TEST(!ha.assign(test::as_native(p.server.release())));
-        native_handle_type const held = ha.native_handle();
+        stream_file fa(a);
+        stream_file fb(b);
+        BOOST_TEST(!fa.open(tmp.path, file_base::read_only));
+        auto [sec, spos] = fa.seek(6, file_base::seek_set);
+        BOOST_TEST(!sec);
+        BOOST_TEST_EQ(spos, 6u);
+        native_handle_type const held = fa.native_handle();
 
         std::error_code rec;
-        char buf[4];
+        char buf[8]{};
         auto reader = [&]() -> capy::task<> {
             auto [e, n] =
-                co_await ha.read_some(capy::mutable_buffer(buf, sizeof(buf)));
+                co_await fa.read_some(capy::mutable_buffer(buf, sizeof(buf)));
             rec = e;
             (void)n;
         };
         capy::run_async(a.get_executor())(reader());
-        a.poll(); // the read is now issued and pending
+        BOOST_TEST_EQ(a.poll_one(), 1u);
 
         bool threw = false;
         try
         {
-            (void)ha.release();
+            (void)fa.release();
         }
         catch (std::system_error const& e)
         {
@@ -897,11 +899,72 @@ struct stream_file_test
             BOOST_TEST(e.code() == std::errc::device_or_resource_busy);
         }
         BOOST_TEST(threw);
-        BOOST_TEST_EQ(ha.native_handle(), held);
+        BOOST_TEST(fa.is_open());
+        BOOST_TEST_EQ(fa.native_handle(), held);
+        // The failed release() left the position alone.
+        auto [pec, pos] = fa.seek(0, file_base::seek_cur);
+        BOOST_TEST(!pec);
+        BOOST_TEST_EQ(pos, 6u);
 
         a.run();
-        BOOST_TEST(rec == capy::cond::canceled);
-        BOOST_TEST(!hb.assign(ha.release()));
+        // The disk may have finished the read before the cancel reached
+        // it; a decided result is reported as is.
+        BOOST_TEST(!rec || rec == capy::cond::canceled);
+        BOOST_TEST(!fb.assign(fa.release()));
+        BOOST_TEST(!fa.is_open());
+        BOOST_TEST(fb.is_open());
+    }
+
+    void testReassignIgnoresStaleCompletion()
+    {
+        // close() and assign() run while the old read's packet is still
+        // queued. Its bytes came from the old file, so they must not
+        // move the new file's position.
+        temp_file ta("sf_stale_a_", "hello");
+        temp_file tb("sf_stale_b_", "WORLD");
+        io_context ioc(Backend);
+        native_handle_type rawb{};
+        {
+            stream_file t(ioc);
+            BOOST_TEST(!t.open(tb.path, file_base::read_only));
+            rawb = t.release();
+        }
+        stream_file f(ioc);
+        BOOST_TEST(!f.open(ta.path, file_base::read_only));
+
+        char old_buf[8]{};
+        auto old_reader = [&]() -> capy::task<> {
+            auto [e, n] = co_await f.read_some(
+                capy::mutable_buffer(old_buf, sizeof(old_buf)));
+            (void)e;
+            (void)n;
+        };
+        capy::run_async(ioc.get_executor())(old_reader());
+        BOOST_TEST_EQ(ioc.poll_one(), 1u);
+
+        f.close();
+        BOOST_TEST(!f.assign(rawb));
+        ioc.run();
+        ioc.restart();
+
+        auto [sec, pos] = f.seek(0, file_base::seek_cur);
+        BOOST_TEST(!sec);
+        BOOST_TEST_EQ(pos, 0u);
+
+        std::error_code ec;
+        std::size_t n = 0;
+        char buf[8]{};
+        auto reader = [&]() -> capy::task<> {
+            auto [rec, rn] =
+                co_await f.read_some(capy::mutable_buffer(buf, sizeof(buf)));
+            ec = rec;
+            n  = rn;
+        };
+        capy::run_async(ioc.get_executor())(reader());
+        ioc.run();
+        BOOST_TEST(!ec);
+        BOOST_TEST_EQ(n, 5u);
+        BOOST_TEST(std::memcmp(buf, "WORLD", 5) == 0);
     }
 #endif
 
@@ -1359,6 +1422,7 @@ struct stream_file_test
         testFailedAssignKeepsHeldFileIocp();
         testReleaseDetachesForReadoption();
         testFileReleaseWithPendingThrowsAndKeeps();
+        testReassignIgnoresStaleCompletion();
 #endif
         testSeekNegative();
         testCancelWithStoppedToken();

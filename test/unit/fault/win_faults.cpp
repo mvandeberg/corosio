@@ -700,9 +700,9 @@ struct win_common_faults
     /* Adoption of a handle the library did not open.
 
        The only thing it does is associate the handle with the
-       completion port, so a refusal there is its only failure. It
-       closes what the object held before it tries, which is why the
-       caller's handle is still theirs afterwards. ERROR_INVALID_PARAMETER
+       completion port, so a refusal there is its only failure. The
+       object is closed before and after, and the caller still owns
+       the handle afterwards. ERROR_INVALID_PARAMETER
        is mapped to invalid_argument explicitly, since the toolchains
        map 87 differently.
     */

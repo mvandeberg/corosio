@@ -979,6 +979,7 @@ struct random_access_file_test
         testAssignRejectsSynchronousHandle();
         testFailedAssignKeepsHeldFileIocp();
         testReleaseDetachesForReadoption();
+        testFileReleaseWithPendingThrowsAndKeeps();
         testStopTokenCancelsReadAt();
 #endif
         testWrongDirectionIoFails();
@@ -1151,6 +1152,53 @@ struct random_access_file_test
         ioc2.run();
         BOOST_TEST(!ec);
         BOOST_TEST_EQ(n, 5u);
+    }
+
+    void testFileReleaseWithPendingThrowsAndKeeps()
+    {
+        // A read is in flight until the run loop dequeues its packet,
+        // even when the disk finished it at once. poll_one() starts the
+        // reader, which issues the read, and stops there.
+        temp_file tmp("raf_relbusy_", "hello");
+        io_context a(Backend);
+        io_context b(Backend);
+        random_access_file fa(a);
+        random_access_file fb(b);
+        BOOST_TEST(!fa.open(tmp.path, file_base::read_only));
+        native_handle_type const held = fa.native_handle();
+
+        std::error_code rec;
+        char buf[8]{};
+        auto reader = [&]() -> capy::task<> {
+            auto [e, n] = co_await fa.read_some_at(
+                0, capy::mutable_buffer(buf, sizeof(buf)));
+            rec = e;
+            (void)n;
+        };
+        capy::run_async(a.get_executor())(reader());
+        BOOST_TEST_EQ(a.poll_one(), 1u);
+
+        bool threw = false;
+        try
+        {
+            (void)fa.release();
+        }
+        catch (std::system_error const& e)
+        {
+            threw = true;
+            BOOST_TEST(e.code() == std::errc::device_or_resource_busy);
+        }
+        BOOST_TEST(threw);
+        BOOST_TEST(fa.is_open());
+        BOOST_TEST_EQ(fa.native_handle(), held);
+
+        a.run();
+        // The disk may have finished the read before the cancel reached
+        // it; a decided result is reported as is.
+        BOOST_TEST(!rec || rec == capy::cond::canceled);
+        BOOST_TEST(!fb.assign(fa.release()));
+        BOOST_TEST(!fa.is_open());
+        BOOST_TEST(fb.is_open());
     }
 #endif
 
@@ -1507,9 +1555,9 @@ struct random_access_file_test
         // The handle is still valid — we can read from it
         char buf[5] = {};
 #if BOOST_COROSIO_HAS_IOCP
-        // The released handle is still IOCP-associated, so we must
-        // set the low-order bit of hEvent to prevent the completion
-        // from being posted to the (unserviced) IOCP port.
+        // release() detached the handle from the completion port, so
+        // no packet is queued. The low-order bit of hEvent would
+        // suppress one anyway; it costs nothing to keep.
         HANDLE h   = reinterpret_cast<HANDLE>(handle);
         HANDLE evt = ::CreateEvent(nullptr, TRUE, FALSE, nullptr);
         OVERLAPPED ov{};

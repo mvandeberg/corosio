@@ -42,6 +42,13 @@ namespace boost::corosio {
     (blocking `preadv`/`pwritev`) with completion posted back to
     the scheduler. On Windows, true overlapped I/O is used via IOCP.
 
+    On Windows, while the file is open its handle is bound to the
+    context's completion port, and every overlapped call on it queues
+    a packet to that port. Do not issue your own overlapped I/O on
+    `native_handle()` (`DeviceIoControl`, `ReadFile`) unless the
+    `OVERLAPPED`'s `hEvent` has its low-order bit set, which
+    suppresses the packet.
+
     @par Thread Safety
     Distinct objects: Safe.@n
     Shared objects: Unsafe. Only one asynchronous operation

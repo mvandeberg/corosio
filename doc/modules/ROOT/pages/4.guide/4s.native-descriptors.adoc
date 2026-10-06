@@ -362,6 +362,15 @@ For regular files, prefer cpp:random_access_file[]. It also offers
 need sector-aligned offsets, lengths, and buffers. A misaligned request
 fails with the kernel's error.
 
+While an overlapped type or a file type holds a handle, the handle is
+bound to the context's completion port, and every overlapped call on it
+queues a packet to that port. Do not issue your own overlapped I/O on it
+(`ConnectNamedPipe`, `WaitCommEvent`, `DeviceIoControl`) unless the
+`OVERLAPPED`'s `hEvent` has its low-order bit set, which suppresses the
+packet. Connect a pipe server before `assign()`. A successful
+`release()` detaches the handle, which lifts the restriction.
+cpp:win_object_handle[] never binds to the completion port.
+
 === What Is Rejected
 
 Each type checks a handle before `assign()` changes anything. The file
@@ -463,15 +472,6 @@ handle from the context's completion port. If an operation is still in
 flight, or Windows refuses the detach, `release()` throws and the object
 keeps the handle. Call it again once the cancelled operations have
 completed.
-
-While a handle is bound to a completion port, every overlapped call on
-it queues a packet to that port. Do not issue your own overlapped I/O on
-it (`ConnectNamedPipe`, `WaitCommEvent`, `DeviceIoControl`) unless the
-`OVERLAPPED`'s `hEvent` has its low-order bit set, which suppresses the
-packet. Connect a pipe server before `assign()`.
-
-cpp:win_object_handle[] never binds to the completion port, so its
-released handle has no such restriction.
 
 === Waiting on Kernel Objects
 

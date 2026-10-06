@@ -120,38 +120,6 @@ struct win_stream_handle_test
         BOOST_TEST(!h.is_open());
     }
 
-    void testFailedAssignLeavesPendingReadIntact()
-    {
-        io_context ioc(Backend);
-        win_stream_handle h(ioc);
-        auto p = test::make_pipe_pair();
-        adopt(h, p);
-
-        std::error_code ec;
-        std::size_t n = 0;
-        char buf[8]{};
-        auto reader = [&]() -> capy::task<> {
-            auto [rec, rn] =
-                co_await h.read_some(capy::mutable_buffer(buf, sizeof(buf)));
-            ec = rec;
-            n  = rn;
-        };
-        auto rejecter = [&]() -> capy::task<> {
-            HANDLE r = nullptr, w = nullptr;
-            BOOST_TEST(::CreatePipe(&r, &w, nullptr, 0));
-            test::unique_handle rr(r), ww(w);
-            BOOST_TEST(h.assign(test::as_native(r)) == error::already_open);
-            // The parked read still belongs to the held pipe.
-            BOOST_TEST(test::write_all(p.client.get(), "hi", 2));
-            co_return;
-        };
-        capy::run_async(ioc.get_executor())(reader());
-        capy::run_async(ioc.get_executor())(rejecter());
-        ioc.run();
-        BOOST_TEST(!ec);
-        BOOST_TEST_EQ(n, 2u);
-    }
-
     void testAssignOnOpenKeepsPendingRead()
     {
         io_context ioc(Backend);
@@ -646,7 +614,6 @@ struct win_stream_handle_test
         testAssignRejectsInvalid();
         testAssignRejectsSelf();
         testAssignRejectsHandleBoundElsewhere();
-        testFailedAssignLeavesPendingReadIntact();
         testAssignOnOpenKeepsPendingRead();
         testReadWrite();
         testConcurrentReadAndWrite();
