@@ -14,6 +14,7 @@
 
 #if BOOST_COROSIO_HAS_IOCP
 
+#include <boost/corosio/error.hpp>
 #include <boost/capy/buffers.hpp>
 #include <boost/capy/cond.hpp>
 #include <boost/capy/ex/run_async.hpp>
@@ -194,9 +195,7 @@ struct win_random_access_handle_test
         HANDLE r = nullptr, w = nullptr;
         BOOST_TEST(::CreatePipe(&r, &w, nullptr, 0));
         test::unique_handle rr(r), ww(w);
-        BOOST_TEST(
-            fx.h.assign(test::as_native(r)) ==
-            std::errc::operation_not_supported);
+        BOOST_TEST(fx.h.assign(test::as_native(r)) == error::already_open);
         BOOST_TEST_EQ(fx.h.native_handle(), held);
     }
 
@@ -297,16 +296,15 @@ struct win_random_access_handle_test
         BOOST_TEST(on_strand);
     }
 
-    void testReleaseWithPendingStaysBound()
+    void testReleaseWithPendingThrowsAndKeeps()
     {
-        // A handle released with a read in flight stays bound to the
-        // first port, so a second live context cannot adopt it.
         io_context a(Backend);
         io_context b(Backend);
         win_random_access_handle ha(a);
         win_random_access_handle hb(b);
         auto p = test::make_pipe_pair();
         BOOST_TEST(!ha.assign(test::as_native(p.server.release())));
+        native_handle_type const held = ha.native_handle();
 
         std::error_code rec;
         char buf[4];
@@ -319,12 +317,27 @@ struct win_random_access_handle_test
         capy::run_async(a.get_executor())(reader());
         a.poll(); // the read is now issued and pending
 
-        native_handle_type released = ha.release();
-        BOOST_TEST(hb.assign(released) == std::errc::invalid_argument);
+        bool threw = false;
+        try
+        {
+            (void)ha.release();
+        }
+        catch (std::system_error const& e)
+        {
+            threw = true;
+            BOOST_TEST(e.code() == std::errc::device_or_resource_busy);
+        }
+        BOOST_TEST(threw);
+        BOOST_TEST(ha.is_open());
+        BOOST_TEST_EQ(ha.native_handle(), held);
 
-        a.run();
+        a.run(); // the cancelled read drains
         BOOST_TEST(rec == capy::cond::canceled);
-        ::CloseHandle(reinterpret_cast<HANDLE>(released));
+
+        native_handle_type const released = ha.release(); // idle now
+        BOOST_TEST_EQ(released, held);
+        BOOST_TEST(!ha.is_open());
+        BOOST_TEST(!hb.assign(released)); // detached: another context adopts it
     }
 
     void testAssignRejectsInvalid()
@@ -343,7 +356,7 @@ struct win_random_access_handle_test
         auto p = test::make_pipe_pair();
         BOOST_TEST(!h.assign(test::as_native(p.server.release())));
         auto const held = h.native_handle();
-        BOOST_TEST(h.assign(held) == std::errc::invalid_argument);
+        BOOST_TEST(h.assign(held) == error::already_open);
         BOOST_TEST_EQ(h.native_handle(), held);
     }
 
@@ -386,7 +399,7 @@ struct win_random_access_handle_test
         testReleaseAndReadopt();
         testResumesOnAwaitingExecutor();
         testReleaseAfterCompletedReadReadopts();
-        testReleaseWithPendingStaysBound();
+        testReleaseWithPendingThrowsAndKeeps();
         testAssignRejectsInvalid();
         testAssignRejectsSelf();
         testStopTokenCancelsRead();

@@ -183,11 +183,8 @@ public:
     std::error_code assign(native_handle_type nh) noexcept
     {
         HANDLE h = reinterpret_cast<HANDLE>(nh);
-        if (is_open() && h == handle_)
-            return std::make_error_code(std::errc::invalid_argument);
         if (auto ec = validate_object_handle(h))
             return ec;
-        close_handle();
         handle_ = h;
         return {};
     }

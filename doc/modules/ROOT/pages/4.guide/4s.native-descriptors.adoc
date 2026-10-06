@@ -429,15 +429,13 @@ which apply the same checks on Windows.
 
 Every rejection in the table fails with a code comparing equal to
 `errc::operation_not_supported`. A null, invalid, or closed handle fails
-with `errc::bad_file_descriptor`. Re-assigning the handle the object
-already holds fails with `errc::invalid_argument`. For the overlapped types,
-so does a handle already bound to another completion port.
+with `errc::bad_file_descriptor`. For the overlapped types, a handle
+already bound to another completion port fails with
+`errc::invalid_argument`.
 
-The overlapped types register a new handle with the completion port
-before they close the old one. Every failure therefore leaves the object
-as it was, pending operations included, and leaves you owning the
-handle. This is stronger than the POSIX guarantee, where a kernel
-refusal leaves the object closed.
+`assign()` requires a closed object; on an open one it fails with
+`error::already_open` and changes nothing. Any other failure leaves the
+object closed and leaves you owning the handle.
 
 === Transfers
 
@@ -461,12 +459,10 @@ like `SIGPIPE` to suppress.
 
 `release()` cancels pending operations and hands the handle back
 without closing it. On the overlapped types, it also detaches the
-handle from the context's completion port, but only if no operation is
-in flight: detaching with a completion still pending would lose it or
-deliver it to the next adopter's port. A handle released with I/O in
-flight therefore stays bound. Adopting it into another `io_context`
-then fails with `errc::invalid_argument`. Release an idle handle to move
-it between contexts.
+handle from the context's completion port. If an operation is still in
+flight, or Windows refuses the detach, `release()` throws and the object
+keeps the handle. Call it again once the cancelled operations have
+completed.
 
 While a handle is bound to a completion port, every overlapped call on
 it queues a packet to that port. Do not issue your own overlapped I/O on

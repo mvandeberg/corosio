@@ -16,6 +16,7 @@
 
 #include <boost/corosio/detail/buffer_param.hpp>
 #include <boost/corosio/detail/dispatch_coro.hpp>
+#include <boost/corosio/detail/except.hpp>
 #include <boost/corosio/detail/intrusive.hpp>
 #include <boost/corosio/detail/native_handle.hpp>
 #include <boost/corosio/native/detail/coro_op_complete.hpp>
@@ -37,6 +38,7 @@
 #include <mutex>
 #include <stop_token>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 /* The overlapped-handle core shared by stream_file, random_access_file,
@@ -221,15 +223,12 @@ public:
     }
 
 protected:
-    /** Validate and register @p h without touching the held handle.
+    /** Validate @p h and register it with this context's port.
 
-        Registration precedes any change to this object, so a kernel
-        refusal leaves it intact too.
+        The object is closed; the public `assign()` rejects an open one.
     */
     std::error_code check_and_register(HANDLE h, handle_kind kind) noexcept
     {
-        if (is_open() && h == handle_)
-            return std::make_error_code(std::errc::invalid_argument);
         if (auto ec = validate_overlapped_handle(h, kind))
             return ec;
         if (!::CreateIoCompletionPort(
@@ -245,25 +244,25 @@ protected:
         return {};
     }
 
-    /** Cancel kernel I/O and unbind from the port; returns the handle.
+    /** Unbind the handle from the port and give it up.
+
+        Called after the ops were cancelled. Throws, leaving the object
+        holding the handle, when an op is still in flight or Windows
+        refuses the detach: detaching under a queued completion would
+        lose it or deliver it to the next adopter's port. Asio fails
+        its release() the same way.
 
         @param idle True when no op of this handle is in flight.
     */
-    HANDLE detach(bool idle) noexcept
+    HANDLE detach_or_throw(bool idle, char const* what)
     {
-        HANDLE h = handle_;
-        handle_  = INVALID_HANDLE_VALUE;
-        if (h != INVALID_HANDLE_VALUE)
-        {
-            ::CancelIoEx(h, nullptr);
-            // Dissociating with a completion still pending would lose it
-            // or deliver it to the next adopter's port. Stay bound; a
-            // later adopt fails with invalid_argument, which release()
-            // documents.
-            if (idle)
-                dissociate_from_iocp(h);
-        }
-        return h;
+        if (!idle)
+            detail::throw_system_error(
+                std::make_error_code(std::errc::device_or_resource_busy), what);
+        if (!dissociate_from_iocp(handle_))
+            detail::throw_system_error(
+                std::make_error_code(std::errc::operation_not_supported), what);
+        return std::exchange(handle_, INVALID_HANDLE_VALUE);
     }
 
     /** Issue ReadFile/WriteFile for an op the caller has set up.
@@ -393,22 +392,24 @@ public:
         if (auto ec = check_and_register(h, kind))
             return ec;
         generation_.fetch_add(1, std::memory_order_acq_rel);
-        cancel();
-        close_handle();
         handle_ = h;
         offset_.store(0, std::memory_order_release);
         return {};
     }
 
-    native_handle_type release() noexcept
+    native_handle_type release()
     {
-        generation_.fetch_add(1, std::memory_order_acq_rel);
+        // Cancel first, as asio does: a release that then fails still
+        // aborts the in-flight I/O, and a retry once it drains succeeds.
         rd_.request_cancel();
         wr_.request_cancel();
-        offset_.store(0, std::memory_order_release);
+        ::CancelIoEx(handle_, nullptr);
         bool const idle = !rd_.in_flight.load(std::memory_order_acquire) &&
             !wr_.in_flight.load(std::memory_order_acquire);
-        return reinterpret_cast<native_handle_type>(detach(idle));
+        HANDLE h = detach_or_throw(idle, "release");
+        generation_.fetch_add(1, std::memory_order_acq_rel);
+        offset_.store(0, std::memory_order_release);
+        return reinterpret_cast<native_handle_type>(h);
     }
 
     /// Close the handle; completions still queued no longer move the position.
@@ -538,21 +539,21 @@ public:
         HANDLE h = reinterpret_cast<HANDLE>(nh);
         if (auto ec = check_and_register(h, kind))
             return ec;
-        cancel();
-        close_handle();
         handle_ = h;
         return {};
     }
 
-    native_handle_type release() noexcept
+    native_handle_type release()
     {
         request_cancel_all();
+        ::CancelIoEx(handle_, nullptr);
         bool idle;
         {
             std::lock_guard<win_mutex> lock(ops_mutex_);
             idle = outstanding_ops_.empty();
         }
-        return reinterpret_cast<native_handle_type>(detach(idle));
+        return reinterpret_cast<native_handle_type>(
+            detach_or_throw(idle, "release"));
     }
 
 protected:

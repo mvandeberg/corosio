@@ -195,28 +195,21 @@ public:
 
     /** Adopt an existing waitable handle.
 
-        Validation runs before anything is mutated or closed. On any
-        failure the object still holds whatever handle and pending
-        wait it held before, and the caller still owns @p h.
-
         No wait is performed on @p h; its signal state is unchanged.
-        A pending wait on the previously held handle is cancelled,
-        unless the kernel already satisfied it, in which case it
-        reports success.
 
         @param h The native handle to adopt.
 
-        @return `errc::invalid_argument` when @p h is the handle this
-            object already holds. `errc::bad_file_descriptor` when
-            @p h is null, invalid or closed.
-            `errc::operation_not_supported` when @p h is a
+        @return `error::already_open` if this object is open.
+            `errc::bad_file_descriptor` when @p h is null, invalid or
+            closed. `errc::operation_not_supported` when @p h is a
             pseudo-handle, an object type other than process, thread,
             event, semaphore or waitable timer, lacks `SYNCHRONIZE`
             access, or this `io_context` uses `locking_mode::unsafe`.
             Otherwise an empty code.
 
         @par Exception Safety
-        Throws nothing. Strong guarantee.
+        Throws nothing. On failure the object stays closed and @p h
+        stays with the caller.
 
         @see release
     */

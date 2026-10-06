@@ -268,24 +268,20 @@ public:
 
         The file object becomes not-open. The caller is
         responsible for closing the returned handle.
-        On Windows the handle is detached from this context's
-        completion port only if no operation is in flight. A handle
-        released with I/O in flight therefore stays bound, and
-        adopting it into another `io_context` fails with
-        `errc::invalid_argument`; see the next paragraph for using it
-        yourself. Release an idle handle to move it between contexts.
 
-        While the handle is bound to a completion port, every
-        overlapped call on it queues a packet to that port. Do not
-        issue your own overlapped I/O on it (`ConnectNamedPipe`,
-        `WaitCommEvent`, `DeviceIoControl`) unless the `OVERLAPPED`'s
-        `hEvent` has its low-order bit set, which suppresses the
-        packet. Connect a pipe server before `assign()`.
+        On Windows, pending operations are cancelled first. If one is
+        still in flight, or Windows refuses to detach the handle from
+        this context's completion port, the object keeps the handle
+        and this throws. Call `release()` again once the cancelled
+        operations have completed.
 
         @return The native file descriptor or handle.
 
         @throws std::system_error `errc::bad_file_descriptor` if the
-            file is not open.
+            file is not open; on Windows,
+            `errc::device_or_resource_busy` if an operation is still in
+            flight, or `errc::operation_not_supported` if the handle
+            cannot be detached.
     */
     native_handle_type release();
 

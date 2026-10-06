@@ -48,14 +48,9 @@ namespace boost::corosio {
 
     @par Ownership
     `assign()` takes ownership and `close()` closes the handle.
-    `release()` hands it back. The handle is detached from this
-    context's completion port only if no operation is in flight,
-    since a completion still pending would otherwise be lost or
-    reach the wrong port. A handle released with I/O in flight
-    therefore stays bound, and adopting it into another `io_context`
-    fails with `errc::invalid_argument`; see the next paragraph for
-    using it yourself. Release an idle handle to move it between
-    contexts.
+    `release()` detaches it from this context's completion port and
+    hands it back, or throws and keeps it while an operation is
+    still in flight.
 
     While the handle is bound to a completion port, every overlapped
     call on it queues a packet to that port. Do not issue your own
@@ -112,7 +107,7 @@ public:
 
             @return The native handle.
         */
-        virtual native_handle_type release_handle() noexcept = 0;
+        virtual native_handle_type release_handle() = 0;
 
         /** Request cancellation of pending asynchronous operations.
 
@@ -178,23 +173,19 @@ public:
 
     /** Adopt an existing overlapped handle.
 
-        Validation and completion-port registration run before
-        anything is mutated or closed. On any failure the object
-        still holds whatever handle and pending operations it held
-        before, and the caller still owns @p h.
-
         @param h The native handle to adopt.
 
-        @return `errc::invalid_argument` when @p h is the handle this
-            object already holds or is bound to another completion
-            port. `errc::bad_file_descriptor` when @p h is null,
-            invalid or closed. `errc::operation_not_supported` when
-            @p h is a console, a synchronous-mode handle, a disk file
-            or a directory. Otherwise the error reported by the
-            kernel, or an empty code.
+        @return `error::already_open` if this object is open.
+            `errc::invalid_argument` when @p h is bound to another
+            completion port. `errc::bad_file_descriptor` when @p h is
+            null, invalid or closed. `errc::operation_not_supported`
+            when @p h is a console, a synchronous-mode handle, a disk
+            file or a directory. Otherwise the error the system
+            reported, or an empty code.
 
         @par Exception Safety
-        Throws nothing. Strong guarantee.
+        Throws nothing. On failure the object stays closed and @p h
+        stays with the caller.
 
         @see release
     */
@@ -202,28 +193,20 @@ public:
 
     /** Release ownership of the native handle.
 
-        The object becomes not-open and pending operations are
-        cancelled. The handle is detached from this context's
-        completion port only if no operation is in flight. A handle
-        released with I/O in flight therefore stays bound, and
-        adopting it into another `io_context` fails with
-        `errc::invalid_argument`; see the next paragraph for using it
-        yourself. Release an idle handle to move it between contexts.
-        The caller is responsible for closing the result.
-
-        While the handle is bound to a completion port, every
-        overlapped call on it queues a packet to that port. Do not
-        issue your own overlapped I/O on it (`ConnectNamedPipe`,
-        `WaitCommEvent`, `DeviceIoControl`) unless the `OVERLAPPED`'s
-        `hEvent` has its low-order bit set, which suppresses the
-        packet. Connect a pipe server before `assign()`.
+        Pending operations are cancelled first. If one is still in
+        flight, or Windows refuses to detach the handle from this
+        context's completion port, the object keeps the handle and
+        this throws. Call `release()` again once the cancelled
+        operations have completed. On success the object becomes
+        not-open and the caller is responsible for closing the
+        result.
 
         @return The native handle.
 
         @throws std::system_error `errc::bad_file_descriptor` if the
-            object is not open.
-
-        @post `is_open() == false`
+            object is not open; `errc::device_or_resource_busy` if an
+            operation is still in flight; `errc::operation_not_supported`
+            if the handle cannot be detached.
     */
     native_handle_type release();
 

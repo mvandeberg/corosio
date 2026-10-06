@@ -55,6 +55,7 @@
 #endif
 
 #if BOOST_COROSIO_HAS_IOCP
+#include <boost/corosio/win_stream_handle.hpp>
 #include "win_test_handles.hpp"
 #endif
 
@@ -860,6 +861,48 @@ struct stream_file_test
         BOOST_TEST(!ec);
         BOOST_TEST_EQ(n, 5u);
     }
+
+    void testFileReleaseWithPendingThrowsAndKeeps()
+    {
+        // A disk-file read completes too fast to stay in flight, and
+        // stream_file rejects pipes, so win_stream_handle stands in.
+        // stream_file's release() runs the same code (win_slot_handle).
+        io_context a(Backend);
+        io_context b(Backend);
+        win_stream_handle ha(a);
+        win_stream_handle hb(b);
+        auto p = test::make_pipe_pair();
+        BOOST_TEST(!ha.assign(test::as_native(p.server.release())));
+        native_handle_type const held = ha.native_handle();
+
+        std::error_code rec;
+        char buf[4];
+        auto reader = [&]() -> capy::task<> {
+            auto [e, n] =
+                co_await ha.read_some(capy::mutable_buffer(buf, sizeof(buf)));
+            rec = e;
+            (void)n;
+        };
+        capy::run_async(a.get_executor())(reader());
+        a.poll(); // the read is now issued and pending
+
+        bool threw = false;
+        try
+        {
+            (void)ha.release();
+        }
+        catch (std::system_error const& e)
+        {
+            threw = true;
+            BOOST_TEST(e.code() == std::errc::device_or_resource_busy);
+        }
+        BOOST_TEST(threw);
+        BOOST_TEST_EQ(ha.native_handle(), held);
+
+        a.run();
+        BOOST_TEST(rec == capy::cond::canceled);
+        BOOST_TEST(!hb.assign(ha.release()));
+    }
 #endif
 
     void testWrongDirectionIoFails()
@@ -1315,6 +1358,7 @@ struct stream_file_test
         testAssignRejectsSynchronousHandle();
         testFailedAssignKeepsHeldFileIocp();
         testReleaseDetachesForReadoption();
+        testFileReleaseWithPendingThrowsAndKeeps();
 #endif
         testSeekNegative();
         testCancelWithStoppedToken();

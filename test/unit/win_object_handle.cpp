@@ -15,6 +15,7 @@
 #if BOOST_COROSIO_HAS_IOCP
 
 #include <boost/corosio/delay.hpp>
+#include <boost/corosio/error.hpp>
 #include <boost/capy/cond.hpp>
 #include <boost/capy/ex/run_async.hpp>
 #include <boost/capy/ex/strand.hpp>
@@ -107,7 +108,7 @@ struct win_object_handle_test
         io_context ioc(Backend);
         win_object_handle o(ioc);
         adopt_event(o, true, false);
-        BOOST_TEST(o.assign(o.native_handle()) == std::errc::invalid_argument);
+        BOOST_TEST(o.assign(o.native_handle()) == error::already_open);
         BOOST_TEST(o.is_open());
     }
 
@@ -539,32 +540,34 @@ struct win_object_handle_test
             0);
     }
 
-    void testAssignWhileWaitPendingCancelsOldWait()
+    void testAssignOnOpenKeepsPendingWait()
     {
         io_context ioc(Backend);
         win_object_handle o(ioc);
-        test::unique_handle e1(::CreateEventW(nullptr, TRUE, FALSE, nullptr));
-        test::unique_handle e2(::CreateEventW(nullptr, TRUE, TRUE, nullptr));
-        BOOST_TEST(!o.assign(test::as_native(e1.release())));
+        HANDLE ev = adopt_event(o, /*manual=*/true, /*signaled=*/false);
+        test::unique_handle other(::CreateEventW(nullptr, TRUE, TRUE, nullptr));
 
-        std::error_code first, second;
-        auto t = [&]() -> capy::task<> {
+        std::error_code ec;
+        bool done = false;
+        auto waiter = [&]() -> capy::task<> {
             auto [e] = co_await o.wait();
-            first    = e;
-            auto [f] = co_await o.wait();
-            second   = f;
+            ec       = e;
+            done     = true;
         };
-        auto swapper = [&]() -> capy::task<> {
+        auto poker = [&]() -> capy::task<> {
             auto [d] = co_await delay(std::chrono::milliseconds(10));
             (void)d;
-            BOOST_TEST(!o.assign(test::as_native(e2.release())));
+            BOOST_TEST(
+                o.assign(test::as_native(other.get())) == error::already_open);
+            BOOST_TEST_EQ(done, false); // the pending wait is undisturbed
+            ::SetEvent(ev);
         };
-        capy::run_async(ioc.get_executor())(t());
-        capy::run_async(ioc.get_executor())(swapper());
+        capy::run_async(ioc.get_executor())(waiter());
+        capy::run_async(ioc.get_executor())(poker());
         ioc.run();
 
-        BOOST_TEST(first == capy::cond::canceled);
-        BOOST_TEST(!second); // e2 is signaled
+        BOOST_TEST(done);
+        BOOST_TEST(!ec);
     }
 
     void run()
@@ -593,7 +596,7 @@ struct win_object_handle_test
         testSignalBeforeCloseReportsSuccess();
         testSignalBeforeReleaseReportsSuccess();
         testSignalBeforeDestroyReportsSuccess();
-        testAssignWhileWaitPendingCancelsOldWait();
+        testAssignOnOpenKeepsPendingWait();
     }
 };
 

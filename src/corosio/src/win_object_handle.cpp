@@ -15,6 +15,7 @@
 
 #include <boost/corosio/detail/except.hpp>
 #include <boost/corosio/detail/win_handle_service.hpp>
+#include <boost/corosio/error.hpp>
 
 #include "src/detail/use_backend_service.hpp"
 
@@ -37,6 +38,8 @@ win_object_handle::win_object_handle(capy::execution_context& ctx)
 std::error_code
 win_object_handle::assign(native_handle_type h) noexcept
 {
+    if (is_open())
+        return make_error_code(error::already_open);
     auto& svc = static_cast<detail::object_handle_service&>(h_.service());
     return svc.assign_object_handle(get(), h);
 }
