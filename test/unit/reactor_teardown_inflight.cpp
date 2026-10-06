@@ -16,7 +16,7 @@
 #if BOOST_COROSIO_POSIX
 
 #include <boost/corosio/io_context.hpp>
-#include <boost/corosio/posix_descriptor.hpp>
+#include <boost/corosio/posix_stream_descriptor.hpp>
 #include <boost/corosio/tcp_acceptor.hpp>
 #include <boost/corosio/tcp_socket.hpp>
 #include <boost/corosio/wait_type.hpp>
@@ -111,7 +111,7 @@ struct reactor_teardown_test
         {
             io_context ioc(Backend);
             auto reader = [&]() -> capy::task<> {
-                posix_descriptor d(ioc);
+                posix_stream_descriptor d(ioc);
                 BOOST_TEST(!d.assign(rp[0]));
                 char buf[16];
                 std::ignore = co_await d.read_some(
@@ -119,7 +119,7 @@ struct reactor_teardown_test
                 ++resumed;
             };
             auto writer = [&]() -> capy::task<> {
-                posix_descriptor d(ioc);
+                posix_stream_descriptor d(ioc);
                 BOOST_TEST(!d.assign(wp[1]));
                 char big[4096] = {};
                 std::ignore =
@@ -127,7 +127,7 @@ struct reactor_teardown_test
                 ++resumed;
             };
             auto waiter = [&](int fd, wait_type w) -> capy::task<> {
-                posix_descriptor d(ioc);
+                posix_stream_descriptor d(ioc);
                 BOOST_TEST(!d.assign(fd));
                 std::ignore = co_await d.wait(w);
                 ++resumed;
@@ -194,7 +194,7 @@ struct reactor_teardown_test
         {
             io_context ioc(Backend);
             auto reader = [&]() -> capy::task<> {
-                posix_descriptor d(ioc);
+                posix_stream_descriptor d(ioc);
                 BOOST_TEST(!d.assign(p[0]));
                 // Parks on a wait, since the pipe is full and a read
                 // would complete.
@@ -202,7 +202,7 @@ struct reactor_teardown_test
                 ++resumed;
             };
             auto writer = [&]() -> capy::task<> {
-                posix_descriptor d(ioc);
+                posix_stream_descriptor d(ioc);
                 BOOST_TEST(!d.assign(p[1]));
                 char big[4096] = {};
                 std::ignore =

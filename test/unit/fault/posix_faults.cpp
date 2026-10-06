@@ -626,8 +626,8 @@ struct posix_common_faults
     void testAssignDuringFinishedReadKeepsNewOffset()
     {
         // A pool worker whose preadv has returned, but which has not yet
-        // advanced the offset, when assign() swaps the file: the bytes
-        // belong to the old file, so the new file must stay at 0.
+        // advanced the offset, when close() + assign() swap the file: the
+        // bytes belong to the old file, so the new file must stay at 0.
         if constexpr (ring_files)
             return;
         if (!hook_is_live(sys::preadv))
@@ -656,6 +656,7 @@ struct posix_common_faults
             hold.wait_held();
             int fd2 = ::open(p2.c_str(), O_RDONLY | O_CLOEXEC);
             BOOST_TEST(fd2 >= 0);
+            sf.close();
             BOOST_TEST(!sf.assign(fd2));
             hold.release();
             co_return;

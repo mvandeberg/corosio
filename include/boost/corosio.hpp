@@ -15,6 +15,7 @@
 #include <boost/corosio/connect.hpp>
 #include <boost/corosio/delay.hpp>
 #include <boost/corosio/endpoint.hpp>
+#include <boost/corosio/error.hpp>
 #include <boost/corosio/family.hpp>
 #include <boost/corosio/file_base.hpp>
 #include <boost/corosio/host_name.hpp>
@@ -23,7 +24,7 @@
 #include <boost/corosio/ipv4_address.hpp>
 #include <boost/corosio/ipv6_address.hpp>
 #include <boost/corosio/message_flags.hpp>
-#include <boost/corosio/posix_descriptor.hpp> // POSIX-only; self-guarded
+#include <boost/corosio/posix_stream_descriptor.hpp> // POSIX-only; self-guarded
 #include <boost/corosio/random_access_file.hpp>
 #include <boost/corosio/resolver.hpp>
 #include <boost/corosio/shutdown_type.hpp>

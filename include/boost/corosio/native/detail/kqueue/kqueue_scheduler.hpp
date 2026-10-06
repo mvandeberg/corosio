@@ -61,8 +61,9 @@ struct kqueue_op;
     variable until handlers are available.
 
     kqueue uses EV_CLEAR for edge-triggered semantics (equivalent to
-    epoll's EPOLLET). File descriptors are registered once with both
-    EVFILT_READ and EVFILT_WRITE and stay registered until closed.
+    epoll's EPOLLET). A descriptor gets EVFILT_READ at registration and
+    EVFILT_WRITE when a write-direction operation first parks, as asio
+    does; both stay registered until the descriptor is closed.
 
     @par Thread Safety
     All public member functions are thread-safe.
@@ -120,9 +121,10 @@ public:
 
     /** Register a descriptor for persistent monitoring.
 
-        Adds EVFILT_READ and EVFILT_WRITE (both EV_CLEAR) for @a fd
-        and stores @a desc in the kevent udata field so that the
-        reactor can dispatch events to the correct reactor_descriptor_state.
+        Adds EVFILT_READ (EV_CLEAR) for @a fd and stores @a desc in the
+        kevent udata field so that the reactor can dispatch events to
+        the correct reactor_descriptor_state. EVFILT_WRITE is added later
+        by ensure_write_registered.
 
         @param fd The file descriptor to register.
         @param desc Pointer to the caller-owned reactor_descriptor_state.
@@ -132,6 +134,20 @@ public:
     */
     std::error_code
     register_descriptor(int fd, reactor_descriptor_state* desc) const;
+
+    /** Add EVFILT_WRITE for @a fd if it is not registered yet.
+
+        Called with `desc->mutex` held, when a write-direction
+        operation is about to park.
+
+        @param fd The registered file descriptor.
+        @param desc Its reactor_descriptor_state.
+
+        @return The kernel's refusal of the filter, otherwise a default
+        constructed error code.
+    */
+    std::error_code ensure_write_registered(
+        int fd, reactor_descriptor_state* desc) const noexcept;
 
     /** Deregister a persistently registered descriptor.
 
@@ -227,93 +243,31 @@ kqueue_scheduler::configure_reactor(
     event_buffer_.resize(max_events_per_poll_);
 }
 
-/// Per-filter outcome of kqueue_add_rw; 0 means added.
-struct kqueue_add_result
+/// Add one edge-triggered filter for @p fd; returns 0 or the errno.
+inline int
+kqueue_add_filter(int kq, int fd, short filter, void* udata) noexcept
 {
-    int read_err;
-    int write_err;
-};
-
-/** Add edge-triggered EVFILT_READ and EVFILT_WRITE for @p fd.
-
-    All or nothing. Without EV_RECEIPT a refused filter stops the
-    changelist with the earlier filters still applied, leaving a knote
-    whose udata outlives the caller's state.
-*/
-inline kqueue_add_result
-kqueue_add_rw(int kq, int fd, void* udata) noexcept
-{
-    struct kevent changes[2];
+    struct kevent ch;
     EV_SET(
-        &changes[0], static_cast<uintptr_t>(fd), EVFILT_READ,
-        EV_ADD | EV_CLEAR | EV_RECEIPT, 0, 0, udata);
-    EV_SET(
-        &changes[1], static_cast<uintptr_t>(fd), EVFILT_WRITE,
-        EV_ADD | EV_CLEAR | EV_RECEIPT, 0, 0, udata);
-
-    struct kevent receipts[2];
-    int const n = ::kevent(kq, changes, 2, receipts, 2, nullptr);
-    if (n < 0)
-        return {errno, errno};
-
-    kqueue_add_result r{0, 0};
-    for (int i = 0; i < n; ++i)
-    {
-        if (!(receipts[i].flags & EV_ERROR) || receipts[i].data == 0)
-            continue;
-        int const err = static_cast<int>(receipts[i].data);
-        if (receipts[i].filter == EVFILT_READ)
-            r.read_err = err;
-        else
-            r.write_err = err;
-    }
-
-    // Exactly one filter failed: delete the one that was added.
-    if ((r.read_err == 0) != (r.write_err == 0))
-    {
-        struct kevent del;
-        short const added = r.read_err == 0 ? EVFILT_READ : EVFILT_WRITE;
-        EV_SET(
-            &del, static_cast<uintptr_t>(fd), added, EV_DELETE, 0, 0, nullptr);
-        ::kevent(kq, &del, 1, nullptr, 0, nullptr);
-    }
-    return r;
+        &ch, static_cast<uintptr_t>(fd), filter, EV_ADD | EV_CLEAR | EV_RECEIPT,
+        0, 0, udata);
+    struct kevent receipt;
+    if (::kevent(kq, &ch, 1, &receipt, 1, nullptr) < 0)
+        return errno;
+    return (receipt.flags & EV_ERROR) ? static_cast<int>(receipt.data) : 0;
 }
 
 inline std::error_code
 kqueue_scheduler::register_descriptor(
     int fd, reactor_descriptor_state* desc) const
 {
-    auto r               = kqueue_add_rw(kq_fd_, fd, desc);
-    std::uint32_t events = reactor_event_read | reactor_event_write;
-
-    // EPIPE on EVFILT_WRITE: a pipe or FIFO whose peer is gone (an
-    // exited child's stdout). A write on it fails at once and never
-    // parks, so watch reads alone rather than refuse the descriptor.
-    if (r.read_err == 0 && r.write_err == EPIPE)
-    {
-        struct kevent ch;
-        EV_SET(
-            &ch, static_cast<uintptr_t>(fd), EVFILT_READ, EV_ADD | EV_CLEAR, 0,
-            0, desc);
-        r.read_err =
-            ::kevent(kq_fd_, &ch, 1, nullptr, 0, nullptr) < 0 ? errno : 0;
-        r.write_err = 0;
-        events      = reactor_event_read;
-    }
-
-    // EINVAL/ENODEV on EVFILT_READ: a device with no kqfilter. As on
-    // epoll's EPERM, adopt it unwatched. kqueue_add_rw left nothing
-    // registered.
-    bool const unpollable = r.read_err == EINVAL || r.read_err == ENODEV;
-    if (!unpollable)
-    {
-        if (r.read_err != 0)
-            return make_err(r.read_err);
-        if (r.write_err != 0)
-            return make_err(r.write_err);
-    }
-    desc->registered_events = unpollable ? 0 : events;
+    int const err = kqueue_add_filter(kq_fd_, fd, EVFILT_READ, desc);
+    // EINVAL/ENODEV: a device with no kqfilter. As on epoll's EPERM,
+    // adopt it unwatched.
+    bool const unpollable = err == EINVAL || err == ENODEV;
+    if (err != 0 && !unpollable)
+        return make_err(err);
+    desc->registered_events = unpollable ? 0 : reactor_event_read;
     desc->unpollable        = unpollable;
     desc->fd                = fd;
     desc->scheduler_        = this;
@@ -327,17 +281,36 @@ kqueue_scheduler::register_descriptor(
     return {};
 }
 
+inline std::error_code
+kqueue_scheduler::ensure_write_registered(
+    int fd, reactor_descriptor_state* desc) const noexcept
+{
+    // Added on first need, as asio does: adoption never asks for a
+    // write filter a read-only device would refuse. Adding a filter
+    // reports the current state, so an fd already writable fires at
+    // once and no edge is lost.
+    if (desc->registered_events & reactor_event_write)
+        return {};
+    if (int err = kqueue_add_filter(kq_fd_, fd, EVFILT_WRITE, desc))
+        return make_err(err);
+    desc->registered_events |= reactor_event_write;
+    return {};
+}
+
 inline void
 kqueue_scheduler::deregister_descriptor(int fd) const
 {
+    // EV_RECEIPT reports each change separately, so a never-added
+    // EVFILT_WRITE (ENOENT) does not stop the EVFILT_READ delete.
     struct kevent changes[2];
     EV_SET(
-        &changes[0], static_cast<uintptr_t>(fd), EVFILT_READ, EV_DELETE, 0, 0,
-        nullptr);
+        &changes[0], static_cast<uintptr_t>(fd), EVFILT_READ,
+        EV_DELETE | EV_RECEIPT, 0, 0, nullptr);
     EV_SET(
-        &changes[1], static_cast<uintptr_t>(fd), EVFILT_WRITE, EV_DELETE, 0, 0,
-        nullptr);
-    ::kevent(kq_fd_, changes, 2, nullptr, 0, nullptr);
+        &changes[1], static_cast<uintptr_t>(fd), EVFILT_WRITE,
+        EV_DELETE | EV_RECEIPT, 0, 0, nullptr);
+    struct kevent receipts[2];
+    ::kevent(kq_fd_, changes, 2, receipts, 2, nullptr);
 }
 
 inline void

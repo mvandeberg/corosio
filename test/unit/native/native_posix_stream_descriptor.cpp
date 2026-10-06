@@ -7,7 +7,7 @@
 // Official repository: https://github.com/cppalliance/corosio
 //
 
-#include <boost/corosio/native/native_posix_descriptor.hpp>
+#include <boost/corosio/native/native_posix_stream_descriptor.hpp>
 
 #include <boost/corosio/detail/platform.hpp>
 
@@ -32,49 +32,52 @@
 namespace boost::corosio {
 
 template<auto Backend>
-struct native_posix_descriptor_test
+struct native_posix_stream_descriptor_test
 {
-    static_assert(
-        std::is_base_of_v<posix_descriptor, native_posix_descriptor<Backend>>);
+    static_assert(std::is_base_of_v<
+                  posix_stream_descriptor,
+                  native_posix_stream_descriptor<Backend>>);
 
     static_assert(
         !std::is_same_v<
-            decltype(std::declval<native_posix_descriptor<Backend>&>()
+            decltype(std::declval<native_posix_stream_descriptor<Backend>&>()
                          .read_some(std::declval<capy::mutable_buffer>())),
             decltype(std::declval<io_stream&>().read_some(
                 std::declval<capy::mutable_buffer>()))>,
-        "native_posix_descriptor::read_some must shadow "
+        "native_posix_stream_descriptor::read_some must shadow "
         "io_stream::read_some");
     static_assert(
         !std::is_same_v<
-            decltype(std::declval<native_posix_descriptor<Backend>&>()
+            decltype(std::declval<native_posix_stream_descriptor<Backend>&>()
                          .write_some(std::declval<capy::const_buffer>())),
             decltype(std::declval<io_stream&>().write_some(
                 std::declval<capy::const_buffer>()))>,
-        "native_posix_descriptor::write_some must shadow "
+        "native_posix_stream_descriptor::write_some must shadow "
         "io_stream::write_some");
     static_assert(
         !std::is_same_v<
-            decltype(std::declval<native_posix_descriptor<Backend>&>().wait(
-                wait_type::read)),
-            decltype(std::declval<posix_descriptor&>().wait(wait_type::read))>,
-        "native_posix_descriptor::wait must shadow posix_descriptor::wait");
+            decltype(std::declval<native_posix_stream_descriptor<Backend>&>()
+                         .wait(wait_type::read)),
+            decltype(std::declval<posix_stream_descriptor&>().wait(
+                wait_type::read))>,
+        "native_posix_stream_descriptor::wait must shadow "
+        "posix_stream_descriptor::wait");
 
     void testConstruct()
     {
         native_io_context<Backend> ioc;
-        native_posix_descriptor<Backend> d(ioc);
+        native_posix_stream_descriptor<Backend> d(ioc);
         BOOST_TEST_EQ(d.is_open(), false);
     }
 
     // Writes into a pipe with plain POSIX calls and reads the bytes
-    // back through native_posix_descriptor, exercising the shadowed
+    // back through native_posix_stream_descriptor, exercising the shadowed
     // read_some() awaitable end to end rather than merely
     // static-asserting the type shape.
     void testReadWriteRoundTrip()
     {
         native_io_context<Backend> ioc;
-        native_posix_descriptor<Backend> d(ioc);
+        native_posix_stream_descriptor<Backend> d(ioc);
 
         int fds[2];
         BOOST_TEST_EQ(::pipe(fds), 0);
@@ -105,8 +108,8 @@ struct native_posix_descriptor_test
     void testPolymorphicSlice()
     {
         native_io_context<Backend> ioc;
-        native_posix_descriptor<Backend> d(ioc);
-        posix_descriptor& base = d;
+        native_posix_stream_descriptor<Backend> d(ioc);
+        posix_stream_descriptor& base = d;
         BOOST_TEST_EQ(base.is_open(), false);
     }
 
@@ -115,7 +118,7 @@ struct native_posix_descriptor_test
     void testWait()
     {
         native_io_context<Backend> ioc;
-        native_posix_descriptor<Backend> d(ioc);
+        native_posix_stream_descriptor<Backend> d(ioc);
 
         int fds[2];
         BOOST_TEST_EQ(::pipe(fds), 0);
@@ -150,7 +153,7 @@ struct native_posix_descriptor_test
     void testWriteSome()
     {
         native_io_context<Backend> ioc;
-        native_posix_descriptor<Backend> d(ioc);
+        native_posix_stream_descriptor<Backend> d(ioc);
 
         int fds[2];
         BOOST_TEST_EQ(::pipe(fds), 0);
@@ -187,7 +190,8 @@ struct native_posix_descriptor_test
 };
 
 COROSIO_BACKEND_TESTS(
-    native_posix_descriptor_test, "boost.corosio.native_posix_descriptor")
+    native_posix_stream_descriptor_test,
+    "boost.corosio.native_posix_stream_descriptor")
 
 } // namespace boost::corosio
 

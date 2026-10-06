@@ -75,7 +75,7 @@ struct validate_fd_test
     void testRejectsRegularFile()
     {
         // stream_file::assign() / random_access_file::assign() own
-        // adoption of regular files; posix_descriptor rejects by policy.
+        // adoption of regular files; posix_stream_descriptor rejects by policy.
         auto path =
             std::filesystem::temp_directory_path() / "corosio_validate_fd_test";
         int fd = ::open(path.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0600);

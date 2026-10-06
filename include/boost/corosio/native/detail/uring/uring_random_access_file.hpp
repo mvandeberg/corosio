@@ -157,21 +157,10 @@ public:
 
     std::error_code assign(native_handle_type handle) noexcept override
     {
-        // handle >= 0 guard: an unset impl reports native_handle() == -1,
-        // and a caller-supplied -1 must fail as a bad fd, not a
-        // self-assign.
-        if (handle >= 0 && handle == fd_)
-            return std::make_error_code(std::errc::invalid_argument);
-
-        // Validate before touching the held fd: a failed assign must
-        // leave this object unchanged and the caller still owning handle.
+        // The public assign() guarantees the object is closed.
         if (auto ec = validate_file_fd(handle))
             return ec;
 
-        // No cancel() before this, unlike the POSIX twin: close_file()
-        // calls cancel_and_flush(fd_) itself, so the mandatory
-        // cancel-before-close pairing is already there.
-        close_file();
         fd_ = handle;
         return {};
     }

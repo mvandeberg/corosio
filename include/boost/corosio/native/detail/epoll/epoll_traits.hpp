@@ -15,6 +15,7 @@
 #if BOOST_COROSIO_HAS_EPOLL
 
 #include <boost/corosio/native/detail/make_err.hpp>
+#include <boost/corosio/native/detail/reactor/reactor_descriptor_ops.hpp>
 #include <boost/corosio/native/detail/reactor/reactor_descriptor_state.hpp>
 
 #include <system_error>
@@ -94,38 +95,7 @@ struct epoll_traits
         }
     };
 
-    // Descriptors are not sockets: sendmsg() fails with ENOTSOCK on a
-    // pipe or character device, so the write path is writev()/write()
-    // and SIGPIPE suppression is structurally unavailable -- MSG_NOSIGNAL
-    // is a send() flag and SO_NOSIGPIPE a socket option. A write to a
-    // pipe whose read end has closed raises SIGPIPE, exactly as a plain
-    // write(2) would; callers install SIG_IGN.
-    struct descriptor_write_policy
-    {
-        static ssize_t write(int fd, iovec* iovecs, int count) noexcept
-        {
-            ssize_t n;
-            do
-            {
-                n = ::writev(fd, iovecs, count);
-            }
-            while (n < 0 && errno == EINTR);
-            return n;
-        }
-
-        // Single-buffer fast path: skips the kernel's iov_iter setup.
-        static ssize_t
-        write_one(int fd, void const* data, std::size_t size) noexcept
-        {
-            ssize_t n;
-            do
-            {
-                n = ::write(fd, data, size);
-            }
-            while (n < 0 && errno == EINTR);
-            return n;
-        }
-    };
+    using descriptor_write_policy = detail::descriptor_write_policy;
 
     struct accept_policy
     {

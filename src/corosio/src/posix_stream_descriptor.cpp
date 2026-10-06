@@ -7,7 +7,8 @@
 // Official repository: https://github.com/cppalliance/corosio
 //
 
-#include <boost/corosio/posix_descriptor.hpp>
+#include <boost/corosio/posix_stream_descriptor.hpp>
+#include <boost/corosio/error.hpp>
 
 #include <boost/corosio/detail/platform.hpp>
 
@@ -20,12 +21,12 @@
 
 namespace boost::corosio {
 
-posix_descriptor::~posix_descriptor()
+posix_stream_descriptor::~posix_stream_descriptor()
 {
     close();
 }
 
-posix_descriptor::posix_descriptor(capy::execution_context& ctx)
+posix_stream_descriptor::posix_stream_descriptor(capy::execution_context& ctx)
     : io_object(handle(
           ctx,
           detail::use_backend_service<
@@ -35,24 +36,26 @@ posix_descriptor::posix_descriptor(capy::execution_context& ctx)
 }
 
 std::error_code
-posix_descriptor::assign(native_handle_type fd) noexcept
+posix_stream_descriptor::assign(native_handle_type fd) noexcept
 {
+    if (is_open())
+        return make_error_code(error::already_open);
     auto& svc = static_cast<detail::descriptor_service&>(h_.service());
     return svc.assign_descriptor(get(), fd);
 }
 
 native_handle_type
-posix_descriptor::release()
+posix_stream_descriptor::release()
 {
     if (!is_open())
         detail::throw_system_error(
             make_error_code(std::errc::bad_file_descriptor),
-            "posix_descriptor::release");
+            "posix_stream_descriptor::release");
     return get().release_descriptor();
 }
 
 void
-posix_descriptor::close() noexcept
+posix_stream_descriptor::close() noexcept
 {
     if (!is_open())
         return;
@@ -60,7 +63,7 @@ posix_descriptor::close() noexcept
 }
 
 native_handle_type
-posix_descriptor::native_handle() const noexcept
+posix_stream_descriptor::native_handle() const noexcept
 {
     if (!h_)
         return -1;
@@ -68,7 +71,7 @@ posix_descriptor::native_handle() const noexcept
 }
 
 void
-posix_descriptor::cancel() noexcept
+posix_stream_descriptor::cancel() noexcept
 {
     if (!is_open())
         return;

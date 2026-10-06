@@ -7,11 +7,11 @@
 // Official repository: https://github.com/cppalliance/corosio
 //
 
-#ifndef BOOST_COROSIO_NATIVE_NATIVE_POSIX_DESCRIPTOR_HPP
-#define BOOST_COROSIO_NATIVE_NATIVE_POSIX_DESCRIPTOR_HPP
+#ifndef BOOST_COROSIO_NATIVE_NATIVE_POSIX_STREAM_DESCRIPTOR_HPP
+#define BOOST_COROSIO_NATIVE_NATIVE_POSIX_STREAM_DESCRIPTOR_HPP
 
 #include <boost/corosio/detail/op_base.hpp>
-#include <boost/corosio/posix_descriptor.hpp>
+#include <boost/corosio/posix_stream_descriptor.hpp>
 #include <boost/corosio/backend.hpp>
 
 #if BOOST_COROSIO_POSIX || defined(BOOST_COROSIO_MRDOCS)
@@ -40,7 +40,7 @@ namespace boost::corosio {
 
 /** Drives an already-open POSIX descriptor, calling the backend directly.
 
-    This class template inherits from @ref posix_descriptor and
+    This class template inherits from @ref posix_stream_descriptor and
     shadows the async operations (`read_some`, `write_some`, `wait`)
     with versions that call the backend implementation directly.
     This lets the compiler inline through the entire call chain.
@@ -48,8 +48,8 @@ namespace boost::corosio {
     Non-async operations (`assign`, `release`, `close`, `cancel`)
     remain unchanged and dispatch through the compiled library.
 
-    A `native_posix_descriptor` IS-A `posix_descriptor` and can be
-    passed to any function expecting `posix_descriptor&` or
+    A `native_posix_stream_descriptor` IS-A `posix_stream_descriptor` and can be
+    passed to any function expecting `posix_stream_descriptor&` or
     `io_stream&`, in which case virtual dispatch is used
     transparently.
 
@@ -57,19 +57,19 @@ namespace boost::corosio {
         provides the concrete implementation types.
 
     @par Thread Safety
-    Same as @ref posix_descriptor.
+    Same as @ref posix_stream_descriptor.
 
     @par Example
     @par !example assign_and_wait
 
-    @see posix_descriptor, epoll_t, kqueue_t
+    @see posix_stream_descriptor, epoll_t, kqueue_t
 */
 template<auto Backend>
-class native_posix_descriptor : public posix_descriptor
+class native_posix_stream_descriptor : public posix_stream_descriptor
 {
     using backend_type = decltype(Backend);
-    using impl_type    = typename backend_type::descriptor_type;
-    using service_type = typename backend_type::descriptor_service_type;
+    using impl_type    = typename backend_type::stream_descriptor_type;
+    using service_type = typename backend_type::stream_descriptor_service_type;
 
     impl_type& get_impl() noexcept
     {
@@ -80,11 +80,11 @@ class native_posix_descriptor : public posix_descriptor
     struct native_read_awaitable
         : detail::bytes_op_base<native_read_awaitable<MutableBufferSequence>>
     {
-        native_posix_descriptor& self_;
+        native_posix_stream_descriptor& self_;
         MutableBufferSequence buffers_;
 
         native_read_awaitable(
-            native_posix_descriptor& self,
+            native_posix_stream_descriptor& self,
             MutableBufferSequence buffers) noexcept
             : self_(self)
             , buffers_(std::move(buffers))
@@ -103,11 +103,12 @@ class native_posix_descriptor : public posix_descriptor
     struct native_write_awaitable
         : detail::bytes_op_base<native_write_awaitable<ConstBufferSequence>>
     {
-        native_posix_descriptor& self_;
+        native_posix_stream_descriptor& self_;
         ConstBufferSequence buffers_;
 
         native_write_awaitable(
-            native_posix_descriptor& self, ConstBufferSequence buffers) noexcept
+            native_posix_stream_descriptor& self,
+            ConstBufferSequence buffers) noexcept
             : self_(self)
             , buffers_(std::move(buffers))
         {
@@ -123,11 +124,11 @@ class native_posix_descriptor : public posix_descriptor
 
     struct native_wait_awaitable : detail::void_op_base<native_wait_awaitable>
     {
-        native_posix_descriptor& self_;
+        native_posix_stream_descriptor& self_;
         wait_type w_;
 
         native_wait_awaitable(
-            native_posix_descriptor& self, wait_type w) noexcept
+            native_posix_stream_descriptor& self, wait_type w) noexcept
             : self_(self)
             , w_(w)
         {
@@ -145,7 +146,7 @@ public:
 
         @param ctx The execution context that owns this object.
     */
-    explicit native_posix_descriptor(capy::execution_context& ctx)
+    explicit native_posix_stream_descriptor(capy::execution_context& ctx)
         : io_object(handle(ctx, ctx.use_service<service_type>()))
     {
     }
@@ -157,25 +158,27 @@ public:
     template<class Ex>
         requires(!std::same_as<
                     std::remove_cvref_t<Ex>,
-                    native_posix_descriptor>) &&
+                    native_posix_stream_descriptor>) &&
         capy::Executor<Ex>
-    explicit native_posix_descriptor(Ex const& ex)
-        : native_posix_descriptor(ex.context())
+    explicit native_posix_stream_descriptor(Ex const& ex)
+        : native_posix_stream_descriptor(ex.context())
     {
     }
 
     /// Move construct.
-    native_posix_descriptor(native_posix_descriptor&&) noexcept = default;
+    native_posix_stream_descriptor(native_posix_stream_descriptor&&) noexcept =
+        default;
 
     /// Move assign.
-    native_posix_descriptor&
-    operator=(native_posix_descriptor&&) noexcept = default;
+    native_posix_stream_descriptor&
+    operator=(native_posix_stream_descriptor&&) noexcept = default;
 
     /// Copy construction is disabled; the handle is uniquely owned.
-    native_posix_descriptor(native_posix_descriptor const&) = delete;
+    native_posix_stream_descriptor(native_posix_stream_descriptor const&) =
+        delete;
     /// Copy assignment is disabled; the handle is uniquely owned.
-    native_posix_descriptor&
-    operator=(native_posix_descriptor const&) = delete;
+    native_posix_stream_descriptor&
+    operator=(native_posix_stream_descriptor const&) = delete;
 
     /** Asynchronously read data from the descriptor.
 
@@ -210,7 +213,7 @@ public:
     /** Wait for readiness without transferring bytes.
 
         Calls the backend implementation directly, bypassing virtual
-        dispatch. Otherwise identical to @ref posix_descriptor::wait.
+        dispatch. Otherwise identical to @ref posix_stream_descriptor::wait.
 
         @param w The direction to wait on.
 
@@ -226,4 +229,4 @@ public:
 
 #endif // BOOST_COROSIO_POSIX || BOOST_COROSIO_MRDOCS
 
-#endif // BOOST_COROSIO_NATIVE_NATIVE_POSIX_DESCRIPTOR_HPP
+#endif // BOOST_COROSIO_NATIVE_NATIVE_POSIX_STREAM_DESCRIPTOR_HPP

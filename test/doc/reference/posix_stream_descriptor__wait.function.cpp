@@ -7,12 +7,12 @@
 // Official repository: https://github.com/cppalliance/corosio
 //
 
-// Reference example injected into include/boost/corosio/posix_descriptor.hpp's
-// documentation for posix_descriptor::wait, by
+// Reference example injected into include/boost/corosio/posix_stream_descriptor.hpp's
+// documentation for posix_stream_descriptor::wait, by
 // doc/addons/extensions/reference-snippets.lua. The tagged region is what the
 // reference renders; scaffolding stays outside the tags.
 //
-// posix_descriptor's whole class body is wrapped in #if BOOST_COROSIO_POSIX in
+// posix_stream_descriptor's whole class body is wrapped in #if BOOST_COROSIO_POSIX in
 // its own header, so the region that names the type is guarded the same way,
 // following local_datagram_socket.record.cpp. The includes below are safe
 // unconditionally -- the header itself resolves to nothing off POSIX.
@@ -21,7 +21,7 @@
 
 #include <boost/corosio/detail/platform.hpp>
 #include <boost/corosio/io_context.hpp>
-#include <boost/corosio/posix_descriptor.hpp>
+#include <boost/corosio/posix_stream_descriptor.hpp>
 
 #include <boost/capy/task.hpp>
 
@@ -45,7 +45,7 @@ await_readable(corosio::io_context& ioc, int fd)
     if (copy < 0)
         co_return std::error_code(errno, std::system_category());
 
-    corosio::posix_descriptor d(ioc);
+    corosio::posix_stream_descriptor d(ioc);
     if (auto ec = d.assign(copy))
     {
         // A rejected descriptor stays the caller's to close.

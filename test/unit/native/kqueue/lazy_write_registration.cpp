@@ -20,7 +20,7 @@
 
 namespace boost::corosio {
 
-struct kqueue_register_rollback_test
+struct kqueue_lazy_write_registration_test
 {
     static bool has_filter(int kq, int fd, short filter)
     {
@@ -31,51 +31,43 @@ struct kqueue_register_rollback_test
         return ::kevent(kq, &ch, 1, nullptr, 0, nullptr) == 0;
     }
 
-    void testBothFiltersAdded()
+    void testAdoptRegistersReadOnly()
     {
         int kq = ::kqueue();
         int fds[2];
         BOOST_TEST_EQ(::pipe(fds), 0);
-        auto r = detail::kqueue_add_rw(kq, fds[0], nullptr);
-        BOOST_TEST_EQ(r.read_err, 0);
-        BOOST_TEST_EQ(r.write_err, 0);
+        BOOST_TEST_EQ(
+            detail::kqueue_add_filter(kq, fds[0], EVFILT_READ, nullptr), 0);
         BOOST_TEST(has_filter(kq, fds[0], EVFILT_READ));
+        BOOST_TEST(!has_filter(kq, fds[0], EVFILT_WRITE));
         ::close(fds[0]);
         ::close(fds[1]);
         ::close(kq);
     }
 
-    void testWriteRefusalLeavesNothingRegistered()
+    void testRefusedFilterReportsErrno()
     {
-        // A FreeBSD pipe write end whose reader is gone refuses
-        // EVFILT_WRITE with EPIPE while accepting EVFILT_READ.
-        int kq = ::kqueue();
-        int fds[2];
-        BOOST_TEST_EQ(::pipe(fds), 0);
-        ::close(fds[0]);
-        auto r = detail::kqueue_add_rw(kq, fds[1], nullptr);
-        if (r.write_err == 0)
-        {
-            // This kernel accepts it; the scenario is not reproducible.
-            ::close(fds[1]);
-            ::close(kq);
-            return;
-        }
-        BOOST_TEST(!has_filter(kq, fds[1], EVFILT_READ));
-        ::close(fds[1]);
+        // A kqueue descriptor has a read filter only.
+        int kq    = ::kqueue();
+        int inner = ::kqueue();
+        BOOST_TEST_EQ(
+            detail::kqueue_add_filter(kq, inner, EVFILT_WRITE, nullptr),
+            EINVAL);
+        BOOST_TEST(!has_filter(kq, inner, EVFILT_WRITE));
+        ::close(inner);
         ::close(kq);
     }
 
     void run()
     {
-        testBothFiltersAdded();
-        testWriteRefusalLeavesNothingRegistered();
+        testAdoptRegistersReadOnly();
+        testRefusedFilterReportsErrno();
     }
 };
 
 TEST_SUITE(
-    kqueue_register_rollback_test,
-    "boost.corosio.native.kqueue.register_rollback");
+    kqueue_lazy_write_registration_test,
+    "boost.corosio.native.kqueue.lazy_write_registration");
 
 } // namespace boost::corosio
 

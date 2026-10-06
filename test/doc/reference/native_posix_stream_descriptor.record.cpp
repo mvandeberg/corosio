@@ -8,16 +8,16 @@
 //
 
 // Reference example injected into
-// include/boost/corosio/native/native_posix_descriptor.hpp's documentation
-// for native_posix_descriptor, by doc/addons/extensions/reference-snippets.lua.
+// include/boost/corosio/native/native_posix_stream_descriptor.hpp's documentation
+// for native_posix_stream_descriptor, by doc/addons/extensions/reference-snippets.lua.
 // The tagged region is what the reference renders; scaffolding stays outside
 // the tags.
 //
-// native_posix_descriptor is a class template (`template<auto Backend>`);
+// native_posix_stream_descriptor is a class template (`template<auto Backend>`);
 // the reference slug drops the template parameter, but the example must
 // still name a concrete backend tag. corosio::epoll is what this library
 // actually offers as a compile-time tag on Linux (see backend.hpp); every
-// backend tag defines descriptor_type, so the type itself is not the
+// backend tag defines stream_descriptor_type, so the type itself is not the
 // constraint -- the tag's own existence is. Guarding on
 // BOOST_COROSIO_HAS_EPOLL (rather than BOOST_COROSIO_POSIX) matches
 // native_local_stream_socket.record.cpp's precedent for this exact class
@@ -27,7 +27,7 @@
 
 #include <boost/corosio/backend.hpp>
 #include <boost/corosio/native/native_io_context.hpp>
-#include <boost/corosio/native/native_posix_descriptor.hpp>
+#include <boost/corosio/native/native_posix_stream_descriptor.hpp>
 
 #include <boost/capy/ex/run_async.hpp>
 #include <boost/capy/task.hpp>
@@ -46,7 +46,7 @@ namespace {
 capy::task<std::error_code>
 await_readable_native(corosio::native_io_context<corosio::epoll>& ctx, int fd)
 {
-    corosio::native_posix_descriptor<corosio::epoll> d(ctx);
+    corosio::native_posix_stream_descriptor<corosio::epoll> d(ctx);
 
     // Adopt a duplicate: assign() takes ownership of the copy, so the
     // caller's own fd stays independent of this object's lifetime.

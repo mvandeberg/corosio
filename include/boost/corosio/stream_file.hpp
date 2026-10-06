@@ -14,6 +14,7 @@
 #include <boost/corosio/detail/platform.hpp>
 #include <boost/corosio/detail/except.hpp>
 #include <boost/corosio/detail/native_handle.hpp>
+#include <boost/corosio/error.hpp>
 #include <boost/corosio/file_base.hpp>
 #include <boost/corosio/io/io_stream.hpp>
 #include <boost/capy/ex/execution_context.hpp>
@@ -290,35 +291,34 @@ public:
 
     /** Adopt an existing native handle.
 
-        Validation runs before anything is mutated or closed. On
-        error the object still holds whatever file it held before,
-        and the caller still owns @p handle. On success the object
-        takes ownership of @p handle and closes any file it
-        previously held. Handles created elsewhere may be unsuitable
-        for asynchronous I/O; such failures are reported through the
-        returned error code.
+        The object must be closed. To replace a held file, `close()`
+        or `release()` it first. On success the object takes
+        ownership of @p handle. Handles created elsewhere may be
+        unsuitable for asynchronous I/O; such failures are reported
+        through the returned error code.
 
         @param handle The native file descriptor or handle.
 
         @return An error code describing the outcome.
-            `errc::invalid_argument` if @p handle is the one this
-            object already holds. `errc::bad_file_descriptor` if it
-            is invalid. `errc::operation_not_supported` if it names
-            something a file object cannot position. On Windows,
+            `error::already_open` if this object is open.
+            `errc::bad_file_descriptor` if @p handle is invalid.
+            `errc::operation_not_supported` if it names something a
+            file object cannot position. On Windows,
             that means a pipe, a socket, a console, a directory, a
             handle opened without `FILE_FLAG_OVERLAPPED`, or one
             already in skip-completion-port-on-success mode. On
-            Windows, `errc::invalid_argument` also when @p handle is
+            Windows, `errc::invalid_argument` when @p handle is
             bound to another completion port. Any other failure is
             the code reported by the system. Otherwise, the code is
             empty.
 
         @par Exception Safety
-        Throws nothing. Strong guarantee.
+        Throws nothing. On failure the object is unchanged and the
+        caller still owns @p handle.
 
         @note On POSIX, "something a file object cannot position"
             means, in practice, a pipe, a socket, or any other
-            anonymous inode. Adopt those into a @ref posix_descriptor
+            anonymous inode. Adopt those into a @ref posix_stream_descriptor
             instead.
 
         @see release

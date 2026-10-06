@@ -16,6 +16,7 @@
 
 #if BOOST_COROSIO_HAS_IOCP
 
+#include <boost/corosio/error.hpp>
 #include <boost/corosio/io_context.hpp>
 #include <boost/corosio/local_endpoint.hpp>
 #include <boost/corosio/local_stream_acceptor.hpp>
@@ -197,41 +198,42 @@ struct iocp_paths_test
         io_context ioc(iocp);
         auto const invalid = static_cast<native_handle_type>(~0ull);
 
+        // Validation runs only on a closed object; an open one reports
+        // already_open first.
         tcp_socket t(ioc);
-        BOOST_TEST(!t.open(family::v4));
         BOOST_TEST(!!t.assign(invalid));
-        BOOST_TEST(
-            t.assign(t.native_handle()) ==
-            std::make_error_code(std::errc::invalid_argument));
-        BOOST_TEST(t.is_open());
+        BOOST_TEST(!t.is_open());
 
         // A datagram socket is the wrong type for a TCP stream slot.
         udp_socket u(ioc);
         BOOST_TEST(!u.open(family::v4));
         auto ufd = u.release();
         BOOST_TEST(!!t.assign(ufd));
+        BOOST_TEST(!t.is_open());
         ::closesocket(static_cast<SOCKET>(ufd));
 
+        BOOST_TEST(!t.open(family::v4));
+        BOOST_TEST(t.assign(t.native_handle()) == error::already_open);
+        BOOST_TEST(t.is_open());
+
         udp_socket u2(ioc);
-        BOOST_TEST(!u2.open(family::v4));
         BOOST_TEST(!!u2.assign(invalid));
-        BOOST_TEST(
-            u2.assign(u2.native_handle()) ==
-            std::make_error_code(std::errc::invalid_argument));
+        BOOST_TEST(!u2.is_open());
+        BOOST_TEST(!u2.open(family::v4));
+        BOOST_TEST(u2.assign(u2.native_handle()) == error::already_open);
 
         // An AF_INET socket cannot back an AF_UNIX acceptor.
         test::temp_socket_dir tmp;
         local_stream_acceptor lacc(ioc);
-        BOOST_TEST(!lacc.open());
         tcp_socket t2(ioc);
         BOOST_TEST(!t2.open(family::v4));
         auto tfd = t2.release();
         BOOST_TEST(!!lacc.assign(tfd));
+        BOOST_TEST(!lacc.is_open());
         ::closesocket(static_cast<SOCKET>(tfd));
 
-        BOOST_TEST(
-            lacc.assign(lacc.native_handle()) ==
-            std::make_error_code(std::errc::invalid_argument));
+        BOOST_TEST(!lacc.open());
+        BOOST_TEST(lacc.assign(lacc.native_handle()) == error::already_open);
     }
 
     void testShutdownReceiveVariants()

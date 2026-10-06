@@ -10,7 +10,7 @@
 // The two-phase transfer machinery in uring_descriptor: a kernel EAGAIN
 // arms a poll_add, the poll's completion re-submits the transfer, and
 // every path that abandons the op in between leaves a terminal result
-// behind. None of this is reachable through posix_descriptor's public
+// behind. None of this is reachable through posix_stream_descriptor's public
 // API: io_uring retries a pollable O_NONBLOCK descriptor internally, so
 // -EAGAIN never reaches userspace for the descriptor kinds this type
 // carries, and the remaining producer (an SQ ring that stays full after

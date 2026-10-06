@@ -7,8 +7,8 @@
 // Official repository: https://github.com/cppalliance/corosio
 //
 
-#ifndef BOOST_COROSIO_POSIX_DESCRIPTOR_HPP
-#define BOOST_COROSIO_POSIX_DESCRIPTOR_HPP
+#ifndef BOOST_COROSIO_POSIX_STREAM_DESCRIPTOR_HPP
+#define BOOST_COROSIO_POSIX_STREAM_DESCRIPTOR_HPP
 
 #include <boost/corosio/detail/config.hpp>
 #include <boost/corosio/detail/platform.hpp>
@@ -18,6 +18,7 @@
 #include <boost/corosio/detail/except.hpp>
 #include <boost/corosio/detail/native_handle.hpp>
 #include <boost/corosio/detail/op_base.hpp>
+#include <boost/corosio/error.hpp>
 #include <boost/corosio/io/io_stream.hpp>
 #include <boost/corosio/wait_type.hpp>
 #include <boost/capy/ex/executor_ref.hpp>
@@ -35,18 +36,16 @@
    The two contract points that are not obvious from the
    declarations:
 
-   assign() validates before it mutates. A fd rejected by validation
-   leaves the object holding whatever it held before, pending
-   operations included, and leaves ownership of the fd with the
-   caller. A kernel registration refusal is the one exception. The
-   previous descriptor is already closed by then, so the object is
-   left closed.
+   assign() requires a closed object and never touches an open one.
+   Every failure, validation or kernel refusal, leaves the object
+   closed and the fd with the caller.
 
-   O_NONBLOCK is applied lazily, at the first read_some/write_some,
-   and never restored. A wait()-only user never triggers it, which
-   is what makes adopting STDIN_FILENO safe: flipping the flag would
-   change the parent shell's terminal, because the flag lives on the
-   shared open file description, not on the descriptor.
+   On the reactor backends O_NONBLOCK is applied lazily, at the first
+   read_some/write_some, and never restored; io_uring never touches
+   it. A wait()-only user never triggers it, which is what makes
+   adopting STDIN_FILENO safe: flipping the flag would change the
+   parent shell's terminal, because the flag lives on the shared open
+   file description, not on the descriptor.
 */
 
 namespace boost::corosio {
@@ -61,7 +60,7 @@ namespace boost::corosio {
 
     The type name is deliberately platform-qualified. Portability
     comes from the interfaces it implements, not from the name. A
-    `posix_descriptor` is an @ref io_stream. `capy::read`,
+    `posix_stream_descriptor` is an @ref io_stream. `capy::read`,
     `capy::write`, other `capy::Stream`-constrained algorithms and
     TLS layering therefore work on it exactly as they do on a
     socket.
@@ -73,10 +72,12 @@ namespace boost::corosio {
     which both descriptors share.
 
     @par Descriptor Flags
-    `assign()` and `wait()` never modify the descriptor. The first
-    `read_some()` or `write_some()` sets `O_NONBLOCK` and never
-    restores it. The flag lives on the shared open file
-    description, so restoring it would race every other holder. A
+    `assign()` and `wait()` never modify the descriptor on any
+    backend. On epoll, kqueue and select the first `read_some()` or
+    `write_some()` sets `O_NONBLOCK` and never restores it. On
+    io_uring nothing is ever modified. The flag lives on the shared
+    open file description, so restoring it would race every other
+    holder. A
     `dup()` is no escape: the duplicate shares that same description,
     so the flag change reaches the other holder anyway. When another
     party owns the descriptor and cannot tolerate `O_NONBLOCK`, use
@@ -92,17 +93,16 @@ namespace boost::corosio {
     backend. An operation on it that would have to wait for readiness
     completes with `errc::operation_not_supported`. On select, a
     descriptor at or above `FD_SETSIZE` is rejected with
-    `errc::too_many_files_open` before anything changes. Where a
-    kernel refusal surfaces depends on the backend. The epoll and
-    kqueue backends register the descriptor during `assign()`, so a
-    refusal fails there. What remains to refuse is resource exhaustion
-    (`ENOMEM`, `ENOSPC`).
-    The io_uring backend has no adopt-time registration, so
-    `assign()` succeeds and takes ownership, and the refusal appears
-    at the first `read_some()` or `write_some()`. An `assign()`-time
-    refusal is the one failure that does not preserve the previously
-    held descriptor. The previous descriptor is already closed by
-    then, so the object is left closed.
+    `errc::too_many_files_open`. Where a kernel refusal surfaces
+    depends on the backend. The epoll and kqueue backends register the
+    descriptor during `assign()`, so a refusal fails there. What
+    remains to refuse is resource exhaustion (`ENOMEM`, `ENOSPC`).
+    kqueue watches writes only once a write-direction operation first
+    has to wait. A descriptor that refuses write watching is still
+    adopted, and such a write or `wait(wait_type::write)` completes
+    with the kernel's refusal. The io_uring backend has no adopt-time
+    registration, so `assign()` succeeds and takes ownership, and the
+    refusal appears at the first `read_some()` or `write_some()`.
 
     @par Signals
     Writing to a descriptor whose peer has closed raises `SIGPIPE`
@@ -121,7 +121,7 @@ namespace boost::corosio {
 
     @see io_stream, stream_file, wait_type
 */
-class BOOST_COROSIO_DECL posix_descriptor : public io_stream
+class BOOST_COROSIO_DECL posix_stream_descriptor : public io_stream
 {
 public:
     /** Define backend hooks for descriptor operations.
@@ -176,15 +176,17 @@ public:
     struct wait_awaitable : detail::void_op_base<wait_awaitable>
     {
     private:
-        friend posix_descriptor;
+        friend posix_stream_descriptor;
 
-        wait_awaitable(posix_descriptor& d, wait_type w) noexcept : d_(d), w_(w)
+        wait_awaitable(posix_stream_descriptor& d, wait_type w) noexcept
+            : d_(d)
+            , w_(w)
         {
         }
 
         friend detail::void_op_base<wait_awaitable>;
 
-        posix_descriptor& d_;
+        posix_stream_descriptor& d_;
         wait_type w_;
 
         std::coroutine_handle<>
@@ -198,26 +200,29 @@ public:
 
         Closes the descriptor if open, cancelling pending operations.
     */
-    ~posix_descriptor() override;
+    ~posix_stream_descriptor() override;
 
     /** Construct from an execution context.
 
         @param ctx The execution context that owns this object.
     */
-    explicit posix_descriptor(capy::execution_context& ctx);
+    explicit posix_stream_descriptor(capy::execution_context& ctx);
 
     /** Construct from an executor.
 
-        The overload excludes `posix_descriptor` itself so that it
+        The overload excludes `posix_stream_descriptor` itself so that it
         cannot displace the move constructor.
 
         @tparam Ex A type satisfying `capy::Executor`.
         @param ex The executor whose context owns this object.
     */
     template<class Ex>
-        requires(!std::same_as<std::remove_cvref_t<Ex>, posix_descriptor>) &&
+        requires(!std::same_as<
+                    std::remove_cvref_t<Ex>,
+                    posix_stream_descriptor>) &&
         capy::Executor<Ex>
-    explicit posix_descriptor(Ex const& ex) : posix_descriptor(ex.context())
+    explicit posix_stream_descriptor(Ex const& ex)
+        : posix_stream_descriptor(ex.context())
     {
     }
 
@@ -226,7 +231,7 @@ public:
         @param other The object to move from.
         @pre No awaitables returned by @p other's methods exist.
     */
-    posix_descriptor(posix_descriptor&& other) noexcept
+    posix_stream_descriptor(posix_stream_descriptor&& other) noexcept
         : io_object(std::move(other))
     {
     }
@@ -237,45 +242,38 @@ public:
         @return `*this`.
         @pre No awaitables returned by either object's methods exist.
     */
-    posix_descriptor& operator=(posix_descriptor&& other) noexcept
+    posix_stream_descriptor& operator=(posix_stream_descriptor&& other) noexcept
     {
         io_object::operator=(std::move(other));
         return *this;
     }
 
     /// Copy construction is disabled; the descriptor is uniquely owned.
-    posix_descriptor(posix_descriptor const&) = delete;
+    posix_stream_descriptor(posix_stream_descriptor const&) = delete;
     /// Copy assignment is disabled; the descriptor is uniquely owned.
-    posix_descriptor& operator=(posix_descriptor const&) = delete;
+    posix_stream_descriptor& operator=(posix_stream_descriptor const&) = delete;
 
     /** Adopt an existing native descriptor.
 
-        Validation runs before anything is mutated or closed. When
-        validation rejects @p fd the object still holds whatever
-        descriptor and pending operations it held before, and the
-        caller still owns @p fd. On success the object takes
+        The object must be closed. To replace a held descriptor,
+        `close()` or `release()` it first. On success the object takes
         ownership and @p fd is closed by `close()` or the destructor.
 
         No descriptor flag is modified here, `O_NONBLOCK` included.
 
         @param fd The native descriptor to adopt.
 
-        @return `errc::invalid_argument` when @p fd is the
-            descriptor this object already holds.
+        @return `error::already_open` if this object is open.
             `errc::bad_file_descriptor` when @p fd is negative or
             closed. `errc::operation_not_supported` when @p fd names
             a regular file, block device, or directory.
             `errc::too_many_files_open` on select when @p fd is at or
-            above `FD_SETSIZE`. Otherwise the `errno` reported by the
-            kernel, or an empty code.
+            above `FD_SETSIZE`. Otherwise the error the system
+            reported, or an empty code.
 
         @par Exception Safety
-        Throws nothing. The strong guarantee covers every validation
-        failure, `FD_SETSIZE` on select included. A kernel
-        registration refusal can occur only after validation passes,
-        and only on the backends that register at adopt time (epoll,
-        kqueue). The previous descriptor is already closed by then,
-        so the object is left closed and @p fd stays with the caller.
+        Throws nothing. On failure the object is unchanged and @p fd
+        stays with the caller.
 
         @see release
     */
@@ -347,13 +345,16 @@ public:
 
 protected:
     /// Default-construct (for derived types that initialize `io_object` directly).
-    posix_descriptor() noexcept = default;
+    posix_stream_descriptor() noexcept = default;
 
     /** Construct from a handle.
 
         @param h The handle this object takes ownership of.
     */
-    explicit posix_descriptor(handle h) noexcept : io_object(std::move(h)) {}
+    explicit posix_stream_descriptor(handle h) noexcept
+        : io_object(std::move(h))
+    {
+    }
 
 private:
     /// Return the implementation downcast to this type's interface.

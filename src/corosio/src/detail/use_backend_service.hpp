@@ -1,5 +1,6 @@
 //
 // Copyright (c) 2026 Steve Gerbino
+// Copyright (c) 2026 Michael Vandeberg
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -97,7 +98,7 @@ struct local_datagram_service_of
 template<class Tag>
 struct descriptor_service_of
 {
-    using type = typename Tag::descriptor_service_type;
+    using type = typename Tag::stream_descriptor_service_type;
 };
 
 template<class Tag>

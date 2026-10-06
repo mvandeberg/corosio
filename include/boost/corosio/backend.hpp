@@ -88,9 +88,9 @@ struct epoll_t
     using local_datagram_service_type = detail::epoll_local_datagram_service;
 
     /// The concrete adopted-descriptor type.
-    using descriptor_type = detail::epoll_descriptor;
+    using stream_descriptor_type = detail::epoll_descriptor;
     /// The service that owns the descriptor implementations.
-    using descriptor_service_type = detail::epoll_descriptor_service;
+    using stream_descriptor_service_type = detail::epoll_descriptor_service;
 
     /// The concrete signal set type.
     using signal_type = detail::posix_signal;
@@ -197,9 +197,9 @@ struct select_t
     using local_datagram_service_type = detail::select_local_datagram_service;
 
     /// The concrete adopted-descriptor type.
-    using descriptor_type = detail::select_descriptor;
+    using stream_descriptor_type = detail::select_descriptor;
     /// The service that owns the descriptor implementations.
-    using descriptor_service_type = detail::select_descriptor_service;
+    using stream_descriptor_service_type = detail::select_descriptor_service;
 
     /// The concrete signal set type.
     using signal_type = detail::posix_signal;
@@ -306,9 +306,9 @@ struct kqueue_t
     using local_datagram_service_type = detail::kqueue_local_datagram_service;
 
     /// The concrete adopted-descriptor type.
-    using descriptor_type = detail::kqueue_descriptor;
+    using stream_descriptor_type = detail::kqueue_descriptor;
     /// The service that owns the descriptor implementations.
-    using descriptor_service_type = detail::kqueue_descriptor_service;
+    using stream_descriptor_service_type = detail::kqueue_descriptor_service;
 
     /// The concrete signal set type.
     using signal_type = detail::posix_signal;
@@ -415,9 +415,9 @@ struct uring_t
     using local_datagram_service_type = detail::uring_local_datagram_service;
 
     /// The concrete adopted-descriptor type.
-    using descriptor_type = detail::uring_descriptor;
+    using stream_descriptor_type = detail::uring_descriptor;
     /// The service that owns the descriptor implementations.
-    using descriptor_service_type = detail::uring_descriptor_service;
+    using stream_descriptor_service_type = detail::uring_descriptor_service;
 
     /// The concrete signal set type.
     using signal_type = detail::posix_signal;

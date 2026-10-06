@@ -1,5 +1,6 @@
 //
 // Copyright (c) 2025 Vinnie Falco (vinnie.falco@gmail.com)
+// Copyright (c) 2026 Michael Vandeberg
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -215,8 +216,8 @@ platform and backend:
 | Unparseable input to the `make_*` factories, invalid signal_set
   flags, a negative seek
 
-| `already_connected`
-| `connect_pair()` on an already-open socket
+| `corosio::error::already_open`
+| `assign()` or `connect_pair()` on an already-open object
 
 | `no_such_device_or_address`
 | `corosio::connect()` with no viable candidate

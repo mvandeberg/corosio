@@ -1,5 +1,6 @@
 //
 // Copyright (c) 2026 Steve Gerbino
+// Copyright (c) 2026 Michael Vandeberg
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -17,7 +18,7 @@
 #include <boost/corosio/detail/platform.hpp>
 
 #include <boost/corosio/native/native_io_context.hpp>
-#include <boost/corosio/native/native_posix_descriptor.hpp>
+#include <boost/corosio/native/native_posix_stream_descriptor.hpp>
 #include <boost/corosio/native/native_random_access_file.hpp>
 #include <boost/corosio/native/native_stream_file.hpp>
 #include <boost/corosio/native/native_tcp_acceptor.hpp>
@@ -419,7 +420,7 @@ struct native_resume_cancel_test
         BOOST_TEST_EQ(::pipe(fds), 0);
         BOOST_TEST_EQ(::write(fds[1], "hello", 5), 5);
 
-        native_posix_descriptor<Backend> d(ioc);
+        native_posix_stream_descriptor<Backend> d(ioc);
         BOOST_TEST(!d.assign(fds[0]));
 
         std::stop_source ss;
@@ -462,7 +463,7 @@ struct native_resume_cancel_test
         BOOST_TEST_EQ(::pipe(fds), 0);
         BOOST_TEST_EQ(::write(fds[1], "hello", 5), 5);
 
-        native_posix_descriptor<Backend> d(ioc);
+        native_posix_stream_descriptor<Backend> d(ioc);
         BOOST_TEST(!d.assign(fds[0]));
 
         std::stop_source ss;

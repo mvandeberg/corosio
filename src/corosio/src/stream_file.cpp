@@ -8,6 +8,7 @@
 //
 
 #include <boost/corosio/stream_file.hpp>
+#include <boost/corosio/error.hpp>
 #include <boost/corosio/detail/except.hpp>
 #include <boost/corosio/detail/platform.hpp>
 
@@ -127,9 +128,8 @@ stream_file::release()
 std::error_code
 stream_file::assign(native_handle_type handle) noexcept
 {
-    // Closing here first, unconditionally, would defeat the impl's own
-    // validate-before-mutate contract: get().assign() validates handle
-    // and only then closes whatever this object currently holds.
+    if (is_open())
+        return make_error_code(error::already_open);
     return get().assign(handle);
 }
 

@@ -8,13 +8,14 @@
 //
 
 // Test that header file is self-contained.
-#include <boost/corosio/posix_descriptor.hpp>
+#include <boost/corosio/posix_stream_descriptor.hpp>
 
 #include <boost/corosio/detail/platform.hpp>
 
 #if BOOST_COROSIO_POSIX
 
 #include <boost/corosio/delay.hpp>
+#include <boost/corosio/error.hpp>
 #include <boost/capy/buffers.hpp>
 #include <boost/capy/concept/read_stream.hpp>
 #include <boost/capy/concept/write_stream.hpp>
@@ -38,33 +39,38 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#if BOOST_COROSIO_HAS_KQUEUE
+#include <sys/event.h>
+#endif
+
 #include "context.hpp"
 #include "test_suite.hpp"
 
 namespace boost::corosio {
 
-static_assert(capy::ReadStream<posix_descriptor>);
-static_assert(capy::WriteStream<posix_descriptor>);
-static_assert(std::is_base_of_v<io_stream, posix_descriptor>);
-static_assert(!std::is_copy_constructible_v<posix_descriptor>);
-static_assert(std::is_move_constructible_v<posix_descriptor>);
+static_assert(capy::ReadStream<posix_stream_descriptor>);
+static_assert(capy::WriteStream<posix_stream_descriptor>);
+static_assert(std::is_base_of_v<io_stream, posix_stream_descriptor>);
+static_assert(!std::is_copy_constructible_v<posix_stream_descriptor>);
+static_assert(std::is_move_constructible_v<posix_stream_descriptor>);
 
 // assign() must be impossible to call and ignore.
 static_assert(std::is_same_v<
-              decltype(std::declval<posix_descriptor&>().assign(
+              decltype(std::declval<posix_stream_descriptor&>().assign(
                   std::declval<native_handle_type>())),
               std::error_code>);
 
-struct posix_descriptor_contract_test
+struct posix_stream_descriptor_contract_test
 {
     void run() {}
 };
 
 TEST_SUITE(
-    posix_descriptor_contract_test, "boost.corosio.posix_descriptor_contract");
+    posix_stream_descriptor_contract_test,
+    "boost.corosio.posix_stream_descriptor_contract");
 
 template<auto Backend>
-struct posix_descriptor_test
+struct posix_stream_descriptor_test
 {
     // Returns a pipe whose ends are both blocking, so every test that
     // cares about O_NONBLOCK starts from a known state.
@@ -73,13 +79,27 @@ struct posix_descriptor_test
         BOOST_TEST_EQ(::pipe(fds), 0);
     }
 
+    // io_uring never touches the descriptor's flags; the reactors set
+    // O_NONBLOCK on the first transfer.
+#if BOOST_COROSIO_HAS_URING
+    static constexpr bool is_uring =
+        std::is_same_v<std::remove_const_t<decltype(Backend)>, uring_t>;
+#else
+    static constexpr bool is_uring = false;
+#endif
+
+    static bool has_nonblock(int fd)
+    {
+        return (::fcntl(fd, F_GETFL) & O_NONBLOCK) != 0;
+    }
+
     // The .epoll, .select and .uring variants are separate ctest
     // entries that run concurrently under ctest -j, so a fixed global
     // name would race between them.
     static std::filesystem::path temp_path(char const* tag)
     {
         return std::filesystem::temp_directory_path() /
-            ("corosio_posix_descriptor_" + std::string(tag) + "_" +
+            ("corosio_posix_stream_descriptor_" + std::string(tag) + "_" +
              typeid(decltype(Backend)).name() + "_" +
              std::to_string(::getpid()));
     }
@@ -87,7 +107,7 @@ struct posix_descriptor_test
     void testConstruction()
     {
         io_context ioc(Backend);
-        posix_descriptor d(ioc);
+        posix_stream_descriptor d(ioc);
         BOOST_TEST_EQ(d.is_open(), false);
         BOOST_TEST_EQ(d.native_handle(), -1);
     }
@@ -95,7 +115,7 @@ struct posix_descriptor_test
     void testAssignRejectsRegularFile()
     {
         io_context ioc(Backend);
-        posix_descriptor d(ioc);
+        posix_stream_descriptor d(ioc);
 
         auto path = temp_path("regular");
         int fd    = ::open(path.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0600);
@@ -113,19 +133,19 @@ struct posix_descriptor_test
     void testAssignRejectsBadFd()
     {
         io_context ioc(Backend);
-        posix_descriptor d(ioc);
+        posix_stream_descriptor d(ioc);
         BOOST_TEST(d.assign(-1) == std::errc::bad_file_descriptor);
     }
 
     void testAssignRejectsSelf()
     {
         io_context ioc(Backend);
-        posix_descriptor d(ioc);
+        posix_stream_descriptor d(ioc);
         int fds[2];
         make_pipe(fds);
 
         BOOST_TEST(!d.assign(fds[0]));
-        BOOST_TEST(d.assign(d.native_handle()) == std::errc::invalid_argument);
+        BOOST_TEST(d.assign(d.native_handle()) == error::already_open);
         // Still open on the same fd after the rejected self-assign.
         BOOST_TEST_EQ(d.is_open(), true);
         BOOST_TEST_EQ(d.native_handle(), fds[0]);
@@ -133,50 +153,46 @@ struct posix_descriptor_test
         ::close(fds[1]);
     }
 
-    void testFailedAssignLeavesPriorStateIntact()
+    void testAssignOnOpenKeepsParkedRead()
     {
         io_context ioc(Backend);
-        posix_descriptor d(ioc);
-        int fds[2];
-        make_pipe(fds);
-        BOOST_TEST(!d.assign(fds[0]));
+        posix_stream_descriptor d(ioc);
+        int a[2], b[2];
+        make_pipe(a);
+        make_pipe(b);
+        BOOST_TEST(!d.assign(a[0]));
 
-        auto path = temp_path("reject");
-        int reg   = ::open(path.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0600);
-        BOOST_TEST(reg >= 0);
-
-        BOOST_TEST(d.assign(reg) == std::errc::operation_not_supported);
-
-        // The held descriptor survived the rejected assign and still works.
-        BOOST_TEST_EQ(d.native_handle(), fds[0]);
-        char const msg[] = "ok";
-        BOOST_TEST_EQ(::write(fds[1], msg, 2), 2);
-
-        auto ex = ioc.get_executor();
-        char buf[8]{};
-        std::size_t n = 0;
-        std::error_code ec;
+        std::error_code rec;
+        std::size_t rn = 0;
+        char buf[1];
         auto reader = [&]() -> capy::task<> {
-            auto [rec, rn] =
-                co_await d.read_some(capy::mutable_buffer(buf, sizeof(buf)));
-            ec = rec;
-            n  = rn;
+            auto [e, n] = co_await d.read_some(capy::mutable_buffer(buf, 1));
+            rec         = e;
+            rn          = n;
         };
-        capy::run_async(ex)(reader());
+        auto other = [&]() -> capy::task<> {
+            auto [e] = co_await delay(std::chrono::milliseconds(10));
+            (void)e;
+            BOOST_TEST(d.assign(b[0]) == error::already_open);
+            BOOST_TEST_EQ(d.native_handle(), a[0]);
+            BOOST_TEST(::fcntl(b[0], F_GETFD) >= 0); // still the caller's
+            BOOST_TEST_EQ(::write(a[1], "k", 1), 1);
+        };
+        capy::run_async(ioc.get_executor())(reader());
+        capy::run_async(ioc.get_executor())(other());
         ioc.run();
 
-        BOOST_TEST(!ec);
-        BOOST_TEST_EQ(n, 2u);
-
-        ::close(reg);
-        std::filesystem::remove(path);
-        ::close(fds[1]);
+        BOOST_TEST(!rec);
+        BOOST_TEST_EQ(rn, 1u);
+        ::close(a[1]);
+        ::close(b[0]);
+        ::close(b[1]);
     }
 
     void testAssignDoesNotTouchFlagsButReadDoes()
     {
         io_context ioc(Backend);
-        posix_descriptor d(ioc);
+        posix_stream_descriptor d(ioc);
         int fds[2];
         make_pipe(fds);
 
@@ -200,8 +216,8 @@ struct posix_descriptor_test
 
         BOOST_TEST_EQ(n, 5u);
         BOOST_TEST_EQ(std::memcmp(buf, msg, 5), 0);
-        // ...and the first read is what flipped the flag.
-        BOOST_TEST(::fcntl(fds[0], F_GETFL) & O_NONBLOCK);
+        // ...and on a reactor the first read is what flipped the flag.
+        BOOST_TEST_EQ(has_nonblock(fds[0]), !is_uring);
 
         ::close(fds[1]);
     }
@@ -209,7 +225,7 @@ struct posix_descriptor_test
     void testWaitDoesNotTouchFlags()
     {
         io_context ioc(Backend);
-        posix_descriptor d(ioc);
+        posix_stream_descriptor d(ioc);
         int fds[2];
         make_pipe(fds);
         BOOST_TEST(!d.assign(fds[0]));
@@ -241,7 +257,7 @@ struct posix_descriptor_test
     void testWaitReadParksUntilDataArrives()
     {
         io_context ioc(Backend);
-        posix_descriptor d(ioc);
+        posix_stream_descriptor d(ioc);
         int fds[2];
         make_pipe(fds);
         BOOST_TEST(!d.assign(fds[0]));
@@ -274,7 +290,7 @@ struct posix_descriptor_test
         // Registration latches write_ready on an empty pipe; the probe
         // must not let that stale flag report a full pipe as writable.
         io_context ioc(Backend);
-        posix_descriptor d(ioc);
+        posix_stream_descriptor d(ioc);
         int fds[2];
         make_pipe(fds);
         BOOST_TEST(!d.assign(fds[1]));
@@ -326,7 +342,7 @@ struct posix_descriptor_test
     void testWriteSome()
     {
         io_context ioc(Backend);
-        posix_descriptor d(ioc);
+        posix_stream_descriptor d(ioc);
         int fds[2];
         make_pipe(fds);
         BOOST_TEST(!d.assign(fds[1]));
@@ -352,7 +368,7 @@ struct posix_descriptor_test
     void testCancelPendingRead()
     {
         io_context ioc(Backend);
-        posix_descriptor d(ioc);
+        posix_stream_descriptor d(ioc);
         int fds[2];
         make_pipe(fds);
         BOOST_TEST(!d.assign(fds[0]));
@@ -385,7 +401,7 @@ struct posix_descriptor_test
     void testReleaseCancelsAndTransfersOwnership()
     {
         io_context ioc(Backend);
-        posix_descriptor d(ioc);
+        posix_stream_descriptor d(ioc);
         int fds[2];
         make_pipe(fds);
         BOOST_TEST(!d.assign(fds[0]));
@@ -424,7 +440,7 @@ struct posix_descriptor_test
     void testEofOnClosedWriteEnd()
     {
         io_context ioc(Backend);
-        posix_descriptor d(ioc);
+        posix_stream_descriptor d(ioc);
         int fds[2];
         make_pipe(fds);
         BOOST_TEST(!d.assign(fds[0]));
@@ -456,7 +472,7 @@ struct posix_descriptor_test
         // end -- no EPOLLIN, no EPOLLERR -- and the registration is
         // edge-triggered, so a mapping that drops it hangs forever.
         io_context ioc(Backend);
-        posix_descriptor d(ioc);
+        posix_stream_descriptor d(ioc);
         int fds[2];
         make_pipe(fds);
         BOOST_TEST(!d.assign(fds[0]));
@@ -507,7 +523,7 @@ struct posix_descriptor_test
         for (bool close_before_wait : {true, false})
         {
             io_context ioc(Backend);
-            posix_descriptor d(ioc);
+            posix_stream_descriptor d(ioc);
             int fds[2];
             make_pipe(fds);
             BOOST_TEST(!d.assign(fds[0]));
@@ -550,8 +566,8 @@ struct posix_descriptor_test
         // ::read / write_one fast path; this is the only coverage of
         // the ::readv / ::writev gather forms.
         io_context ioc(Backend);
-        posix_descriptor w(ioc);
-        posix_descriptor r(ioc);
+        posix_stream_descriptor w(ioc);
+        posix_stream_descriptor r(ioc);
         int fds[2];
         make_pipe(fds);
         BOOST_TEST(!w.assign(fds[1]));
@@ -592,7 +608,7 @@ struct posix_descriptor_test
         // A stale nonblocking_ == true would leave the newly adopted
         // descriptor blocking while the library believed otherwise.
         io_context ioc(Backend);
-        posix_descriptor d(ioc);
+        posix_stream_descriptor d(ioc);
         int first[2];
         int second[2];
         make_pipe(first);
@@ -607,10 +623,11 @@ struct posix_descriptor_test
                 co_await d.read_some(capy::mutable_buffer(buf, sizeof(buf)));
             BOOST_TEST(!ec1);
             BOOST_TEST_EQ(n1, 1u);
-            BOOST_TEST(::fcntl(first[0], F_GETFL) & O_NONBLOCK);
+            BOOST_TEST_EQ(has_nonblock(first[0]), !is_uring);
 
-            // Adopting over the armed descriptor must not inherit its
-            // latch; the fresh pipe end is still blocking.
+            // Re-adopting after close() must not inherit the latch; the
+            // fresh pipe end is still blocking.
+            d.close();
             BOOST_TEST(!d.assign(second[0]));
             BOOST_TEST_EQ(::fcntl(second[0], F_GETFL) & O_NONBLOCK, 0);
 
@@ -620,7 +637,7 @@ struct posix_descriptor_test
             BOOST_TEST(!ec2);
             BOOST_TEST_EQ(n2, 2u);
             BOOST_TEST_EQ(std::memcmp(buf, "xy", 2), 0);
-            BOOST_TEST(::fcntl(second[0], F_GETFL) & O_NONBLOCK);
+            BOOST_TEST_EQ(has_nonblock(second[0]), !is_uring);
         };
         capy::run_async(ioc.get_executor())(body());
         ioc.run();
@@ -649,7 +666,7 @@ struct posix_descriptor_test
         } restore_sigpipe;
 
         io_context ioc(Backend);
-        posix_descriptor d(ioc);
+        posix_stream_descriptor d(ioc);
         int fds[2];
         make_pipe(fds);
         BOOST_TEST(!d.assign(fds[1]));
@@ -709,7 +726,7 @@ struct posix_descriptor_test
         // testWaitForErrorThenWait -- the precedent this copies --
         // needs no kqueue exemption.
         io_context ioc(Backend);
-        posix_descriptor d(ioc);
+        posix_stream_descriptor d(ioc);
         int fds[2];
         make_pipe(fds);
         BOOST_TEST(!d.assign(fds[1]));
@@ -764,7 +781,7 @@ struct posix_descriptor_test
     void testWaitOnClosedDescriptor()
     {
         io_context ioc(Backend);
-        posix_descriptor d(ioc);
+        posix_stream_descriptor d(ioc);
 
         std::error_code ec;
         bool done   = false;
@@ -782,13 +799,13 @@ struct posix_descriptor_test
 
     void testConcurrentFirstReadAndWrite()
     {
-        // One read and one write may be in flight at once; their first
-        // calls both arm O_NONBLOCK, from different threads.
+        // One read and one write may be in flight at once; on a reactor
+        // their first calls both arm O_NONBLOCK, from different threads.
         int sv[2];
         BOOST_TEST_EQ(::socketpair(AF_UNIX, SOCK_STREAM, 0, sv), 0);
 
         io_context ioc(Backend, 2);
-        posix_descriptor d(ioc);
+        posix_stream_descriptor d(ioc);
         BOOST_TEST(!d.assign(sv[0]));
 
         std::error_code rec, wec;
@@ -812,7 +829,7 @@ struct posix_descriptor_test
 
         BOOST_TEST(!rec);
         BOOST_TEST(!wec);
-        BOOST_TEST(::fcntl(sv[0], F_GETFL) & O_NONBLOCK);
+        BOOST_TEST_EQ(has_nonblock(sv[0]), !is_uring);
         ::close(sv[1]);
     }
 
@@ -821,8 +838,8 @@ struct posix_descriptor_test
         // epoll (EPERM) and kqueue (EINVAL) cannot watch these, but
         // their I/O never blocks; every backend adopts them.
         io_context ioc(Backend);
-        posix_descriptor zero(ioc);
-        posix_descriptor null(ioc);
+        posix_stream_descriptor zero(ioc);
+        posix_stream_descriptor null(ioc);
         int zfd = ::open("/dev/zero", O_RDONLY);
         int nfd = ::open("/dev/null", O_WRONLY);
         BOOST_TEST(zfd >= 0);
@@ -867,7 +884,7 @@ struct posix_descriptor_test
             std::is_same_v<std::remove_const_t<decltype(Backend)>, epoll_t>)
         {
             io_context ioc(Backend);
-            posix_descriptor zero(ioc);
+            posix_stream_descriptor zero(ioc);
             BOOST_TEST(!zero.assign(::open("/dev/zero", O_RDONLY)));
 
             std::error_code ec;
@@ -883,28 +900,29 @@ struct posix_descriptor_test
 #endif
     }
 
-    void testSelectFdSetsizeKeepsPriorState()
+    void testSelectFdSetsizeIsRejected()
     {
 #if BOOST_COROSIO_HAS_SELECT
         if constexpr (
             std::is_same_v<std::remove_const_t<decltype(Backend)>, select_t>)
         {
             io_context ioc(Backend);
-            posix_descriptor d(ioc);
+            posix_stream_descriptor d(ioc);
             int fds[2];
             make_pipe(fds);
-            BOOST_TEST(!d.assign(fds[0]));
 
             int high = ::fcntl(fds[1], F_DUPFD, FD_SETSIZE);
             if (high < 0)
             {
-                ::close(fds[1]); // RLIMIT_NOFILE too low to test
+                ::close(fds[0]); // RLIMIT_NOFILE too low to test
+                ::close(fds[1]);
                 return;
             }
             BOOST_TEST(d.assign(high) == std::errc::too_many_files_open);
-            BOOST_TEST_EQ(d.native_handle(), fds[0]); // still held
+            BOOST_TEST_EQ(d.is_open(), false);
             BOOST_TEST(::fcntl(high, F_GETFD) != -1); // caller still owns it
             ::close(high);
+            ::close(fds[0]);
             ::close(fds[1]);
         }
 #endif
@@ -914,7 +932,7 @@ struct posix_descriptor_test
     {
         // Hangup first, then wait: every backend completes with a code.
         io_context ioc(Backend);
-        posix_descriptor d(ioc);
+        posix_stream_descriptor d(ioc);
         int fds[2];
         make_pipe(fds);
         BOOST_TEST(!d.assign(fds[0]));
@@ -949,7 +967,7 @@ struct posix_descriptor_test
         // alone, which must still reach the parked error wait. select
         // and kqueue raise no event for it, as described there.
         io_context ioc(Backend);
-        posix_descriptor d(ioc);
+        posix_stream_descriptor d(ioc);
         int fds[2];
         make_pipe(fds);
         BOOST_TEST(!d.assign(fds[0]));
@@ -1004,7 +1022,7 @@ struct posix_descriptor_test
         // An adopted, always-readable fd with nothing parked on it must
         // not keep the reactor busy while a timer is outstanding.
         io_context ioc(Backend);
-        posix_descriptor d(ioc);
+        posix_stream_descriptor d(ioc);
         int fd = ::open("/dev/zero", O_RDONLY);
         BOOST_TEST(!d.assign(fd));
 
@@ -1020,57 +1038,10 @@ struct posix_descriptor_test
         BOOST_TEST(cpu_ms < 100.0);
     }
 
-    void testFailedAssignKeepsPendingRead()
-    {
-        // "Pending operations included": a rejected assign() must not
-        // cancel or disturb a read already parked on the held fd.
-        io_context ioc(Backend);
-        posix_descriptor d(ioc);
-        int fds[2];
-        make_pipe(fds);
-        BOOST_TEST(!d.assign(fds[0]));
-
-        auto path = temp_path("reject_pending");
-        int reg   = ::open(path.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0600);
-        BOOST_TEST(reg >= 0);
-
-        char buf[8]{};
-        std::size_t n = 0;
-        std::error_code ec;
-        bool done   = false;
-        auto reader = [&]() -> capy::task<> {
-            auto [rec, rn] =
-                co_await d.read_some(capy::mutable_buffer(buf, sizeof(buf)));
-            ec   = rec;
-            n    = rn;
-            done = true;
-        };
-        auto rejecter = [&]() -> capy::task<> {
-            auto [e] = co_await delay(std::chrono::milliseconds(10));
-            (void)e;
-            BOOST_TEST_EQ(done, false); // the read is parked
-            BOOST_TEST(d.assign(reg) == std::errc::operation_not_supported);
-            BOOST_TEST_EQ(::write(fds[1], "x", 1), 1);
-        };
-
-        auto ex = ioc.get_executor();
-        capy::run_async(ex)(reader());
-        capy::run_async(ex)(rejecter());
-        ioc.run();
-
-        BOOST_TEST(done);
-        BOOST_TEST(!ec);
-        BOOST_TEST_EQ(n, 1u);
-
-        ::close(reg);
-        std::filesystem::remove(path);
-        ::close(fds[1]);
-    }
-
     void testWriteSomeArmsNonblocking()
     {
         io_context ioc(Backend);
-        posix_descriptor d(ioc);
+        posix_stream_descriptor d(ioc);
         int fds[2];
         make_pipe(fds);
         BOOST_TEST(!d.assign(fds[1]));
@@ -1086,14 +1057,14 @@ struct posix_descriptor_test
         ioc.run();
 
         BOOST_TEST(!ec);
-        BOOST_TEST(::fcntl(fds[1], F_GETFL) & O_NONBLOCK);
+        BOOST_TEST_EQ(has_nonblock(fds[1]), !is_uring);
         ::close(fds[0]);
     }
 
     void testStopTokenCancelsRead()
     {
         io_context ioc(Backend);
-        posix_descriptor d(ioc);
+        posix_stream_descriptor d(ioc);
         int fds[2];
         make_pipe(fds);
         BOOST_TEST(!d.assign(fds[0]));
@@ -1122,7 +1093,7 @@ struct posix_descriptor_test
     void testZeroLength()
     {
         io_context ioc(Backend);
-        posix_descriptor d(ioc);
+        posix_stream_descriptor d(ioc);
         int fds[2];
         make_pipe(fds);
         BOOST_TEST(!d.assign(fds[0]));
@@ -1144,7 +1115,7 @@ struct posix_descriptor_test
     void testReleaseWhenClosedThrows()
     {
         io_context ioc(Backend);
-        posix_descriptor d(ioc);
+        posix_stream_descriptor d(ioc);
         BOOST_TEST_THROWS(d.release(), std::system_error);
     }
 
@@ -1154,8 +1125,8 @@ struct posix_descriptor_test
         make_pipe(fds);
         io_context a(Backend);
         io_context b(Backend);
-        posix_descriptor da(a);
-        posix_descriptor db(b);
+        posix_stream_descriptor da(a);
+        posix_stream_descriptor db(b);
         BOOST_TEST(!da.assign(fds[0]));
         int const fd = da.release();
         BOOST_TEST(!db.assign(fd));
@@ -1179,7 +1150,7 @@ struct posix_descriptor_test
     {
         // The design's central claim: capy::read works on a descriptor.
         io_context ioc(Backend);
-        posix_descriptor d(ioc);
+        posix_stream_descriptor d(ioc);
         int fds[2];
         make_pipe(fds);
         BOOST_TEST(!d.assign(fds[0]));
@@ -1214,8 +1185,8 @@ struct posix_descriptor_test
         // assign(). FreeBSD's kqueue refuses EVFILT_WRITE on such a
         // pipe with EPIPE, which must not refuse the adoption.
         io_context ioc(Backend);
-        posix_descriptor rd(ioc);
-        posix_descriptor wr(ioc);
+        posix_stream_descriptor rd(ioc);
+        posix_stream_descriptor wr(ioc);
         int fds[2];
         make_pipe(fds);
         BOOST_TEST_EQ(::write(fds[1], "hi", 2), 2);
@@ -1253,7 +1224,7 @@ struct posix_descriptor_test
         // A readiness wait reports the hangup as readiness, as asio does;
         // the write that follows names broken_pipe.
         io_context ioc(Backend);
-        posix_descriptor d(ioc);
+        posix_stream_descriptor d(ioc);
         int fds[2];
         make_pipe(fds);
         BOOST_TEST(!d.assign(fds[1]));
@@ -1310,13 +1281,131 @@ struct posix_descriptor_test
         waitWriteWithReaderGone(true);
     }
 
+    void testReaderlessPipeAdoptsAndWriteFails()
+    {
+        // A reader-less pipe write end refuses EVFILT_WRITE on FreeBSD;
+        // with lazy write registration, adoption never asks for it.
+        io_context ioc(Backend);
+        posix_stream_descriptor d(ioc);
+        int fds[2];
+        make_pipe(fds);
+        ::close(fds[0]);
+        BOOST_TEST(!d.assign(fds[1]));
+
+        std::error_code ec;
+        auto t = [&]() -> capy::task<> {
+            auto [e, n] = co_await d.write_some(capy::const_buffer("x", 1));
+            ec          = e;
+            (void)n;
+        };
+        struct sigpipe_ignore
+        {
+            void (*prev)(int) = ::signal(SIGPIPE, SIG_IGN);
+            ~sigpipe_ignore()
+            {
+                ::signal(SIGPIPE, prev);
+            }
+        } guard;
+        capy::run_async(ioc.get_executor())(t());
+        ioc.run();
+        BOOST_TEST(ec == std::errc::broken_pipe);
+    }
+
+    void testKqueueFdAdoptsWithoutWriteFilter()
+    {
+#if BOOST_COROSIO_HAS_KQUEUE
+        if constexpr (
+            std::is_same_v<std::remove_const_t<decltype(Backend)>, kqueue_t>)
+        {
+            // A kqueue descriptor supports EVFILT_READ only, so it
+            // stands in for a read-only device: adoption must not ask
+            // for a write filter, and a write wait that would park
+            // fails with the kernel's refusal. Darwin builds poll() on
+            // kqueue and reports POLLNVAL for the refused filter, so
+            // there the speculative probe ends the write wait before
+            // it can park.
+            io_context ioc(Backend);
+            posix_stream_descriptor d(ioc);
+            int inner = ::kqueue();
+            BOOST_TEST(inner >= 0);
+            BOOST_TEST(!d.assign(inner));
+
+            struct kevent ev;
+            EV_SET(&ev, 1, EVFILT_USER, EV_ADD | EV_CLEAR, 0, 0, nullptr);
+            BOOST_TEST_EQ(::kevent(inner, &ev, 1, nullptr, 0, nullptr), 0);
+            EV_SET(&ev, 1, EVFILT_USER, 0, NOTE_TRIGGER, 0, nullptr);
+            BOOST_TEST_EQ(::kevent(inner, &ev, 1, nullptr, 0, nullptr), 0);
+
+            std::error_code rec;
+            auto r = [&]() -> capy::task<> {
+                auto [e] = co_await d.wait(wait_type::read);
+                rec      = e;
+            };
+            capy::run_async(ioc.get_executor())(r());
+            ioc.run();
+            BOOST_TEST(!rec);
+
+#if !defined(__APPLE__)
+            std::error_code wec;
+            auto w = [&]() -> capy::task<> {
+                auto [e] = co_await d.wait(wait_type::write);
+                wec      = e;
+            };
+            ioc.restart();
+            capy::run_async(ioc.get_executor())(w());
+            ioc.run();
+            BOOST_TEST(wec == std::errc::invalid_argument);
+#endif
+        }
+#endif
+    }
+
+    void testBlockingFdReadIsCancellable()
+    {
+        // The fd is left blocking on io_uring; an in-flight read must
+        // still end on cancel(), a stop token, and close().
+        for (int how = 0; how < 3; ++how)
+        {
+            io_context ioc(Backend);
+            posix_stream_descriptor d(ioc);
+            int fds[2];
+            make_pipe(fds);
+            BOOST_TEST(!d.assign(fds[0]));
+
+            std::stop_source stop;
+            std::error_code ec;
+            char buf[1];
+            auto reader = [&]() -> capy::task<> {
+                auto [e, n] =
+                    co_await d.read_some(capy::mutable_buffer(buf, 1));
+                ec = e;
+                (void)n;
+            };
+            auto ender = [&]() -> capy::task<> {
+                auto [e] = co_await delay(std::chrono::milliseconds(10));
+                (void)e;
+                if (how == 0)
+                    d.cancel();
+                else if (how == 1)
+                    stop.request_stop();
+                else
+                    d.close();
+            };
+            capy::run_async(ioc.get_executor(), stop.get_token())(reader());
+            capy::run_async(ioc.get_executor())(ender());
+            ioc.run();
+            BOOST_TEST(ec == capy::cond::canceled);
+            ::close(fds[1]);
+        }
+    }
+
     void run()
     {
         testConstruction();
         testAssignRejectsRegularFile();
         testAssignRejectsBadFd();
         testAssignRejectsSelf();
-        testFailedAssignLeavesPriorStateIntact();
+        testAssignOnOpenKeepsParkedRead();
         testAssignDoesNotTouchFlagsButReadDoes();
         testWaitDoesNotTouchFlags();
         testWaitReadParksUntilDataArrives();
@@ -1335,11 +1424,10 @@ struct posix_descriptor_test
         testConcurrentFirstReadAndWrite();
         testUnpollableCharDeviceAdoptsEverywhere();
         testUnpollableWaitThatWouldParkIsNotSupported();
-        testSelectFdSetsizeKeepsPriorState();
+        testSelectFdSetsizeIsRejected();
         testWaitErrorOnHungUpReadEnd();
         testWaitErrorParksOnReadEndThenNamesCode();
         testSelectDoesNotSpinOnReadableIdleFd();
-        testFailedAssignKeepsPendingRead();
         testWriteSomeArmsNonblocking();
         testStopTokenCancelsRead();
         testZeroLength();
@@ -1348,10 +1436,14 @@ struct posix_descriptor_test
         testComposedRead();
         testAdoptPipeWhosePeerIsGone();
         testWaitWriteWithReaderGoneIsReadiness();
+        testReaderlessPipeAdoptsAndWriteFails();
+        testKqueueFdAdoptsWithoutWriteFilter();
+        testBlockingFdReadIsCancellable();
     }
 };
 
-COROSIO_BACKEND_TESTS(posix_descriptor_test, "boost.corosio.posix_descriptor")
+COROSIO_BACKEND_TESTS(
+    posix_stream_descriptor_test, "boost.corosio.posix_stream_descriptor")
 
 } // namespace boost::corosio
 

@@ -9,6 +9,7 @@
 
 // Test that header file is self-contained.
 #include <boost/corosio/random_access_file.hpp>
+#include <boost/corosio/error.hpp>
 
 // GCC emits false-positive "may be used uninitialized" warnings
 // for structured bindings with co_await expressions
@@ -728,17 +729,13 @@ struct random_access_file_test
     }
 
 #if BOOST_COROSIO_POSIX
-    // assign() calls cancel() before close_file() (POSIX/uring only):
-    // raf_op::do_work reads fd_ at pool-execution time, not at post
-    // time, so without the cancel a read_at queued before assign()
-    // would silently complete against the newly adopted file instead
-    // of being cancelled.
-    void testAssignCancelsInFlightRead()
+    // A rejected assign() leaves a read_at queued on the pool alone:
+    // raf_op::do_work reads fd_ at pool-execution time, so a disturbed
+    // fd_ would show up as the read completing against the other file.
+    void testAssignKeepsQueuedRead()
     {
 #if BOOST_COROSIO_HAS_URING
-        // uring's close_file() cancels internally via
-        // sched_->cancel_and_flush(fd_); this pins the POSIX pool path,
-        // where the cancel used to live in the service, not assign().
+        // No pool on io_uring; this pins the POSIX pool path.
         if constexpr (
             std::is_same_v<std::remove_const_t<decltype(Backend)>, uring_t>)
             return;
@@ -784,16 +781,18 @@ struct random_access_file_test
 
         int fd2 = ::open(tmp2.path.c_str(), O_RDONLY);
         BOOST_TEST(fd2 >= 0);
-        BOOST_TEST(!f.assign(static_cast<native_handle_type>(fd2)));
+        BOOST_TEST(
+            f.assign(static_cast<native_handle_type>(fd2)) ==
+            error::already_open);
 
         blocker.release();
         ioc.run();
 
         BOOST_TEST(resumed);
-        BOOST_TEST(result_ec == capy::cond::canceled);
-        BOOST_TEST_EQ(result_bytes, 0u);
-        // Must not have completed against the newly adopted file's data.
-        BOOST_TEST(std::memcmp(buf, "NEWNEWNEW", 9) != 0);
+        BOOST_TEST(!result_ec);
+        BOOST_TEST_EQ(result_bytes, 9u);
+        BOOST_TEST(std::memcmp(buf, "OLDOLDOLD", 9) == 0);
+        ::close(fd2);
     }
 #endif
 
@@ -899,8 +898,41 @@ struct random_access_file_test
     }
 #endif
 
+    void testAssignOnOpenIsAlreadyOpen()
+    {
+        temp_file tmp1("raf_open_a_", "first");
+        temp_file tmp2("raf_open_b_", "second");
+        io_context ioc(Backend);
+        random_access_file f(ioc);
+        BOOST_TEST(!f.open(tmp1.path, file_base::read_only));
+        auto held = f.native_handle();
+
+#if BOOST_COROSIO_HAS_IOCP
+        HANDLE h = ::CreateFileW(
+            tmp2.path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+            nullptr, OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, nullptr);
+        BOOST_TEST(h != INVALID_HANDLE_VALUE);
+        auto second = reinterpret_cast<native_handle_type>(h);
+#else
+        int fd = ::open(tmp2.path.c_str(), O_RDONLY);
+        BOOST_TEST(fd >= 0);
+        auto second = static_cast<native_handle_type>(fd);
+#endif
+        BOOST_TEST(f.assign(second) == error::already_open);
+        BOOST_TEST(f.assign(held) == error::already_open);
+        BOOST_TEST(f.native_handle() == held);
+
+#if BOOST_COROSIO_HAS_IOCP
+        ::CloseHandle(h);
+#else
+        ::close(fd);
+#endif
+    }
+
     void run()
     {
+        testAssignOnOpenIsAlreadyOpen();
         testResumesOnAwaitingExecutor();
         testConstruction();
         testConstructionFromExecutor();
@@ -939,8 +971,7 @@ struct random_access_file_test
         testClosedAtOpsComplete();
         testStopRaceReportsTransfer();
         testAssignPipeRejected();
-        testFailedAssignLeavesFileOpen();
-        testSelfAssignRejected();
+        testAssignRejectsBadHandle();
 #if BOOST_COROSIO_POSIX
         testHugeOffsetFails();
 #endif
@@ -952,7 +983,6 @@ struct random_access_file_test
 #endif
         testWrongDirectionIoFails();
         testResizeReadOnlyFails();
-        testAssignOverOpenAdopts();
         testOffsetAbove4GiB();
         testOpenSyncAllOnWrite();
         testOpenExclusiveExistingFails();
@@ -967,7 +997,7 @@ struct random_access_file_test
         // POSIX file work runs on the pool; IOCP uses overlapped I/O.
         testDestroyWithPoolWorkQueued();
         testReadWriteAtAfterPoolShutdown();
-        testAssignCancelsInFlightRead();
+        testAssignKeepsQueuedRead();
 #endif
 
 #if !COROSIO_TEST_HAS_ASAN
@@ -1017,74 +1047,14 @@ struct random_access_file_test
         BOOST_TEST_EQ(f.size(), 10u);
     }
 
-    void testAssignOverOpenAdopts()
-    {
-        temp_file tmp1("raf_assign_a_", "first");
-        temp_file tmp2("raf_assign_b_", "second");
-        io_context ioc(Backend);
-        random_access_file f(ioc);
-
-        BOOST_TEST(!f.open(tmp1.path, file_base::read_only));
-        // Only read back under the POSIX guard below: fcntl has no
-        // equivalent probe for a closed Windows handle.
-        [[maybe_unused]] auto held = f.native_handle();
-
-#if BOOST_COROSIO_HAS_IOCP
-        HANDLE h = ::CreateFileW(
-            tmp2.path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
-            nullptr, OPEN_EXISTING,
-            FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, nullptr);
-        BOOST_TEST(h != INVALID_HANDLE_VALUE);
-        auto raw = reinterpret_cast<native_handle_type>(h);
-#else
-        int fd = ::open(tmp2.path.c_str(), O_RDONLY);
-        BOOST_TEST(fd >= 0);
-        auto raw = static_cast<native_handle_type>(fd);
-#endif
-        // Adopting over an open file closes the previous handle first
-        BOOST_TEST(!f.assign(raw));
-        BOOST_TEST(f.is_open());
-        BOOST_TEST_EQ(f.size(), 6u);
-
-#if BOOST_COROSIO_POSIX
-        // Pin the property the (now-removed) wrapper-level close() used
-        // to provide: a *successful* assign still closes the fd it
-        // replaced, not just the one it rejects.
-        errno = 0;
-        BOOST_TEST(::fcntl(held, F_GETFD) < 0);
-        BOOST_TEST_EQ(errno, EBADF);
-#endif
-    }
-
-    // These validate assign()'s fail-before-mutate contract on every
-    // backend.
-    void testFailedAssignLeavesFileOpen()
+    void testAssignRejectsBadHandle()
     {
         io_context ioc(Backend);
         random_access_file f(ioc);
-
-        temp_file tmp("raf_assign_reject_");
         BOOST_TEST(
-            !f.open(tmp.path, file_base::read_write | file_base::create));
-        auto held = f.native_handle();
-
-        // A rejected assign must not close the file we already hold.
-        BOOST_TEST(f.assign(static_cast<native_handle_type>(-1)) == std::errc::bad_file_descriptor);
-        BOOST_TEST_EQ(f.is_open(), true);
-        BOOST_TEST_EQ(f.native_handle(), held);
-    }
-
-    void testSelfAssignRejected()
-    {
-        io_context ioc(Backend);
-        random_access_file f(ioc);
-
-        temp_file tmp("raf_assign_self_");
-        BOOST_TEST(
-            !f.open(tmp.path, file_base::read_write | file_base::create));
-
-        BOOST_TEST(f.assign(f.native_handle()) == std::errc::invalid_argument);
-        BOOST_TEST_EQ(f.is_open(), true);
+            f.assign(static_cast<native_handle_type>(-1)) ==
+            std::errc::bad_file_descriptor);
+        BOOST_TEST_EQ(f.is_open(), false);
     }
 
     void testAssignPipeRejected()
@@ -1136,7 +1106,7 @@ struct random_access_file_test
         auto p = test::make_pipe_pair();
         BOOST_TEST(
             f.assign(test::as_native(p.server.get())) ==
-            std::errc::operation_not_supported);
+            error::already_open);
         BOOST_TEST_EQ(f.native_handle(), held);
 
         std::error_code ec;

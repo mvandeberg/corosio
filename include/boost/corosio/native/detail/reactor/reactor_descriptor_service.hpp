@@ -72,7 +72,8 @@ public:
     ~reactor_descriptor_service() override = default;
 
     std::error_code assign_descriptor(
-        posix_descriptor::implementation& impl, native_handle_type fd) override;
+        posix_stream_descriptor::implementation& impl,
+        native_handle_type fd) override;
 
     void shutdown() override
     {
@@ -145,29 +146,19 @@ private:
 template<class Derived, class Traits, class DescFinal>
 std::error_code
 reactor_descriptor_service<Derived, Traits, DescFinal>::assign_descriptor(
-    posix_descriptor::implementation& impl_base, native_handle_type fd)
+    posix_stream_descriptor::implementation& impl_base, native_handle_type fd)
 {
     auto* impl = static_cast<DescFinal*>(&impl_base);
 
-    // fd >= 0 guard: an unset impl reports native_handle() == -1, and a
-    // caller-supplied -1 must fail as a bad fd, not a self-assign.
-    if (fd >= 0 && fd == impl->native_handle())
-        return std::make_error_code(std::errc::invalid_argument);
-
-    // Validate before touching the held descriptor: a failed assign
-    // must leave the object unchanged and the caller owning the fd.
+    // The public assign() guarantees the object is closed.
     if (auto ec = validate_descriptor_fd(fd))
         return ec;
 
     if constexpr (requires { Traits::max_descriptor; })
     {
-        // Checked here, not left to register_descriptor, so the
-        // refusal precedes close_descriptor() and keeps the old fd.
         if (fd >= Traits::max_descriptor)
             return make_err(EMFILE);
     }
-
-    impl->close_descriptor();
 
     return impl->init_and_register(fd);
 }

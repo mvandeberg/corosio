@@ -14,7 +14,7 @@
 
 #if BOOST_COROSIO_POSIX
 
-#include <boost/corosio/posix_descriptor.hpp>
+#include <boost/corosio/posix_stream_descriptor.hpp>
 #include <boost/corosio/wait_type.hpp>
 #include <boost/corosio/detail/dispatch_coro.hpp>
 #include <boost/corosio/detail/intrusive.hpp>
@@ -22,6 +22,7 @@
 #include <boost/corosio/native/detail/make_err.hpp>
 #include <boost/corosio/native/detail/validate_fd.hpp>
 #include <boost/corosio/native/detail/reactor/reactor_descriptor_state.hpp>
+#include <boost/corosio/native/detail/reactor/reactor_io_core.hpp>
 #include <boost/corosio/native/detail/reactor/reactor_op.hpp>
 #include <boost/corosio/native/detail/reactor/reactor_op_complete.hpp>
 #include <boost/capy/buffers.hpp>
@@ -37,30 +38,15 @@
 #include <sys/uio.h>
 #include <unistd.h>
 
-/* Reactor-backed implementation of posix_descriptor.
+/* Reactor-backed implementation of posix_stream_descriptor.
 
-   Deliberately does not derive from reactor_basic_socket: that base
-   is rooted in native_socket_base, which overrides local_endpoint(),
-   set_option() and get_option() on its ImplBase. posix_descriptor has
-   no socket verbs, so the shared logic (init_and_register, register_op,
-   the cancel/close/release op sweeps) is carried here against five op
-   slots instead of eight.
+   The register/park/cancel/teardown protocol lives in reactor_io_core.
 
    The one behavior that is genuinely new: O_NONBLOCK is armed lazily,
    on the first read_some/write_some and never from assign() or wait().
    The flag lives on the shared open file description, so arming it is
    visible to every other holder of that description -- which is why a
    wait()-only user must never trigger it.
-
-   PARALLEL COPY: init_and_register, register_op, cancel_single_op and
-   the cancel/close/release op sweeps here mirror the socket versions in
-   reactor_basic_socket.hpp (init_and_register, register_op,
-   cancel_single_op, do_cancel, do_close_socket, do_release_socket).
-   The two are separate code because that base carries native_socket_base
-   and its socket verbs; they are not separate protocols. A fix to the
-   cancel/park protocol -- slot claiming under desc_state_.mutex, the
-   cached-edge replay in register_op, the impl_ref_ pinning during
-   teardown -- belongs in both files.
 */
 
 namespace boost::corosio::detail {
@@ -196,7 +182,7 @@ reactor_descriptor_wait_op<Traits, Descriptor, Acceptor>::operator()()
 // Descriptor implementation
 // ============================================================
 
-/** CRTP base for reactor-backed posix_descriptor implementations.
+/** CRTP base for reactor-backed posix_stream_descriptor implementations.
 
     Holds the adopted descriptor, its reactor registration state, and
     the five op slots (read, write, and one wait per direction).
@@ -208,8 +194,9 @@ reactor_descriptor_wait_op<Traits, Descriptor, Acceptor>::operator()()
 */
 template<class Derived, class Traits, class Service, class Acceptor>
 class reactor_descriptor
-    : public posix_descriptor::implementation
+    : public posix_stream_descriptor::implementation
     , public std::enable_shared_from_this<Derived>
+    , public reactor_io_core<Derived, Service, typename Traits::desc_state_type>
     , public intrusive_list<Derived>::node
 {
     using base_op  = reactor_descriptor_base_op<Traits, Derived, Acceptor>;
@@ -217,15 +204,20 @@ class reactor_descriptor
     using write_op = reactor_descriptor_write_op<Traits, Derived, Acceptor>;
     using wait_op  = reactor_descriptor_wait_op<Traits, Derived, Acceptor>;
 
+    using core_type =
+        reactor_io_core<Derived, Service, typename Traits::desc_state_type>;
+    friend core_type;
+
 protected:
     // NOLINTNEXTLINE(bugprone-crtp-constructor-accessibility)
-    explicit reactor_descriptor(Service& svc) noexcept : svc_(svc) {}
+    explicit reactor_descriptor(Service& svc) noexcept : core_type(svc) {}
+
+    using core_type::svc_;
 
 public:
     ~reactor_descriptor() override = default;
 
-    /// Per-descriptor state for persistent reactor registration.
-    typename Traits::desc_state_type desc_state_;
+    using core_type::desc_state_;
 
     // --- Virtual method overrides ---
 
@@ -270,7 +262,7 @@ public:
 
     void cancel() noexcept override
     {
-        do_cancel();
+        this->cancel_all();
     }
 
     // --- Service-facing (non-virtual) ---
@@ -288,10 +280,6 @@ public:
 
     /// Close the descriptor and cancel pending operations.
     void close_descriptor() noexcept;
-
-    /// Cancel a single pending operation, claiming it from its slot.
-    template<class Op>
-    void cancel_single_op(Op& op) noexcept;
 
 private:
     /** Arm O_NONBLOCK, once, before the first speculative syscall.
@@ -335,16 +323,6 @@ private:
         std::stop_token const&,
         std::error_code*);
 
-    void do_cancel() noexcept;
-
-    /// Register an op with the reactor, handling cached edge events.
-    template<class Op>
-    void register_op(
-        Op& op,
-        reactor_op_base*& desc_slot,
-        bool& ready_flag,
-        bool is_write_direction = false) noexcept;
-
     /// Apply @a fn to each of the five op slots.
     template<class Fn>
     void for_each_op(Fn fn) noexcept
@@ -356,31 +334,22 @@ private:
         fn(wait_er_);
     }
 
-    /** Claim every parked op out of its descriptor_state slot.
-
-        @param claimed Receives the claimed ops; must hold five.
-        @param teardown Also clear the cached edge flags and, if the
-        state is queued in the scheduler, pin the impl alive.
-        @param self Keepalive used by @a teardown.
-        @return The number of ops claimed.
-    */
-    int claim_parked_ops(
-        reactor_op_base** claimed,
-        bool teardown,
-        std::shared_ptr<Derived> const& self) noexcept;
-
-    /// Post claimed ops to the scheduler, keeping the impl alive.
-    void post_claimed_ops(
-        reactor_op_base** claimed,
-        int count,
-        std::shared_ptr<Derived> const& self) noexcept;
+    /// Apply @a fn to each op and the descriptor_state slot it parks in.
+    template<class Fn>
+    void for_each_desc_entry(Fn fn) noexcept
+    {
+        fn(rd_, desc_state_.read_op);
+        fn(wr_, desc_state_.write_op);
+        fn(wait_rd_, desc_state_.wait_read_op);
+        fn(wait_wr_, desc_state_.wait_write_op);
+        fn(wait_er_, desc_state_.wait_error_op);
+    }
 
     /// Sweep every op slot, then drop the reactor registration.
     void quiesce() noexcept;
 
     reactor_op_base** op_to_desc_slot(base_op& op) noexcept;
 
-    Service& svc_;
     int fd_           = -1;
     std::atomic<bool> nonblocking_{false};
 
@@ -400,109 +369,21 @@ std::error_code
 reactor_descriptor<Derived, Traits, Service, Acceptor>::init_and_register(
     int fd) noexcept
 {
-    fd_            = fd;
-    desc_state_.fd = fd;
+    fd_ = fd;
+    if (auto ec = this->register_fd(fd))
     {
-        // Every slot this type owns; connect_op is deliberately absent,
-        // a descriptor has no connect operation to park there.
-        std::lock_guard lock(desc_state_.mutex);
-        desc_state_.read_op       = nullptr;
-        desc_state_.write_op      = nullptr;
-        desc_state_.wait_read_op  = nullptr;
-        desc_state_.wait_write_op = nullptr;
-        desc_state_.wait_error_op = nullptr;
-    }
-    if (auto ec = svc_.scheduler().register_descriptor(fd, &desc_state_))
-    {
-        // Undo the partial state so a failed adopt is
-        // indistinguishable from a closed implementation.
-        fd_                           = -1;
-        desc_state_.fd                = -1;
-        desc_state_.registered_events = 0;
+        fd_ = -1;
         return ec;
     }
     return {};
 }
 
 template<class Derived, class Traits, class Service, class Acceptor>
-int
-reactor_descriptor<Derived, Traits, Service, Acceptor>::claim_parked_ops(
-    reactor_op_base** claimed,
-    bool teardown,
-    std::shared_ptr<Derived> const& self) noexcept
-{
-    int count = 0;
-    std::lock_guard lock(desc_state_.mutex);
-    for (auto** slot :
-         {&desc_state_.read_op, &desc_state_.write_op,
-          &desc_state_.wait_read_op, &desc_state_.wait_write_op,
-          &desc_state_.wait_error_op})
-    {
-        if (auto* c = std::exchange(*slot, nullptr))
-            claimed[count++] = c;
-    }
-    if (teardown)
-    {
-        desc_state_.read_ready  = false;
-        desc_state_.write_ready = false;
-
-        // Must be set under the same lock that invoke_deferred_io clears
-        // is_enqueued_ under, or the impl could be destroyed while the
-        // scheduler still holds the queued descriptor_state.
-        if (desc_state_.is_enqueued_.load(std::memory_order_acquire))
-            desc_state_.impl_ref_ = self;
-    }
-    return count;
-}
-
-template<class Derived, class Traits, class Service, class Acceptor>
-void
-reactor_descriptor<Derived, Traits, Service, Acceptor>::post_claimed_ops(
-    reactor_op_base** claimed,
-    int count,
-    std::shared_ptr<Derived> const& self) noexcept
-{
-    for (int i = 0; i < count; ++i)
-    {
-        claimed[i]->impl_ptr = self;
-        svc_.post(claimed[i]);
-        svc_.work_finished();
-    }
-}
-
-template<class Derived, class Traits, class Service, class Acceptor>
-void
-reactor_descriptor<Derived, Traits, Service, Acceptor>::do_cancel() noexcept
-{
-    auto self = this->weak_from_this().lock();
-    if (!self)
-        return;
-
-    for_each_op([](auto& op) { op.request_cancel(); });
-
-    reactor_op_base* claimed[5];
-    int const count = claim_parked_ops(claimed, /*teardown=*/false, self);
-    post_claimed_ops(claimed, count, self);
-}
-
-template<class Derived, class Traits, class Service, class Acceptor>
 void
 reactor_descriptor<Derived, Traits, Service, Acceptor>::quiesce() noexcept
 {
-    auto self = this->weak_from_this().lock();
-    if (self)
-    {
-        for_each_op([](auto& op) { op.request_cancel(); });
-
-        reactor_op_base* claimed[5];
-        int const count = claim_parked_ops(claimed, /*teardown=*/true, self);
-        post_claimed_ops(claimed, count, self);
-    }
-
-    if (fd_ >= 0 && desc_state_.registered_events != 0)
-        svc_.scheduler().deregister_descriptor(fd_);
-
-    desc_state_.registered_events = 0;
+    this->abandon_all();
+    this->unregister_fd(fd_);
     // The next adopted fd starts from an unknown flag state.
     nonblocking_.store(false, std::memory_order_relaxed);
 }
@@ -519,7 +400,6 @@ reactor_descriptor<Derived, Traits, Service, Acceptor>::
         ::close(fd_);
         fd_ = -1;
     }
-    desc_state_.fd = -1;
 }
 
 template<class Derived, class Traits, class Service, class Acceptor>
@@ -532,60 +412,12 @@ reactor_descriptor<Derived, Traits, Service, Acceptor>::
     // Do NOT close -- the caller takes ownership.
     native_handle_type released = fd_;
     fd_                         = -1;
-    desc_state_.fd              = -1;
     return released;
 }
 
 // ============================================================
-// Op registration and per-op cancellation
+// Op slot lookup
 // ============================================================
-
-template<class Derived, class Traits, class Service, class Acceptor>
-template<class Op>
-void
-reactor_descriptor<Derived, Traits, Service, Acceptor>::register_op(
-    Op& op,
-    reactor_op_base*& desc_slot,
-    bool& ready_flag,
-    [[maybe_unused]] bool is_write_direction) noexcept
-{
-    svc_.work_started();
-
-    std::lock_guard lock(desc_state_.mutex);
-    bool io_done = false;
-    if (ready_flag)
-    {
-        ready_flag = false;
-        op.perform_io();
-        io_done = (op.errn != EAGAIN && op.errn != EWOULDBLOCK);
-        if (!io_done)
-            op.errn = 0;
-    }
-
-    if (io_done || op.cancelled.load(std::memory_order_acquire))
-    {
-        svc_.post(&op);
-        svc_.work_finished();
-    }
-    else
-    {
-        if (desc_state_.unpollable)
-        {
-            // Nothing will ever report readiness for this fd.
-            op.complete(EOPNOTSUPP, 0);
-            svc_.post(&op);
-            svc_.work_finished();
-            return;
-        }
-
-        desc_slot = &op;
-
-        // Select rebuilds its fd_sets from parked ops only, so parking
-        // must wake it. Compiled away for epoll and kqueue.
-        if constexpr (Service::needs_park_notification)
-            svc_.scheduler().notify_reactor();
-    }
-}
 
 template<class Derived, class Traits, class Service, class Acceptor>
 reactor_op_base**
@@ -603,41 +435,6 @@ reactor_descriptor<Derived, Traits, Service, Acceptor>::op_to_desc_slot(
     if (&op == static_cast<void*>(&wait_er_))
         return &desc_state_.wait_error_op;
     return nullptr;
-}
-
-template<class Derived, class Traits, class Service, class Acceptor>
-template<class Op>
-void
-reactor_descriptor<Derived, Traits, Service, Acceptor>::cancel_single_op(
-    Op& op) noexcept
-{
-    auto self = this->weak_from_this().lock();
-    if (!self)
-        return;
-
-    op.request_cancel();
-
-    reactor_op_base** desc_op_ptr = op_to_desc_slot(op);
-    if (!desc_op_ptr)
-        return;
-
-    reactor_op_base* claimed = nullptr;
-    {
-        std::lock_guard lock(desc_state_.mutex);
-        if (*desc_op_ptr == &op)
-            claimed = std::exchange(*desc_op_ptr, nullptr);
-        // Not in the slot: request_cancel() above already set
-        // op.cancelled, which register_op consults before parking
-        // and the completion decode consults on delivery. Latching
-        // a descriptor flag here instead would outlive this op and
-        // cancel the next wait in the same direction.
-    }
-    if (claimed)
-    {
-        op.impl_ptr = self;
-        svc_.post(&op);
-        svc_.work_finished();
-    }
 }
 
 // ============================================================
@@ -752,7 +549,7 @@ reactor_descriptor<Derived, Traits, Service, Acceptor>::do_read_some(
     op.start(token, static_cast<Derived*>(this));
     op.impl_ptr = this->shared_from_this();
 
-    register_op(op, desc_state_.read_op, desc_state_.read_ready);
+    this->register_op(op, desc_state_.read_op, desc_state_.read_ready);
     return std::noop_coroutine();
 }
 
@@ -846,7 +643,7 @@ reactor_descriptor<Derived, Traits, Service, Acceptor>::do_write_some(
     op.start(token, static_cast<Derived*>(this));
     op.impl_ptr = this->shared_from_this();
 
-    register_op(op, desc_state_.write_op, desc_state_.write_ready, true);
+    this->register_op(op, desc_state_.write_op, desc_state_.write_ready, true);
     return std::noop_coroutine();
 }
 
@@ -924,7 +721,8 @@ reactor_descriptor<Derived, Traits, Service, Acceptor>::do_wait(
     // descriptor mutex before parking. A stale write_ready latched at
     // registration would otherwise report a full pipe as writable.
     bool force_probe = true;
-    register_op(op, *desc_slot_ptr, force_probe, event == reactor_event_write);
+    this->register_op(
+        op, *desc_slot_ptr, force_probe, event == reactor_event_write);
     return std::noop_coroutine();
 }
 

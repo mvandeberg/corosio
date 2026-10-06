@@ -23,7 +23,7 @@
 #include <boost/corosio/local_endpoint.hpp>
 #include <boost/corosio/local_stream_acceptor.hpp>
 #include <boost/corosio/local_stream_socket.hpp>
-#include <boost/corosio/posix_descriptor.hpp>
+#include <boost/corosio/posix_stream_descriptor.hpp>
 #include <boost/corosio/random_access_file.hpp>
 #include <boost/corosio/family.hpp>
 #include <boost/corosio/tcp_acceptor.hpp>
@@ -237,7 +237,7 @@ struct uring_teardown_test
         {
             io_context ioc(uring);
             auto reader = [&]() -> capy::task<> {
-                posix_descriptor f(ioc);
+                posix_stream_descriptor f(ioc);
                 BOOST_TEST(!f.assign(static_cast<native_handle_type>(rp[0])));
                 char buf[16];
                 std::ignore = co_await f.read_some(
@@ -245,7 +245,7 @@ struct uring_teardown_test
                 read_resumed = true;
             };
             auto writer = [&]() -> capy::task<> {
-                posix_descriptor f(ioc);
+                posix_stream_descriptor f(ioc);
                 BOOST_TEST(!f.assign(static_cast<native_handle_type>(wp[1])));
                 char big[4096] = {};
                 std::ignore =
@@ -328,7 +328,7 @@ struct uring_teardown_test
         {
             io_context ioc(uring);
             auto reader = [&]() -> capy::task<> {
-                posix_descriptor f(ioc);
+                posix_stream_descriptor f(ioc);
                 BOOST_TEST(!f.assign(static_cast<native_handle_type>(p[0])));
                 char buf[16];
                 std::ignore = co_await f.read_some(
@@ -336,7 +336,7 @@ struct uring_teardown_test
                 read_resumed = true;
             };
             auto writer = [&]() -> capy::task<> {
-                posix_descriptor f(ioc);
+                posix_stream_descriptor f(ioc);
                 BOOST_TEST(!f.assign(static_cast<native_handle_type>(p[1])));
                 char big[4096] = {};
                 std::ignore =
@@ -438,7 +438,7 @@ struct uring_teardown_test
             io_context ioc(uring);
             auto reader = [](io_context& ctx, int fd,
                              int& count) -> capy::task<> {
-                posix_descriptor f(ctx);
+                posix_stream_descriptor f(ctx);
                 BOOST_TEST(!f.assign(static_cast<native_handle_type>(fd)));
                 char buf[4];
                 std::ignore = co_await f.read_some(
@@ -450,7 +450,7 @@ struct uring_teardown_test
             };
             auto writer = [](io_context& ctx, int fd,
                              int& count) -> capy::task<> {
-                posix_descriptor f(ctx);
+                posix_stream_descriptor f(ctx);
                 BOOST_TEST(!f.assign(static_cast<native_handle_type>(fd)));
                 std::ignore = co_await f.write_some(capy::const_buffer("a", 1));
                 ++count;

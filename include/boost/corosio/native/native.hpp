@@ -21,7 +21,7 @@
 #include <boost/corosio/native/native_local_datagram_socket.hpp>
 #include <boost/corosio/native/native_local_stream_acceptor.hpp>
 #include <boost/corosio/native/native_local_stream_socket.hpp>
-#include <boost/corosio/native/native_posix_descriptor.hpp>
+#include <boost/corosio/native/native_posix_stream_descriptor.hpp>
 #include <boost/corosio/native/native_random_access_file.hpp>
 #include <boost/corosio/native/native_resolver.hpp>
 #include <boost/corosio/native/native_signal_set.hpp>

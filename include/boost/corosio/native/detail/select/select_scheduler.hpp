@@ -113,6 +113,13 @@ public:
     std::error_code
     register_descriptor(int fd, reactor_descriptor_state* desc) const;
 
+    /// No-op: write readiness is watched from registration on.
+    std::error_code
+    ensure_write_registered(int, reactor_descriptor_state*) const noexcept
+    {
+        return {};
+    }
+
     /** Deregister a persistently registered descriptor.
 
         @param fd The file descriptor to deregister.

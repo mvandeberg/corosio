@@ -14,7 +14,7 @@
 //
 // win_stream_handle's whole class body is wrapped in #if BOOST_COROSIO_HAS_IOCP
 // in its own header, so the region that names the type is guarded the same
-// way, following posix_descriptor__wait.function.cpp. The corosio includes are
+// way, following posix_stream_descriptor__wait.function.cpp. The corosio includes are
 // safe unconditionally -- the header itself resolves to nothing off IOCP.
 
 #include "../doc_warnings.hpp"

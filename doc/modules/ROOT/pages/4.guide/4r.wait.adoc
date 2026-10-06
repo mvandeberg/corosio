@@ -75,7 +75,7 @@ exclusive ownership again. Or create a true duplicate with
 This applies to sockets. A library that owns a non-socket descriptor —
 a pipe, a tty, `inotify`, `eventfd` — needs the same readiness
 notification.
-xref:4.guide/4s.native-descriptors.adoc[`posix_descriptor`] provides it
+xref:4.guide/4s.native-descriptors.adoc[`posix_stream_descriptor`] provides it
 with the same `wait()` on the same terms.
 
 == Acceptors

@@ -1,5 +1,6 @@
 //
 // Copyright (c) 2026 Steve Gerbino
+// Copyright (c) 2026 Michael Vandeberg
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -17,7 +18,7 @@
 #include <boost/corosio/local_datagram_socket.hpp>
 #include <boost/corosio/local_stream_acceptor.hpp>
 #include <boost/corosio/local_stream_socket.hpp>
-#include <boost/corosio/posix_descriptor.hpp>
+#include <boost/corosio/posix_stream_descriptor.hpp>
 #include <boost/corosio/random_access_file.hpp>
 #include <boost/corosio/resolver.hpp>
 #include <boost/corosio/signal_set.hpp>
@@ -178,7 +179,7 @@ struct lazy_services_test
         BOOST_TEST(
             ioc.template find_service<local_datagram_service_t>() != nullptr);
 
-        posix_descriptor pd(ioc);
+        posix_stream_descriptor pd(ioc);
         BOOST_TEST(
             ioc.template find_service<descriptor_service_t>() != nullptr);
 #else

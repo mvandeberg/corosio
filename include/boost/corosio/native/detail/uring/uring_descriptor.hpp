@@ -14,8 +14,9 @@
 
 #if BOOST_COROSIO_HAS_URING
 
-#include <boost/corosio/posix_descriptor.hpp>
+#include <boost/corosio/posix_stream_descriptor.hpp>
 #include <boost/corosio/wait_type.hpp>
+#include <boost/corosio/detail/intrusive.hpp>
 #include <boost/corosio/native/detail/uring/uring_file_ops.hpp>
 #include <boost/corosio/native/detail/uring/uring_scheduler.hpp>
 #include <boost/corosio/native/detail/uring/uring_socket_ops.hpp>
@@ -32,7 +33,7 @@
 #include <poll.h>
 #include <unistd.h>
 
-/* io_uring-backed implementation of posix_descriptor.
+/* io_uring-backed implementation of posix_stream_descriptor.
 
    Three things differ from the reactor backends and from the other
    io_uring services:
@@ -41,14 +42,12 @@
    advances) the descriptor's own file position. The file services
    pass a real offset; a pipe, tty or character device has none.
 
-   O_NONBLOCK is armed lazily, on the first read_some/write_some and
-   never from assign() or wait(). The lazy O_NONBLOCK keeps transfers
-   off io-wq workers on kernels that punt blocking reads there; on
-   current kernels READV/WRITEV on such descriptors park in the
-   kernel's poll and EAGAIN reaches userspace mainly when the SQ is
-   full.
+   The descriptor's flags are never modified. A transfer on a blocking
+   fd parks in the kernel and stays cancellable by ASYNC_CANCEL, as
+   asio relies on. A caller who made the fd non-blocking gets EAGAIN
+   completions, which the two-phase shape below turns into a poll and
+   a retry.
 
-   That reporting is what the transfer ops' two-phase shape handles.
    An O_NONBLOCK descriptor the kernel cannot retry internally
    completes with -EAGAIN; the op then re-arms itself as a poll_add on
    the same descriptor and re-submits the transfer when the poll says
@@ -182,7 +181,7 @@ struct uring_descriptor_write_op final : uring_file_write_op_base
         std::uint32_t error) noexcept;
 };
 
-/** Native io_uring implementation of @ref posix_descriptor.
+/** Native io_uring implementation of @ref posix_stream_descriptor.
 
     Holds the adopted descriptor and the five embedded op slots: one
     transfer per direction, and one wait per direction.
@@ -194,12 +193,12 @@ struct uring_descriptor_write_op final : uring_file_write_op_base
     same kind in flight.
 */
 class BOOST_COROSIO_DECL uring_descriptor final
-    : public posix_descriptor::implementation
+    : public posix_stream_descriptor::implementation
     , public std::enable_shared_from_this<uring_descriptor>
+    , public intrusive_list<uring_descriptor>::node
 {
     uring_scheduler* sched_ = nullptr;
     int fd_                 = -1;
-    std::atomic<bool> nonblocking_{false};
 
     // Bumped by cancel() and by every descriptor change. A transfer op
     // between its EAGAIN CQE and its dispatch is invisible to the ring;
@@ -253,15 +252,6 @@ public:
             return std::noop_coroutine();
         }
 
-        // The first transferring operation is what arms O_NONBLOCK;
-        // assign() and wait() never do.
-        if (int const nerr = arm_nonblocking())
-        {
-            rd_.res = -nerr;
-            push_completed(&rd_);
-            return std::noop_coroutine();
-        }
-
         uring_submit_op(*sched_, &rd_);
         return std::noop_coroutine();
     }
@@ -294,18 +284,11 @@ public:
             return std::noop_coroutine();
         }
 
-        if (int const nerr = arm_nonblocking())
-        {
-            wr_.res = -nerr;
-            push_completed(&wr_);
-            return std::noop_coroutine();
-        }
-
         uring_submit_op(*sched_, &wr_);
         return std::noop_coroutine();
     }
 
-    // -- posix_descriptor::implementation --
+    // -- posix_stream_descriptor::implementation --
 
     std::coroutine_handle<> wait(
         std::coroutine_handle<> h,
@@ -338,8 +321,6 @@ public:
             h, ex, ec, fd_, sched_, shared_from_this(), poll_flags, token);
         sched_->work_started();
 
-        // No arm_nonblocking() on any branch here: a wait must leave a
-        // descriptor someone else owns exactly as it found it.
         if (fd_ < 0)
         {
             op->res = -EBADF;
@@ -373,7 +354,6 @@ public:
             sched_->cancel_and_flush(fd_);
         native_handle_type released = fd_;
         fd_                         = -1;
-        nonblocking_.store(false, std::memory_order_relaxed);
         return released;
     }
 
@@ -397,17 +377,18 @@ public:
 
     /** Adopt an already-validated descriptor.
 
-        Resets the lazy-nonblocking latch so a freshly adopted fd is
-        not assumed to carry the flag from whatever this object held
-        before.
-
         @param fd The descriptor to adopt.
     */
     void set_descriptor(int fd) noexcept
     {
         epoch_.fetch_add(1, std::memory_order_release);
-        fd_          = fd;
-        nonblocking_.store(false, std::memory_order_relaxed);
+        fd_ = fd;
+    }
+
+    /// Teardown hook named by uring_file_service_base.
+    void close_file() noexcept
+    {
+        close_descriptor();
     }
 
     /// Cancel pending operations and close the descriptor. No-op when
@@ -424,30 +405,10 @@ public:
         scoped_sigpipe_block no_sigpipe;
         sched_->cancel_and_flush(fd_);
         ::close(fd_);
-        fd_          = -1;
-        nonblocking_.store(false, std::memory_order_relaxed);
+        fd_ = -1;
     }
 
 private:
-    /** Arm O_NONBLOCK, once, before the first transfer.
-
-        Reports an errno rather than an error_code because the op
-        result model records a negated errno in `res`; the round trip
-        is lossless because fcntl only fails with codes make_err
-        passes through.
-    */
-    int arm_nonblocking() noexcept
-    {
-        // Relaxed: ensure_nonblocking is idempotent, so a duplicate
-        // fcntl from a racing first read and write is harmless.
-        if (nonblocking_.load(std::memory_order_relaxed))
-            return 0;
-        if (auto ec = ensure_nonblocking(fd_))
-            return ec.value();
-        nonblocking_.store(true, std::memory_order_relaxed);
-        return 0;
-    }
-
     /** Bind a transfer slot to this descriptor for a fresh submission.
 
         The epoch snapshot taken here is what every later prep compares

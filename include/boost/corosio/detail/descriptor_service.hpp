@@ -15,7 +15,7 @@
 
 #if BOOST_COROSIO_POSIX
 
-#include <boost/corosio/posix_descriptor.hpp>
+#include <boost/corosio/posix_stream_descriptor.hpp>
 #include <boost/capy/ex/execution_context.hpp>
 
 #include <system_error>
@@ -29,7 +29,7 @@ namespace boost::corosio::detail {
    fd with their reactor; uring has no adopt-time registration and
    only takes ownership of it.
    The context constructor installs whichever backend via
-   make_service, and posix_descriptor.cpp retrieves it via
+   make_service, and posix_stream_descriptor.cpp retrieves it via
    create_handle<descriptor_service>().
 */
 class BOOST_COROSIO_DECL descriptor_service
@@ -52,7 +52,8 @@ public:
         @return Error code on failure, empty on success.
     */
     virtual std::error_code assign_descriptor(
-        posix_descriptor::implementation& impl, native_handle_type fd) = 0;
+        posix_stream_descriptor::implementation& impl,
+        native_handle_type fd) = 0;
 
 protected:
     descriptor_service()           = default;

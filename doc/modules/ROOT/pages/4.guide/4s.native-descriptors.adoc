@@ -10,7 +10,7 @@
 = Native Descriptors and Handles
 :page-mode: how-to
 
-cpp:posix_descriptor[] adopts a file descriptor you already have and
+cpp:posix_stream_descriptor[] adopts a file descriptor you already have and
 drives it from an `io_context`, giving it `read_some()`, `write_some()`
 and `wait()`. It exists on POSIX platforms only. On Windows, three
 handle types fill the same role; see <<windows-handles>>.
@@ -33,11 +33,11 @@ Pick the type by what you hold:
 | You have | POSIX | Windows
 
 | A pipe, FIFO, or tty
-| cpp:posix_descriptor[]
+| cpp:posix_stream_descriptor[]
 | cpp:win_stream_handle[] (named pipe opened overlapped)
 
 | A serial port
-| cpp:posix_descriptor[]
+| cpp:posix_stream_descriptor[]
 | cpp:win_stream_handle[]
 
 | A block device or volume
@@ -45,11 +45,11 @@ Pick the type by what you hold:
 | cpp:random_access_file[] or cpp:win_random_access_handle[]
 
 | A process to wait for
-| cpp:posix_descriptor[] on a `pidfd`, `wait(wait_type::read)`
+| cpp:posix_stream_descriptor[] on a `pidfd`, `wait(wait_type::read)`
 | cpp:win_object_handle[] on a process handle, `wait()`
 
 | An event or counter
-| cpp:posix_descriptor[] on an `eventfd`
+| cpp:posix_stream_descriptor[] on an `eventfd`
 | cpp:win_object_handle[] on an event or semaphore
 |===
 
@@ -79,7 +79,7 @@ Every `dup()` of a descriptor shares the same one. None of them has a
 Windows counterpart. A type that named both would have to either
 document each rule twice or say nothing precise about either.
 
-Portability lives one layer up instead. A cpp:posix_descriptor[] is an
+Portability lives one layer up instead. A cpp:posix_stream_descriptor[] is an
 cpp:io_object[], cpp:io_read_stream[], cpp:io_write_stream[] and
 cpp:io_stream[] — the same bases `tcp_socket` has — and, like every
 corosio stream, it satisfies `capy::Stream`. That concept is what the
@@ -110,7 +110,7 @@ include::example$snippets/4s_native_descriptors.cpp[tag=adopt_eventfd,indent=0]
 
 [NOTE]
 ====
-Distinct cpp:posix_descriptor[] objects are safe to use from different
+Distinct cpp:posix_stream_descriptor[] objects are safe to use from different
 threads. A shared object must not run two operations of the same kind
 at once. One read and one write may overlap.
 ====
@@ -144,8 +144,10 @@ xref:4.guide/4r.wait.adoc[Readiness Wait] states for adopted sockets.
 
 [WARNING]
 ====
-`O_NONBLOCK` is set on the first `read_some()` or `write_some()`, never
-by `assign()`, and it is never restored.
+On epoll, kqueue and select, `O_NONBLOCK` is set on the first
+`read_some()` or `write_some()` and never restored. On io_uring nothing
+is ever modified. `assign()` and `wait()` never modify the descriptor on
+any backend.
 
 The flag lives on the shared open file description, not on the
 descriptor, so every other holder of that description sees it.
@@ -169,9 +171,9 @@ is still using.
 include::example$snippets/4s_native_descriptors.cpp[tag=wait_only,indent=0]
 ----
 
-Corosio sets the flag once and does not check it again. If another
-holder clears it, the next `read_some()` or `write_some()` blocks the
-thread running the `io_context`. bash does this to the terminal when a
+On the reactor backends corosio sets the flag once and does not check
+it again. If another holder clears it, the next `read_some()` or
+`write_some()` blocks the thread running the `io_context`. bash does this to the terminal when a
 job suspended with Ctrl-Z resumes. Asio's `posix::stream_descriptor`
 has the same limitation.
 
@@ -188,9 +190,7 @@ flagship descriptor kinds — `eventfd`, `timerfd`, `inotify`, `pidfd` —
 are anonymous inodes whose `st_mode` type bits are all zero. An accept list
 would reject the descriptors this type exists to carry.
 
-A negative or closed descriptor fails with `errc::bad_file_descriptor`,
-and re-assigning the descriptor the object already holds fails with
-`errc::invalid_argument`.
+A negative or closed descriptor fails with `errc::bad_file_descriptor`.
 
 === Transfers
 
@@ -210,21 +210,22 @@ left not-open. `O_NONBLOCK` stays set if an operation set it;
 
 === Where Errors Surface
 
-Validation runs before anything is mutated. A rejected descriptor
-leaves the object holding whatever it held before — pending operations
-included — and leaves you owning the descriptor.
+`assign()` requires a closed object; on an open one it fails with
+`error::already_open` and changes nothing.
 
 On select, a descriptor at or above `FD_SETSIZE` is a validation
 failure too. `select()` cannot monitor it, so `assign()` rejects it
-with `errc::too_many_files_open` and keeps the previous state.
+with `errc::too_many_files_open`.
 
-A refusal from the *kernel* is the one exception, and where it appears
-depends on the backend:
+Where a refusal from the *kernel* appears depends on the backend:
 
 epoll, kqueue:: These register the descriptor with the reactor during
-`assign()`, so a refusal fails `assign()`. The old descriptor has
-already been closed by then, so the object is left closed. What is
-left to refuse is resource exhaustion (`ENOMEM`, `ENOSPC`).
+`assign()`, so a refusal fails `assign()` and leaves the object closed.
+What is left to refuse is resource exhaustion (`ENOMEM`, `ENOSPC`).
+kqueue watches writes only once a write-direction operation first has
+to wait. A descriptor that refuses write watching is still adopted,
+and such a write or `wait(wait_type::write)` completes with the kernel's
+refusal.
 
 io_uring:: There is no adopt-time registration syscall, so `assign()`
 succeeds and a refusal appears at the first operation instead.
@@ -256,7 +257,7 @@ follows names the real failure.
 ====
 Writing to a descriptor whose peer has closed raises `SIGPIPE` in the
 default disposition, which terminates the process. The socket types
-suppress this; cpp:posix_descriptor[] cannot.
+suppress this; cpp:posix_stream_descriptor[] cannot.
 
 The suppression sockets get has no general form. `MSG_NOSIGNAL` is a
 `send()` flag and there is no `writev()` equivalent. `SO_NOSIGPIPE`
@@ -274,7 +275,7 @@ reason. Code ported from it needs no change here.
 == Windows Handles
 
 Windows has no single descriptor type, so the counterpart of
-cpp:posix_descriptor[] is three types. Each adopts a handle you already
+cpp:posix_stream_descriptor[] is three types. Each adopts a handle you already
 have and drives it from an `io_context`. None of them creates a handle.
 
 [NOTE]
@@ -317,7 +318,7 @@ readiness wait can be built on it.
 That gap is the reason for the platform-qualified names. A portable type
 would have to drop `wait()` on POSIX, or promise it on Windows and fail.
 
-Portability lives one layer up, as it does for cpp:posix_descriptor[]. A
+Portability lives one layer up, as it does for cpp:posix_stream_descriptor[]. A
 cpp:win_stream_handle[] is an cpp:io_stream[] and satisfies
 `capy::Stream`. `capy::read`, `capy::write`, and TLS layering work on it
 exactly as they do on a socket.
@@ -534,7 +535,7 @@ object stays open and accepts the next `wait()`.
 
 * xref:4.guide/4r.wait.adoc[Readiness Wait]
 * xref:4.guide/4o.file-io.adoc[File I/O]
-* xref:reference:boost/corosio/posix_descriptor.adoc[`posix_descriptor` reference]
+* xref:reference:boost/corosio/posix_stream_descriptor.adoc[`posix_stream_descriptor` reference]
 * xref:reference:boost/corosio/win_stream_handle.adoc[`win_stream_handle` reference]
 * xref:reference:boost/corosio/win_random_access_handle.adoc[`win_random_access_handle` reference]
 * xref:reference:boost/corosio/win_object_handle.adoc[`win_object_handle` reference]

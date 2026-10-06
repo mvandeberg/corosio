@@ -69,7 +69,7 @@ validate_socket_fd(int fd, int expected_type, bool is_ip) noexcept
     return {};
 }
 
-/** Validate a caller-supplied fd for adoption by @ref posix_descriptor.
+/** Validate a caller-supplied fd for adoption by @ref posix_stream_descriptor.
 
     Non-mutating: interrogates the fd without changing any of its
     flags, so a rejected fd goes back to the caller untouched. In
@@ -155,8 +155,9 @@ validate_file_fd(int fd) noexcept
 
 /** Put a descriptor into non-blocking mode, idempotently.
 
-    Called lazily on the first `read_some` / `write_some`, never from
-    `assign()`. The change is permanent: `O_NONBLOCK` lives on the
+    The reactor backends call it lazily on the first `read_some` /
+    `write_some`, never from `assign()`; io_uring never calls it. The
+    change is permanent: `O_NONBLOCK` lives on the
     shared open file description, so restoring it later would race
     every other holder of that description. A `wait()`-only user
     never reaches this function and their fd is never modified.

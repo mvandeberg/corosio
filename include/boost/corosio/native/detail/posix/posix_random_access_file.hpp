@@ -279,23 +279,10 @@ posix_random_access_file::release()
 inline std::error_code
 posix_random_access_file::assign(native_handle_type handle) noexcept
 {
-    // handle >= 0 guard: an unset impl reports native_handle() == -1, and a
-    // caller-supplied -1 must fail as a bad fd, not a self-assign.
-    if (handle >= 0 && handle == fd_)
-        return std::make_error_code(std::errc::invalid_argument);
-
-    // Validate before touching the held fd: a failed assign must leave
-    // this object unchanged and the caller still owning handle.
+    // The public assign() guarantees the object is closed.
     if (auto ec = validate_file_fd(handle))
         return ec;
 
-    // cancel() first, so a queued read_at/write_at completes canceled
-    // rather than running against the newly adopted file; a worker
-    // already past its cancelled check uses its op's fd snapshot. The service's
-    // close(handle) / destroy() normally pair cancel()+close_file();
-    // assign() bypasses that path and must do the same pairing itself.
-    cancel();
-    close_file();
     fd_ = handle;
     return {};
 }

@@ -36,7 +36,7 @@
 
 // tag::assume[]
 #include <boost/corosio/io_context.hpp>
-#include <boost/corosio/posix_descriptor.hpp>
+#include <boost/corosio/posix_stream_descriptor.hpp>
 #include <boost/corosio/wait_type.hpp>
 #include <boost/capy/buffers.hpp>
 #include <boost/capy/read.hpp>
@@ -71,11 +71,11 @@ last_error() noexcept
 
 // tag::layering[]
 // Nothing below is descriptor-specific. `capy::read` is constrained on
-// capy::Stream, and a posix_descriptor models it exactly as a
+// capy::Stream, and a posix_stream_descriptor models it exactly as a
 // tcp_socket or a tls_stream does, so the same algorithm drives all
 // three.
 capy::task<std::error_code>
-fill(corosio::posix_descriptor& d, capy::mutable_buffer buf)
+fill(corosio::posix_stream_descriptor& d, capy::mutable_buffer buf)
 {
     auto [ec, n] = co_await capy::read(d, buf);
     co_return ec;
@@ -92,7 +92,7 @@ count_events(corosio::io_context& ioc)
     if (fd < 0)
         co_return last_error();
 
-    corosio::posix_descriptor d(ioc);
+    corosio::posix_stream_descriptor d(ioc);
     if (auto ec = d.assign(fd))
     {
         // A failed assign() leaves the descriptor with the caller.
@@ -124,7 +124,7 @@ watch_directory(corosio::io_context& ioc, char const* path)
         co_return ec;
     }
 
-    corosio::posix_descriptor d(ioc);
+    corosio::posix_stream_descriptor d(ioc);
     if (auto ec = d.assign(fd))
     {
         ::close(fd);
@@ -158,7 +158,7 @@ read_a_line(corosio::io_context& ioc)
     if (fd < 0)
         co_return last_error();
 
-    corosio::posix_descriptor d(ioc);
+    corosio::posix_stream_descriptor d(ioc);
     if (auto ec = d.assign(fd))
     {
         ::close(fd);
@@ -203,7 +203,7 @@ watch_foreign(corosio::io_context& ioc, foreign_conn* conn)
     if (copy < 0)
         co_return last_error();
 
-    corosio::posix_descriptor d(ioc);
+    corosio::posix_stream_descriptor d(ioc);
     if (auto ec = d.assign(copy))
     {
         ::close(copy);
@@ -232,7 +232,7 @@ struct native_descriptors_test
         BOOST_TEST(::pipe(fds) == 0);
 
         corosio::io_context ioc;
-        corosio::posix_descriptor d(ioc);
+        corosio::posix_stream_descriptor d(ioc);
         BOOST_TEST(!d.assign(fds[0]));
 
         char got[5] = {};
