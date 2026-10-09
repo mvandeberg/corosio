@@ -66,7 +66,7 @@ class select_tcp_socket final
     friend select_tcp_service;
 
 public:
-    explicit select_tcp_socket(select_tcp_service& svc) noexcept
+    explicit select_tcp_socket(select_tcp_service& svc)
         : base_type(svc)
     {
     }
@@ -98,7 +98,7 @@ class select_local_stream_socket final
 
 public:
     explicit select_local_stream_socket(
-        select_local_stream_service& svc) noexcept
+        select_local_stream_service& svc)
         : base_type(svc)
     {
     }
@@ -131,7 +131,7 @@ class select_udp_socket final
     friend select_udp_service;
 
 public:
-    explicit select_udp_socket(select_udp_service& svc) noexcept
+    explicit select_udp_socket(select_udp_service& svc)
         : base_type(svc)
     {
     }
@@ -167,7 +167,7 @@ class select_local_datagram_socket final
 
 public:
     explicit select_local_datagram_socket(
-        select_local_datagram_service& svc) noexcept
+        select_local_datagram_service& svc)
         : base_type(svc)
     {
     }
@@ -209,7 +209,7 @@ class select_tcp_acceptor final
     friend select_tcp_acceptor_service;
 
 public:
-    explicit select_tcp_acceptor(select_tcp_acceptor_service& svc) noexcept
+    explicit select_tcp_acceptor(select_tcp_acceptor_service& svc)
         : base_type(svc)
     {
     }
@@ -235,7 +235,7 @@ class select_local_stream_acceptor final
 
 public:
     explicit select_local_stream_acceptor(
-        select_local_stream_acceptor_service& svc) noexcept
+        select_local_stream_acceptor_service& svc)
         : base_type(svc)
     {
     }
@@ -258,7 +258,7 @@ class select_descriptor final
     friend select_descriptor_service;
 
 public:
-    explicit select_descriptor(select_descriptor_service& svc) noexcept
+    explicit select_descriptor(select_descriptor_service& svc)
         : base_type(svc)
     {
     }

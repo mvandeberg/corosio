@@ -1,5 +1,6 @@
 //
 // Copyright (c) 2026 Steve Gerbino
+// Copyright (c) 2026 Michael Vandeberg
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -106,6 +107,23 @@ struct cqe_slot
 };
 
 extern thread_local cqe_slot tls_cqe;
+
+// Arm for after_call_scope. Independent of the fail arms: it never
+// changes a result, so it composes with any of them.
+struct after_slot
+{
+    sys which         = sys::count_;
+    void (*fn)(void*) = nullptr;
+    void* ctx         = nullptr;
+    bool fired        = false;
+    bool armed        = false;
+    bool owned        = false;
+};
+
+extern thread_local after_slot tls_after;
+
+// Run the armed action if `which` matches and the call reported events.
+void run_after_call(sys which, long result) noexcept;
 
 #if defined(_WIN32)
 // The IOCP twin of cqe_slot: a completion carries no fd or opcode to

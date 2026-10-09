@@ -79,7 +79,7 @@ class reactor_basic_socket
 
     using core_type = reactor_io_core<Derived, Service, DescState>;
 
-    explicit reactor_basic_socket(Service& svc) noexcept : core_type(svc) {}
+    explicit reactor_basic_socket(Service& svc) : core_type(svc) {}
 
 protected:
     // fd_ / local_endpoint_ and the synchronous accessors (native_handle,

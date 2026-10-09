@@ -210,7 +210,7 @@ class reactor_descriptor
 
 protected:
     // NOLINTNEXTLINE(bugprone-crtp-constructor-accessibility)
-    explicit reactor_descriptor(Service& svc) noexcept : core_type(svc) {}
+    explicit reactor_descriptor(Service& svc) : core_type(svc) {}
 
     using core_type::svc_;
 

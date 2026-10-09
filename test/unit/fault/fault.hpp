@@ -294,6 +294,35 @@ private:
     int idx_ = -1;
 };
 
+/** Run an action right after an event wait returns, on this thread.
+
+    While the scope is alive, the first call to `which` on this thread
+    that returns a positive count runs `fn(ctx)` before the hook hands
+    the kernel's result back. The library still sees exactly what the
+    kernel reported. Only the timing changes, so a test can act in the
+    window between the kernel reporting an event and the library
+    dispatching it, standing in for another thread.
+
+    Only the wait hooks consult it: `epoll_wait`, and `kevent` (and
+    Darwin's `kevent64`) when called without a changelist. Arming any
+    other symbol never fires.
+
+    @par Preconditions
+    No other `after_call_scope` is alive on this thread.
+*/
+class after_call_scope
+{
+public:
+    after_call_scope(sys which, void (*fn)(void*), void* ctx) noexcept;
+    ~after_call_scope();
+
+    /// Return `true` once the action has run.
+    bool fired() const noexcept;
+
+    after_call_scope(after_call_scope const&)            = delete;
+    after_call_scope& operator=(after_call_scope const&) = delete;
+};
+
 /** Rewrite one io_uring completion before corosio sees it.
 
     Matches the first unsubmitted SQE whose `fd` and `opcode`

@@ -1,5 +1,6 @@
 //
 // Copyright (c) 2026 Steve Gerbino
+// Copyright (c) 2026 Michael Vandeberg
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -748,6 +749,46 @@ struct self_test
     }
 #endif
 
+#if defined(__linux__)
+    void testAfterCallRunsOnceOnEvents()
+    {
+        int ep = ::epoll_create1(0);
+        int ev_fd = ::eventfd(1, 0); // readable from the start
+        epoll_event reg{};
+        reg.events = EPOLLIN;
+        BOOST_TEST(::epoll_ctl(ep, EPOLL_CTL_ADD, ev_fd, &reg) == 0);
+
+        int calls = 0;
+        after_call_scope hook(
+            sys::epoll_wait,
+            [](void* p) { ++*static_cast<int*>(p); },
+            &calls);
+
+        epoll_event out;
+        BOOST_TEST(::epoll_wait(ep, &out, 1, 0) == 1);
+        BOOST_TEST(::epoll_wait(ep, &out, 1, 0) == 1);
+        BOOST_TEST(hook.fired());
+        BOOST_TEST_EQ(calls, 1);
+        ::close(ev_fd);
+        ::close(ep);
+    }
+
+    void testAfterCallSkipsEmptyWait()
+    {
+        int ep = ::epoll_create1(0);
+        int calls = 0;
+        after_call_scope hook(
+            sys::epoll_wait,
+            [](void* p) { ++*static_cast<int*>(p); },
+            &calls);
+        epoll_event out;
+        BOOST_TEST(::epoll_wait(ep, &out, 1, 0) == 0);
+        BOOST_TEST(!hook.fired());
+        BOOST_TEST_EQ(calls, 0);
+        ::close(ep);
+    }
+#endif
+
     void run()
     {
         if (skip_under_valgrind())
@@ -771,6 +812,10 @@ struct self_test
         testCountTracksCalls();
         testHookIsLiveAnswersPerPlatform();
         testHighFdHelpers();
+#if defined(__linux__)
+        testAfterCallRunsOnceOnEvents();
+        testAfterCallSkipsEmptyWait();
+#endif
 #if defined(__APPLE__)
         testDarwinSelectAliasReachesHook();
 #endif

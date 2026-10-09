@@ -132,9 +132,13 @@ reactor_descriptor_state::invoke_deferred_io()
 {
     std::shared_ptr<void> prevent_impl_destruction;
     ready_queue local_ops;
+    reactor_scheduler const* sched;
 
     {
         conditionally_enabled_mutex::scoped_lock lock(mutex);
+
+        // The new owner's registration writes scheduler_ under this lock.
+        sched = scheduler_;
 
         // Must clear is_enqueued_ and move impl_ref_ under the same
         // lock that processes I/O. close_socket() checks is_enqueued_
@@ -339,12 +343,12 @@ reactor_descriptor_state::invoke_deferred_io()
     scheduler_op* first = ready_as_op(local_ops.pop());
     if (first)
     {
-        scheduler_->post_deferred_completions(local_ops);
+        sched->post_deferred_completions(local_ops);
         (*first)();
     }
     else
     {
-        scheduler_->compensating_work_started();
+        sched->compensating_work_started();
     }
 }
 

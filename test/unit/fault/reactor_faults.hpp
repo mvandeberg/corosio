@@ -31,6 +31,7 @@
 #include <array>
 #include <cerrno>
 #include <chrono>
+#include <optional>
 #include <stop_token>
 #include <system_error>
 #include <tuple>
@@ -1021,6 +1022,129 @@ struct reactor_common_faults
         BOOST_TEST(rec == std::errc::bad_file_descriptor);
     }
 
+    /* An event harvested for a socket that is destroyed before the
+       reactor dispatches it (#380).
+
+       Another thread can close and destroy a socket while the thread
+       running the reactor holds that socket's event with the scheduler
+       mutex released; the hook stands in for that thread. The socket
+       is idle, so no parked op keeps its impl alive. When the
+       descriptor state lived inside the impl, the dispatch wrote freed
+       memory. select is skipped because it waits only on descriptors
+       with a parked op, so an idle socket never reaches its wait.
+    */
+    void testEventForSocketDestroyedAfterHarvest()
+    {
+        if constexpr (is_select)
+            return;
+
+        io_context ioc(Backend);
+        auto [a, b] = test::make_socket_pair(ioc);
+        std::optional<tcp_socket> victim(std::move(a));
+
+        // A read parked on the peer keeps work outstanding, so
+        // run_one_for() enters the reactor instead of returning.
+        char sink = 0;
+        capy::run_async(ioc.get_executor())(
+            [](tcp_socket& s, char& d) -> capy::task<> {
+                auto [ec, n] =
+                    co_await s.read_some(capy::mutable_buffer(&d, 1));
+                std::ignore = ec;
+                std::ignore = n;
+            }(b, sink));
+        ioc.restart();
+        ioc.poll();
+
+        char const c = 'x';
+        BOOST_TEST(::send(b.native_handle(), &c, 1, 0) == 1);
+
+        constexpr sys wait_call = is_kqueue ? sys::kevent : sys::epoll_wait;
+        after_call_scope hook(
+            wait_call,
+            [](void* p) {
+                static_cast<std::optional<tcp_socket>*>(p)->reset();
+            },
+            &victim);
+        ioc.restart();
+        std::ignore = ioc.run_one_for(std::chrono::milliseconds(200));
+        BOOST_TEST(hook.fired());
+        BOOST_TEST(!victim);
+
+        // Drain: closing the peer completes its parked read.
+        b.close();
+        ioc.restart();
+        ioc.run();
+    }
+
+    /* A destroyed socket's state, reused by the next socket while the
+       old socket's stale event is still to be dispatched. The new
+       socket must work normally. */
+    void testStaleEventAfterReuse()
+    {
+        if constexpr (is_select)
+            return;
+
+        io_context ioc(Backend);
+        auto [a, b] = test::make_socket_pair(ioc);
+        std::optional<tcp_socket> victim(std::move(a));
+
+        char sink = 0;
+        capy::run_async(ioc.get_executor())(
+            [](tcp_socket& s, char& d) -> capy::task<> {
+                auto [ec, n] =
+                    co_await s.read_some(capy::mutable_buffer(&d, 1));
+                std::ignore = ec;
+                std::ignore = n;
+            }(b, sink));
+        ioc.restart();
+        ioc.poll();
+
+        char const c = 'x';
+        BOOST_TEST(::send(b.native_handle(), &c, 1, 0) == 1);
+
+        struct ctx_t
+        {
+            io_context* ioc;
+            std::optional<tcp_socket>* victim;
+            std::optional<tcp_socket> fresh;
+        } ctx{&ioc, &victim, {}};
+
+        constexpr sys wait_call = is_kqueue ? sys::kevent : sys::epoll_wait;
+        after_call_scope hook(
+            wait_call,
+            [](void* p) {
+                auto& x = *static_cast<ctx_t*>(p);
+                x.victim->reset();
+                // The free list is LIFO, so this takes the victim's
+                // state while its harvested event is still undispatched.
+                x.fresh.emplace(*x.ioc);
+            },
+            &ctx);
+        ioc.restart();
+        std::ignore = ioc.run_one_for(std::chrono::milliseconds(200));
+        BOOST_TEST(hook.fired());
+
+        // Hand the state on again; the next object constructed (the
+        // acceptor in make_socket_pair) reuses it with whatever the
+        // stale dispatch left behind.
+        ctx.fresh.reset();
+        auto [c1, c2] = test::make_socket_pair(ioc);
+        char got = 0;
+        auto io = [&]() -> capy::task<> {
+            auto [wec, wn] = co_await c1.write_some(capy::const_buffer(&c, 1));
+            BOOST_TEST(!wec);
+            std::ignore = wn;
+            auto [rec, rn] = co_await c2.read_some(capy::mutable_buffer(&got, 1));
+            BOOST_TEST(!rec);
+            std::ignore = rn;
+        };
+        capy::run_async(ioc.get_executor())(io());
+        b.close();
+        ioc.restart();
+        ioc.run();
+        BOOST_TEST_EQ(got, 'x');
+    }
+
     void testDatagramFails()
     {
         io_context ioc(Backend);
@@ -1218,6 +1342,8 @@ struct reactor_common_faults
         testErrorEventOnWritableWaitWrite();
         testSocketFamilyProbeFails();
         testDatagramFails();
+        testEventForSocketDestroyedAfterHarvest();
+        testStaleEventAfterReuse();
     }
 };
 

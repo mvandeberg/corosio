@@ -70,7 +70,7 @@ class reactor_acceptor
 
 protected:
     // NOLINTNEXTLINE(bugprone-crtp-constructor-accessibility)
-    explicit reactor_acceptor(Service& svc) noexcept : core_type(svc) {}
+    explicit reactor_acceptor(Service& svc) : core_type(svc) {}
 
 protected:
     using core_type::svc_;
@@ -158,9 +158,9 @@ public:
     void init_acceptor_fd(int fd) noexcept
     {
         fd_            = fd;
-        desc_state_.fd = fd;
         {
             std::lock_guard lock(desc_state_.mutex);
+            desc_state_.fd            = fd;
             desc_state_.read_op       = nullptr;
             desc_state_.wait_read_op  = nullptr;
             desc_state_.wait_write_op = nullptr;

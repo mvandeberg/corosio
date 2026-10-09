@@ -1,5 +1,6 @@
 //
 // Copyright (c) 2026 Steve Gerbino
+// Copyright (c) 2026 Michael Vandeberg
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -377,9 +378,39 @@ struct alloc_fault_test
 
 #endif // !_WIN32
 
+    // A reactor socket's descriptor state is allocated inside its
+    // constructor chain; a failure must reach the caller as bad_alloc,
+    // not std::terminate through a noexcept constructor (#380).
+    void testReactorSocketConstructThrows()
+    {
+#if BOOST_COROSIO_HAS_EPOLL
+        io_context ioc(epoll);
+        // A live socket keeps the free list empty, so the first armed
+        // construction that gets past make_shared has to grow the pool.
+        tcp_socket warm(ioc);
+        int threw = 0;
+        for (unsigned nth = 1; nth <= 6; ++nth)
+        {
+            try
+            {
+                fault_scope f(sys::cpp_new, 0, nth);
+                tcp_socket s(ioc);
+            }
+            catch (std::bad_alloc const&)
+            {
+                ++threw;
+            }
+        }
+        BOOST_TEST(threw > 0);
+        tcp_socket after(ioc);
+        BOOST_TEST(after.is_open() == false);
+#endif
+    }
+
     void run()
     {
         testArmFailsAllocation();
+        testReactorSocketConstructThrows();
 #if !defined(_WIN32)
         testTimerRearmRecovery();
         testSelectRegisterRecovery();

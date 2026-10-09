@@ -81,7 +81,7 @@ class reactor_stream_socket
 
 protected:
     // NOLINTNEXTLINE(bugprone-crtp-constructor-accessibility)
-    explicit reactor_stream_socket(Service& svc) noexcept : base_type(svc) {}
+    explicit reactor_stream_socket(Service& svc) : base_type(svc) {}
 
 protected:
     Endpoint remote_endpoint_;

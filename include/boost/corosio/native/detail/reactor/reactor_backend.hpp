@@ -84,9 +84,9 @@ reactor_acceptor_impl<
                     static_cast<SocketFinal&>(*socket_svc->construct());
                 impl.set_socket(accepted);
 
-                impl.desc_state_.fd = accepted;
                 {
                     std::lock_guard lock(impl.desc_state_.mutex);
+                    impl.desc_state_.fd         = accepted;
                     impl.desc_state_.read_op    = nullptr;
                     impl.desc_state_.write_op   = nullptr;
                     impl.desc_state_.connect_op = nullptr;

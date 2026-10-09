@@ -474,12 +474,18 @@ COROSIO_FAULT_HOOK_NX(
     -1,
     (int ep, int op, int fd, epoll_event* ev),
     (ep, op, fd, ev))
-COROSIO_FAULT_HOOK(
-    epoll_wait,
-    int,
-    -1,
-    (int ep, epoll_event* ev, int n, int t),
-    (ep, ev, n, t))
+// Hand-written rather than COROSIO_FAULT_HOOK so after_call_scope can
+// run between the kernel's answer and the caller seeing it.
+extern "C" int
+epoll_wait(int ep, epoll_event* ev, int n, int t)
+{
+    COROSIO_FAULT_REAL(epoll_wait, int (*)(int, epoll_event*, int, int));
+    if (should_fail(sys::epoll_wait))
+        return -1;
+    int const r = real(ep, ev, n, t);
+    run_after_call(sys::epoll_wait, r);
+    return r;
+}
 COROSIO_FAULT_HOOK_NX(eventfd, int, -1, (unsigned v, int f), (v, f))
 COROSIO_FAULT_HOOK_NX(timerfd_create, int, -1, (int c, int f), (c, f))
 COROSIO_FAULT_HOOK_NX(
@@ -522,7 +528,11 @@ kevent(
     bool const fail_any = should_fail(sys::kevent);
     if (fail_add || fail_any)
         return -1;
-    return real(kq, ch, nch, ev, nev, ts);
+    int const r = real(kq, ch, nch, ev, nev, ts);
+    // Registrations return receipts; only a wait hands back events.
+    if (nch == 0)
+        run_after_call(sys::kevent, r);
+    return r;
 }
 #endif
 
@@ -554,7 +564,11 @@ kevent64(
     bool const fail_any = should_fail(sys::kevent);
     if (fail_add || fail_any)
         return -1;
-    return real(kq, ch, nch, ev, nev, flags, ts);
+    int const r = real(kq, ch, nch, ev, nev, flags, ts);
+    // Registrations return receipts; only a wait hands back events.
+    if (nch == 0)
+        run_after_call(sys::kevent, r);
+    return r;
 }
 #endif
 

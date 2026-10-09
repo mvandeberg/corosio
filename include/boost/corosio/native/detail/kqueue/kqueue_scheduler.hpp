@@ -18,6 +18,7 @@
 #include <boost/corosio/detail/config.hpp>
 #include <boost/capy/ex/execution_context.hpp>
 
+#include <boost/corosio/native/detail/reactor/reactor_descriptor_pool.hpp>
 #include <boost/corosio/native/detail/reactor/reactor_scheduler.hpp>
 #include <boost/corosio/native/detail/reactor/reactor_signal_pipe.hpp>
 
@@ -224,6 +225,12 @@ public:
     */
     void deregister_descriptor(int fd) const;
 
+    /// States for this scheduler's descriptors; see reactor_descriptor_pool.
+    reactor_descriptor_pool& descriptor_pool() noexcept
+    {
+        return desc_pool_;
+    }
+
     /// Watch the read end of the POSIX signal self-pipe (see scheduler.hpp).
     [[nodiscard]] std::error_code register_signal_reader(int read_fd) override
     {
@@ -240,6 +247,8 @@ private:
     // Watches the global signal self-pipe's read end (armed lazily by
     // register_signal_reader on the first signal registration).
     reactor_signal_pipe_reader signal_pipe_reader_;
+
+    reactor_descriptor_pool desc_pool_;
 
     // EVFILT_USER idempotency
     mutable std::atomic<bool> user_event_armed_{false};
@@ -324,20 +333,26 @@ inline std::error_code
 kqueue_scheduler::register_descriptor(
     int fd, reactor_descriptor_state* desc) const
 {
+    // The kernel may report the fd, and another thread dispatch it,
+    // before desc->mutex is taken below; the guard spares a reused
+    // state, whose value already matches, a write racing a stale read.
+    if (desc->scheduler_ != this)
+        desc->scheduler_ = this;
+
     int const err = kqueue_add_filter(kq_fd_, fd, EVFILT_READ, desc);
     // EINVAL/ENODEV: a device with no kqfilter. As on epoll's EPERM,
     // adopt it unwatched.
     bool const unpollable = err == EINVAL || err == ENODEV;
     if (err != 0 && !unpollable)
         return make_err(err);
-    desc->registered_events = unpollable ? 0 : reactor_event_read;
-    desc->unpollable        = unpollable;
-    desc->fd                = fd;
-    desc->scheduler_        = this;
-    desc->mutex.set_enabled(reactor_io_locking_);
+    if (desc->mutex.enabled() != reactor_io_locking_)
+        desc->mutex.set_enabled(reactor_io_locking_);
     desc->ready_events_.store(0, std::memory_order_relaxed);
 
     conditionally_enabled_mutex::scoped_lock lock(desc->mutex);
+    desc->registered_events = unpollable ? 0 : reactor_event_read;
+    desc->unpollable        = unpollable;
+    desc->fd                = fd;
     desc->impl_ref_.reset();
     desc->read_ready  = false;
     desc->write_ready = false;

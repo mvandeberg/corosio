@@ -1,5 +1,6 @@
 //
 // Copyright (c) 2026 Steve Gerbino
+// Copyright (c) 2026 Michael Vandeberg
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -173,9 +174,9 @@ setup_accepted_socket(
     auto& impl = static_cast<SocketImpl&>(*socket_svc->construct());
     impl.set_socket(accepted_fd);
 
-    impl.desc_state_.fd = accepted_fd;
     {
         std::lock_guard lock(impl.desc_state_.mutex);
+        impl.desc_state_.fd         = accepted_fd;
         impl.desc_state_.read_op    = nullptr;
         impl.desc_state_.write_op   = nullptr;
         impl.desc_state_.connect_op = nullptr;

@@ -66,7 +66,7 @@ class kqueue_tcp_socket final
     friend kqueue_tcp_service;
 
 public:
-    explicit kqueue_tcp_socket(kqueue_tcp_service& svc) noexcept
+    explicit kqueue_tcp_socket(kqueue_tcp_service& svc)
         : base_type(svc)
     {
     }
@@ -98,7 +98,7 @@ class kqueue_local_stream_socket final
 
 public:
     explicit kqueue_local_stream_socket(
-        kqueue_local_stream_service& svc) noexcept
+        kqueue_local_stream_service& svc)
         : base_type(svc)
     {
     }
@@ -131,7 +131,7 @@ class kqueue_udp_socket final
     friend kqueue_udp_service;
 
 public:
-    explicit kqueue_udp_socket(kqueue_udp_service& svc) noexcept
+    explicit kqueue_udp_socket(kqueue_udp_service& svc)
         : base_type(svc)
     {
     }
@@ -167,7 +167,7 @@ class kqueue_local_datagram_socket final
 
 public:
     explicit kqueue_local_datagram_socket(
-        kqueue_local_datagram_service& svc) noexcept
+        kqueue_local_datagram_service& svc)
         : base_type(svc)
     {
     }
@@ -209,7 +209,7 @@ class kqueue_tcp_acceptor final
     friend kqueue_tcp_acceptor_service;
 
 public:
-    explicit kqueue_tcp_acceptor(kqueue_tcp_acceptor_service& svc) noexcept
+    explicit kqueue_tcp_acceptor(kqueue_tcp_acceptor_service& svc)
         : base_type(svc)
     {
     }
@@ -235,7 +235,7 @@ class kqueue_local_stream_acceptor final
 
 public:
     explicit kqueue_local_stream_acceptor(
-        kqueue_local_stream_acceptor_service& svc) noexcept
+        kqueue_local_stream_acceptor_service& svc)
         : base_type(svc)
     {
     }
@@ -258,7 +258,7 @@ class kqueue_descriptor final
     friend kqueue_descriptor_service;
 
 public:
-    explicit kqueue_descriptor(kqueue_descriptor_service& svc) noexcept
+    explicit kqueue_descriptor(kqueue_descriptor_service& svc)
         : base_type(svc)
     {
     }

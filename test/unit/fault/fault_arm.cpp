@@ -1,5 +1,6 @@
 //
 // Copyright (c) 2026 Steve Gerbino
+// Copyright (c) 2026 Michael Vandeberg
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -230,6 +231,45 @@ unsigned
 fault_scope::count() const noexcept
 {
     return global_ ? global_storage.seen : tls_arms.arms[idx_].seen;
+}
+
+thread_local after_slot tls_after;
+
+void
+run_after_call(sys which, long result) noexcept
+{
+    auto& s = tls_after;
+    if (!s.armed || s.which != which || result <= 0)
+        return;
+    // Disarm first: the action may itself reach hooked calls.
+    s.armed = false;
+    s.fired = true;
+    s.fn(s.ctx);
+}
+
+after_call_scope::after_call_scope(
+    sys which, void (*fn)(void*), void* ctx) noexcept
+{
+    if (tls_after.owned)
+        die("after_call_scope: one is already alive on this thread");
+    tls_after       = after_slot{};
+    tls_after.which = which;
+    tls_after.fn    = fn;
+    tls_after.ctx   = ctx;
+    tls_after.armed = true;
+    tls_after.owned = true;
+}
+
+after_call_scope::~after_call_scope()
+{
+    tls_after.armed = false;
+    tls_after.owned = false;
+}
+
+bool
+after_call_scope::fired() const noexcept
+{
+    return tls_after.fired;
 }
 
 } // namespace boost::corosio::test::fault

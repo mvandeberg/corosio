@@ -32,14 +32,19 @@
 #include <boost/capy/error.hpp>
 #include <boost/capy/ex/io_env.hpp>
 #include <boost/capy/ex/run_async.hpp>
+#include <boost/capy/read.hpp>
 #include <boost/capy/task.hpp>
+#include <boost/capy/write.hpp>
 
+#include <array>
 #include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <optional>
 #include <stop_token>
 #include <system_error>
 #include <thread>
+#include <vector>
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -222,11 +227,88 @@ struct mt_reactor_test
         ioc.run();
     }
 
+    // Many short connections served by several threads on one context,
+    // closing while the reactor holds their events (#380).
+    void testConcurrentCloseUnderLoad()
+    {
+        constexpr std::size_t conns   = 128;
+        constexpr std::size_t threads = 4;
+        constexpr std::size_t rounds  = 4;
+        constexpr std::size_t payload = 1024;
+
+        io_context ioc(Backend);
+        std::atomic<std::size_t> remaining{conns * 2 + 1};
+        auto finish = [&] {
+            if (remaining.fetch_sub(1) == 1)
+                ioc.stop();
+        };
+
+        tcp_acceptor acc(ioc, endpoint(ipv4_address::loopback(), 0));
+        auto const peer = acc.local_endpoint();
+
+        auto echo = [&](tcp_socket s) -> capy::task<> {
+            std::array<char, payload> buf{};
+            for (std::size_t i = 0; i < rounds; ++i)
+            {
+                auto [rec, rn] = co_await capy::read(
+                    s, capy::mutable_buffer(buf.data(), buf.size()));
+                if (rec || rn != buf.size())
+                    break;
+                auto [wec, wn] = co_await capy::write(
+                    s, capy::const_buffer(buf.data(), buf.size()));
+                if (wec || wn != buf.size())
+                    break;
+            }
+            s.close();
+            finish();
+        };
+        auto client = [&]() -> capy::task<> {
+            tcp_socket s(ioc);
+            std::array<char, payload> buf{};
+            auto [cec] = co_await s.connect(peer);
+            for (std::size_t i = 0; !cec && i < rounds; ++i)
+            {
+                auto [wec, wn] = co_await capy::write(
+                    s, capy::const_buffer(buf.data(), buf.size()));
+                if (wec || wn != buf.size())
+                    break;
+                auto [rec, rn] = co_await capy::read(
+                    s, capy::mutable_buffer(buf.data(), buf.size()));
+                if (rec || rn != buf.size())
+                    break;
+            }
+            s.close();
+            finish();
+        };
+        auto accept_loop = [&]() -> capy::task<> {
+            for (std::size_t i = 0; i < conns; ++i)
+            {
+                auto [ec, s] = co_await acc.accept();
+                if (ec)
+                    break;
+                capy::run_async(ioc.get_executor())(echo(std::move(s)));
+            }
+            finish();
+        };
+
+        capy::run_async(ioc.get_executor())(accept_loop());
+        for (std::size_t i = 0; i < conns; ++i)
+            capy::run_async(ioc.get_executor())(client());
+
+        std::vector<std::thread> runners;
+        for (std::size_t i = 0; i < threads; ++i)
+            runners.emplace_back([&] { ioc.run(); });
+        for (auto& r : runners)
+            r.join();
+        BOOST_TEST_EQ(remaining.load(), 0u);
+    }
+
     void run()
     {
         testEventCompletesBatchedOps();
         testForeignPostWakesParkedFollower();
         testAcceptorWaitWakesBlockedReactor();
+        testConcurrentCloseUnderLoad();
     }
 };
 

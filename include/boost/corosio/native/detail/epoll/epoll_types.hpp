@@ -66,7 +66,7 @@ class epoll_tcp_socket final
     friend epoll_tcp_service;
 
 public:
-    explicit epoll_tcp_socket(epoll_tcp_service& svc) noexcept : base_type(svc)
+    explicit epoll_tcp_socket(epoll_tcp_service& svc) : base_type(svc)
     {
     }
 
@@ -96,7 +96,7 @@ class epoll_local_stream_socket final
     friend epoll_local_stream_service;
 
 public:
-    explicit epoll_local_stream_socket(epoll_local_stream_service& svc) noexcept
+    explicit epoll_local_stream_socket(epoll_local_stream_service& svc)
         : base_type(svc)
     {
     }
@@ -129,7 +129,7 @@ class epoll_udp_socket final
     friend epoll_udp_service;
 
 public:
-    explicit epoll_udp_socket(epoll_udp_service& svc) noexcept : base_type(svc)
+    explicit epoll_udp_socket(epoll_udp_service& svc) : base_type(svc)
     {
     }
 
@@ -164,7 +164,7 @@ class epoll_local_datagram_socket final
 
 public:
     explicit epoll_local_datagram_socket(
-        epoll_local_datagram_service& svc) noexcept
+        epoll_local_datagram_service& svc)
         : base_type(svc)
     {
     }
@@ -206,7 +206,7 @@ class epoll_tcp_acceptor final
     friend epoll_tcp_acceptor_service;
 
 public:
-    explicit epoll_tcp_acceptor(epoll_tcp_acceptor_service& svc) noexcept
+    explicit epoll_tcp_acceptor(epoll_tcp_acceptor_service& svc)
         : base_type(svc)
     {
     }
@@ -232,7 +232,7 @@ class epoll_local_stream_acceptor final
 
 public:
     explicit epoll_local_stream_acceptor(
-        epoll_local_stream_acceptor_service& svc) noexcept
+        epoll_local_stream_acceptor_service& svc)
         : base_type(svc)
     {
     }
@@ -255,7 +255,7 @@ class epoll_descriptor final
     friend epoll_descriptor_service;
 
 public:
-    explicit epoll_descriptor(epoll_descriptor_service& svc) noexcept
+    explicit epoll_descriptor(epoll_descriptor_service& svc)
         : base_type(svc)
     {
     }

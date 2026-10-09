@@ -18,6 +18,7 @@
 #include <boost/corosio/detail/config.hpp>
 #include <boost/capy/ex/execution_context.hpp>
 
+#include <boost/corosio/native/detail/reactor/reactor_descriptor_pool.hpp>
 #include <boost/corosio/native/detail/reactor/reactor_scheduler.hpp>
 #include <boost/corosio/native/detail/reactor/reactor_signal_pipe.hpp>
 
@@ -134,6 +135,12 @@ public:
     */
     void notify_reactor() const;
 
+    /// States for this scheduler's descriptors; see reactor_descriptor_pool.
+    reactor_descriptor_pool& descriptor_pool() noexcept
+    {
+        return desc_pool_;
+    }
+
     /// Watch the read end of the POSIX signal self-pipe (see scheduler.hpp).
     [[nodiscard]] std::error_code register_signal_reader(int read_fd) override
     {
@@ -148,6 +155,8 @@ private:
     // Watches the global signal self-pipe's read end (armed lazily by
     // register_signal_reader on the first signal registration).
     reactor_signal_pipe_reader signal_pipe_reader_;
+
+    reactor_descriptor_pool desc_pool_;
 
     // Self-pipe for interrupting select()
     int pipe_fds_[2]; // [0]=read, [1]=write
@@ -224,15 +233,16 @@ select_scheduler::register_descriptor(
     if (fd < 0 || fd >= FD_SETSIZE)
         return make_err(EMFILE);
 
-    desc->registered_events = reactor_event_read | reactor_event_write;
-    desc->unpollable        = false; // the state is reused across adoptions
-    desc->fd                = fd;
-    desc->scheduler_        = this;
-    desc->mutex.set_enabled(reactor_io_locking_);
+    if (desc->mutex.enabled() != reactor_io_locking_)
+        desc->mutex.set_enabled(reactor_io_locking_);
     desc->ready_events_.store(0, std::memory_order_relaxed);
 
     {
         conditionally_enabled_mutex::scoped_lock lock(desc->mutex);
+        desc->registered_events = reactor_event_read | reactor_event_write;
+        desc->unpollable        = false; // the state is reused across adoptions
+        desc->fd                = fd;
+        desc->scheduler_        = this;
         desc->impl_ref_.reset();
         desc->read_ready  = false;
         desc->write_ready = false;
@@ -348,6 +358,10 @@ select_scheduler::run_task(lock_type& lock, context_type& ctx, long timeout_us)
     };
     fd_entry snapshot[FD_SETSIZE];
     int snapshot_count = 0;
+
+    // do_one may have released the lock to wake a peer.
+    if (!lock.owns_lock())
+        lock.lock();
 
     for (auto& [fd, desc] : registered_descs_)
     {

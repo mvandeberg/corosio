@@ -11,6 +11,7 @@
 #define BOOST_COROSIO_NATIVE_DETAIL_REACTOR_REACTOR_IO_CORE_HPP
 
 #include <boost/corosio/detail/config.hpp>
+#include <boost/corosio/native/detail/reactor/reactor_descriptor_pool.hpp>
 #include <boost/corosio/native/detail/reactor/reactor_op_base.hpp>
 
 #include <atomic>
@@ -53,13 +54,31 @@ class reactor_io_core
 
 protected:
     // NOLINTNEXTLINE(bugprone-crtp-constructor-accessibility)
-    explicit reactor_io_core(Service& svc) noexcept : svc_(svc) {}
+    explicit reactor_io_core(Service& svc)
+        : svc_(svc)
+        , desc_pool_(svc.scheduler().descriptor_pool())
+        , desc_state_(*desc_pool_.acquire())
+    {
+    }
+
+    reactor_io_core(reactor_io_core const&)            = delete;
+    reactor_io_core& operator=(reactor_io_core const&) = delete;
+
+    // Through the cached pool, not svc_: services release their impls
+    // from ~reactor_service_state, when svc_.scheduler() is unreachable.
+    ~reactor_io_core()
+    {
+        desc_pool_.release(&desc_state_);
+    }
 
     Service& svc_;
 
+private:
+    reactor_descriptor_pool& desc_pool_;
+
 public:
-    /// Per-descriptor state for persistent reactor registration.
-    DescState desc_state_;
+    /// Per-descriptor state, pooled so it outlives this object (#380).
+    DescState& desc_state_;
 
     /** Cancel a single pending operation.
 
@@ -106,14 +125,15 @@ protected:
     */
     std::error_code register_fd(int fd) noexcept
     {
-        desc_state_.fd = fd;
         {
             std::lock_guard lock(desc_state_.mutex);
+            desc_state_.fd = fd;
             self_ptr()->for_each_desc_entry(
                 [](auto&, reactor_op_base*& slot) { slot = nullptr; });
         }
         if (auto ec = svc_.scheduler().register_descriptor(fd, &desc_state_))
         {
+            std::lock_guard lock(desc_state_.mutex);
             desc_state_.fd                = -1;
             desc_state_.registered_events = 0;
             return ec;
@@ -249,6 +269,7 @@ protected:
     {
         if (fd >= 0 && desc_state_.registered_events != 0)
             svc_.scheduler().deregister_descriptor(fd);
+        std::lock_guard lock(desc_state_.mutex);
         desc_state_.fd                = -1;
         desc_state_.registered_events = 0;
         desc_state_.unpollable        = false;

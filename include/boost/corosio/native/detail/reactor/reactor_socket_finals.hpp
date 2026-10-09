@@ -74,7 +74,7 @@ class reactor_stream_socket_impl
     friend Derived;
     friend Service;
 
-    explicit reactor_stream_socket_impl(Service& svc) noexcept
+    explicit reactor_stream_socket_impl(Service& svc)
         : reactor_stream_socket_impl::reactor_stream_socket(svc)
     {
     }
@@ -142,7 +142,7 @@ class reactor_dgram_socket_impl
     friend Derived;
     friend Service;
 
-    explicit reactor_dgram_socket_impl(Service& svc) noexcept
+    explicit reactor_dgram_socket_impl(Service& svc)
         : reactor_dgram_socket_impl::reactor_datagram_socket(svc)
     {
     }
@@ -187,7 +187,7 @@ class reactor_acceptor_impl
     friend Derived;
     friend Service;
 
-    explicit reactor_acceptor_impl(Service& svc) noexcept
+    explicit reactor_acceptor_impl(Service& svc)
         : reactor_acceptor_impl::reactor_acceptor(svc)
     {
     }
